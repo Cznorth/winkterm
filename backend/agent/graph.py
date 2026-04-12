@@ -37,9 +37,30 @@ async def llm_call(state: AgentState) -> AgentState:
 
     messages = list(state["messages"])
 
+    # 构建系统提示词，包含终端上下文
+    system_content = SYSTEM_PROMPT
+    terminal_output = state.get("terminal_output", "")
+    if terminal_output:
+        # 清理 ANSI 转义序列
+        import re
+        ansi_escape = re.compile(
+            r"\x1b\[[\?0-9;]*[A-Za-z]"
+            r"|\x1b\].*?(?:\x07|\x1b\\)"
+            r"|\x1b[()][AB012]"
+            r"|\x1b[78]"
+            r"|\x1b[=>]"
+        )
+        clean_output = ansi_escape.sub("", terminal_output)
+        # 只保留可打印字符
+        clean_output = "".join(c for c in clean_output if c.isprintable() or c in "\n\t")
+        # 限制长度，避免 token 过多
+        if len(clean_output) > 4000:
+            clean_output = "...(省略前面内容)...\n" + clean_output[-4000:]
+        system_content += f"\n\n---\n## 当前终端输出\n```\n{clean_output}\n```"
+
     # 把系统提示词放在最前面
     if not messages or not isinstance(messages[0], SystemMessage):
-        messages = [SystemMessage(content=SYSTEM_PROMPT)] + messages
+        messages = [SystemMessage(content=system_content)] + messages
 
     response: AIMessage = await llm.ainvoke(messages)
 
