@@ -20,9 +20,7 @@ def set_pty_manager(manager: "PtyManager") -> None:
 
 
 def _require_pty() -> "PtyManager":
-    if _pty_manager is None:
-        raise RuntimeError("PtyManager not initialized")
-    return _pty_manager
+    return _pty_manager  # may be None — tools handle that gracefully
 
 
 # ---------------------------------------------------------------------------
@@ -33,6 +31,8 @@ def _require_pty() -> "PtyManager":
 def read_terminal_context() -> str:
     """获取当前终端的最近输出内容（最近 50 行），每次分析前必须先调用。"""
     pty = _require_pty()
+    if pty is None:
+        return "（无终端会话）"
     ctx = pty.get_context(lines=50)
     return ctx if ctx else "（终端暂无输出）"
 
@@ -46,6 +46,8 @@ def write_command(command: str, explanation: str) -> str:
         explanation: 一句话说明为什么建议这条命令
     """
     pty = _require_pty()
+    if pty is None:
+        return f"[无终端会话] {explanation} → {command}"
     pty.write_message(explanation)
     pty.write_command(command)
     return f"命令已写入终端，等待用户执行：{command}"
@@ -59,6 +61,8 @@ def write_message(message: str) -> str:
         message: 要打印的内容，简短直接
     """
     pty = _require_pty()
+    if pty is None:
+        return f"[无终端会话] {message}"
     pty.write_message(message)
     return "消息已打印"
 
