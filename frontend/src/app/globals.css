@@ -1,0 +1,17 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #0f0f1a;
+  color: #e0e0e0;
+}
+
+/* xterm.js CSS（在 layout.tsx 中以 JS import 引入，见 layout.tsx） */
