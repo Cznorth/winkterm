@@ -22,7 +22,9 @@ def _build_llm() -> MiniMaxChat:
         temperature=0,
         api_key=settings.minimax_api_key,
         base_url=settings.minimax_base_url,
-    ).bind_tools(ALL_TOOLS)
+    )
+    # 暂时不绑定工具
+    # ).bind_tools(ALL_TOOLS)
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,10 @@ import time
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.terminal.pty_manager import PtyManager
+from backend.agent.graph import get_graph
+from backend.agent.tools import set_pty_manager
+from backend.agent.state import AgentState
+from langchain_core.messages import HumanMessage
 
 # 配置日志
 logger = logging.getLogger("ws_handler")
@@ -43,6 +47,9 @@ class TerminalWSHandler:
         self._history_buffer: list[str] = []  # 历史命令缓冲区
         client = websocket.client or "unknown"
         logger.info(f"[INIT] 客户端连接: {client}")
+
+        # 设置 pty_manager 给 agent tools 使用
+        set_pty_manager(self.pty)
 
     async def hookinput(self, data: str) -> None:
         """hook用户输入，用于自定义操作"""
@@ -154,10 +161,67 @@ class TerminalWSHandler:
                 await self.agent_invoke(clean_output[1:])
         else:
             logger.debug("[HISTORY] 未能解析出有效命令")
-    async def agent_invoke(self, user_input):
-        """agent调用"""
-        await self._send(user_input) #这里直接回显，稍后替换成完善的agent invoke
-        self.pty.write(b"\r")
+    async def agent_invoke(self, user_input: str) -> None:
+        """调用 AI Agent 并流式输出到终端。"""
+        logger.info(f"[AGENT] 开始处理: {user_input}")
+
+        # 先打印提示，让用户知道 AI 正在思考
+        self.pty.write("🤖 思考中...".encode("utf-8"))
+
+        try:
+            graph = get_graph()
+
+            initial_state: AgentState = {
+                "messages": [HumanMessage(content=user_input)],
+                "terminal_output": self.pty.get_context(lines=50),
+                "analysis_result": "",
+                "llm_calls": 0,
+            }
+
+            # 使用 astream_events 获取流式输出
+            collected_content = ""
+            async for event in graph.astream_events(initial_state, version="v2"):
+                event_type = event.get("event", "")
+                event_name = event.get("name", "")
+                logger.debug(f"[AGENT] 事件: {event_type} | {event_name}")
+
+                # 监听 LLM 流式输出
+                if event_type == "on_chat_model_stream":
+                    chunk = event.get("data", {}).get("chunk")
+                    if chunk and hasattr(chunk, "content"):
+                        content = chunk.content
+                        if content:
+                            logger.debug(f"[AGENT] AI 输出: {repr(content)}")
+                            ansi_escape = re.compile(
+                                r"\x1b\[[\?0-9;]*[A-Za-z]"
+                                r"|\x1b\].*?(?:\x07|\x1b\\)"
+                                r"|\x1b[()][AB012]"
+                                r"|\x1b[78]"
+                                r"|\x1b[=>]"
+                            )
+                            clean_content = ansi_escape.sub("", content)
+                            clean_content = clean_content.replace("\r", "").replace("\n", "")
+                            collected_content += clean_content
+                            self.pty.write(clean_content.encode("utf-8"))
+
+                # 监听工具调用开始
+                elif event_type == "on_tool_start":
+                    tool_name = event.get("name", "unknown")
+                    logger.debug(f"[AGENT] 工具调用: {tool_name}")
+                    self.pty.write(f"🔧 调用工具: {tool_name}".encode("utf-8"))
+
+                # 监听工具调用结束
+                elif event_type == "on_tool_end":
+                    tool_name = event.get("name", "unknown")
+                    logger.debug(f"[AGENT] 工具完成: {tool_name}")
+
+            # 完成后发送 Ctrl+C 重置命令行
+            logger.info(f"[AGENT] 处理完成")
+            self.pty.write(b"\x03")  # Ctrl+C
+
+        except Exception as e:
+            logger.exception(f"[AGENT] 调用失败: {e}")
+            await self._send(f"\r\n\033[31m❌ AI 调用出错: {e}\033[0m\r\n")
         
     def _on_pty_output(self, data: bytes) -> None:
         """PTY 输出回调：直接发送给 WebSocket。"""
