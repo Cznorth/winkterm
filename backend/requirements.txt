@@ -9,7 +9,8 @@ langchain-core>=0.3.0
 langchain-community>=0.3.0
 
 # Terminal
-ptyprocess>=0.7.0
+ptyprocess>=0.7.0      # Unix PTY
+pywinpty>=2.0.0        # Windows PTY
 
 # Config
 pydantic>=2.7.0
