@@ -10,6 +10,8 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef(getWebSocket());
   const initRef = useRef(false);
+  // 保存清理函数
+  const unsubRef = useRef<{ msg?: () => void; status?: () => void }>({});
 
   const init = useCallback(async () => {
     if (initRef.current) return;
@@ -71,27 +73,42 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
 
     term.focus();
 
+    // 清理之前的 handler
+    if (unsubRef.current.msg) unsubRef.current.msg();
+    if (unsubRef.current.status) unsubRef.current.status();
+
     // 初始化 WebSocket
     const ws = wsRef.current;
     const { cols, rows } = term;
 
-    ws.onMessage((data: string) => {
+    unsubRef.current.msg = ws.onMessage((data: string) => {
       term.write(data);
     });
 
-    ws.onStatus((connected: boolean) => {
-      if (!connected) {
+    let resizeOnConnect: (() => void) | null = () => {
+      ws.sendResize(cols, rows);
+      DEBUG && console.log("[useTerminal] 连接后发送 resize:", cols, rows);
+    };
+
+    unsubRef.current.status = ws.onStatus((connected: boolean) => {
+      if (connected) {
+        if (resizeOnConnect) {
+          resizeOnConnect();
+          resizeOnConnect = null;
+        }
+      } else {
         term.write("\r\n\x1b[31m[WinkTerm] 断开，重连中...\x1b[0m\r\n");
+        resizeOnConnect = () => {
+          if (termRef.current) {
+            const { cols, rows } = termRef.current;
+            ws.sendResize(cols, rows);
+          }
+        };
       }
     });
 
     ws.reset();
     ws.connect();
-
-    // 延迟发送 resize，确保 PTY 已启动
-    requestAnimationFrame(() => {
-      ws.sendResize(cols, rows);
-    });
 
     DEBUG && console.log("[useTerminal] 初始化完成, cols=", cols, "rows=", rows);
   }, [containerRef]);
@@ -113,6 +130,8 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
   // 清理
   useEffect(() => {
     return () => {
+      if (unsubRef.current.msg) unsubRef.current.msg();
+      if (unsubRef.current.status) unsubRef.current.status();
       wsRef.current.disconnect();
     };
   }, []);
