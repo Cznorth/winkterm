@@ -187,6 +187,6 @@ class PtyManager:
     # 上下文（用于 AI 分析，暂时保留接口）
     # ------------------------------------------------------------------
 
-    def get_context(self, lines: int = 50) -> str:
+    def get_context(self, lines: int = 500) -> str:
         recent = list(self._output_buffer)[-lines:]
         return "\n".join(recent)

@@ -58,7 +58,7 @@ class TerminalWSHandler:
         # 检测回车键
         if data in ("\r", "\n", "\r\n"):
             logger.debug("[HISTORY] 检测到回车，开始获取上一条命令")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.3)
             await self._fetch_last_command()
 
     async def handle(self) -> None:
@@ -120,7 +120,7 @@ class TerminalWSHandler:
         self.pty.write(b"\x1b[B")
 
         # 等待下键响应
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.3)
 
         # 停止捕获并解析
         self._capturing_history = False
@@ -166,7 +166,7 @@ class TerminalWSHandler:
         logger.info(f"[AGENT] 开始处理: {user_input}")
 
         # 先打印提示，让用户知道 AI 正在思考
-        self.pty.write("🤖 思考中...".encode("utf-8"))
+        self.pty.write("winkterm: ".encode("utf-8"))
 
         try:
             graph = get_graph()
