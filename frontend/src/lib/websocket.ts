@@ -4,70 +4,106 @@ type MessageHandler = (msg: WsMessage) => void;
 type StatusHandler = (connected: boolean) => void;
 
 const WS_URL =
-  process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/terminal";
+  typeof window !== "undefined"
+    ? (process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/terminal")
+    : "";
 
-const RECONNECT_DELAY_MS = 2000;
-const MAX_RECONNECT_ATTEMPTS = 10;
+const RECONNECT_DELAY_MS = 3000;
+const MAX_RECONNECT_ATTEMPTS = 20;
 
 export class TerminalWebSocket {
   private ws: WebSocket | null = null;
   private messageHandlers: MessageHandler[] = [];
   private statusHandlers: StatusHandler[] = [];
   private reconnectAttempts = 0;
-  private shouldReconnect = true;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 标记是否由用户主动断开，断开时设为 true，connect() 时重置为 false */
+  private userDisconnect = true;
 
   connect(): void {
-    this.shouldReconnect = true;
+    this.userDisconnect = false;
     this._connect();
   }
 
   private _connect(): void {
-    if (this.ws) {
-      this.ws.onclose = null;
-      this.ws.close();
+    if (!WS_URL) return;
+
+    // 清理旧连接（不清 userDisconnect，保持重连能力）
+    this._cleanupWs();
+
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(WS_URL);
+    } catch (err) {
+      console.error("[WS] 创建失败:", err);
+      this._notifyStatus(false);
+      return;
     }
 
-    this.ws = new WebSocket(WS_URL);
-
-    this.ws.onopen = () => {
+    ws.onopen = () => {
       this.reconnectAttempts = 0;
       this._notifyStatus(true);
     };
 
-    this.ws.onmessage = (event: MessageEvent<string>) => {
+    ws.onmessage = (event: MessageEvent<string>) => {
       try {
         const msg: WsMessage = JSON.parse(event.data);
         this._notifyMessage(msg);
       } catch {
-        // 忽略无法解析的消息
+        // ignore parse error
       }
     };
 
-    this.ws.onclose = () => {
+    ws.onclose = (event: CloseEvent) => {
       this._notifyStatus(false);
-      if (this.shouldReconnect && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        this.reconnectAttempts++;
-        this.reconnectTimer = setTimeout(() => this._connect(), RECONNECT_DELAY_MS);
+      // 非主动断开且非正常关闭码时重连
+      if (!this.userDisconnect && event.code !== 1000) {
+        this._scheduleReconnect();
       }
     };
 
-    this.ws.onerror = () => {
-      this.ws?.close();
+    ws.onerror = () => {
+      // onerror 总会触发 onclose，这里不需要额外处理
     };
+
+    this.ws = ws;
   }
 
-  disconnect(): void {
-    this.shouldReconnect = false;
+  private _scheduleReconnect(): void {
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.warn("[WS] 达到最大重连次数");
+      return;
+    }
+    this.reconnectAttempts++;
+    console.log(`[WS] ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} 次重连...`);
+    this.reconnectTimer = setTimeout(
+      () => this._connect(),
+      RECONNECT_DELAY_MS
+    );
+  }
+
+  private _cleanupWs(): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
     if (this.ws) {
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
       this.ws.onclose = null;
-      this.ws.close();
+      this.ws.onerror = null;
+      try {
+        this.ws.close();
+      } catch {
+        // ignore
+      }
       this.ws = null;
     }
+  }
+
+  disconnect(): void {
+    this.userDisconnect = true;
+    this._cleanupWs();
     this._notifyStatus(false);
   }
 
@@ -104,7 +140,7 @@ export class TerminalWebSocket {
   }
 }
 
-// 单例
+// 单例，HMR 复用
 let _instance: TerminalWebSocket | null = null;
 
 export function getWebSocket(): TerminalWebSocket {
