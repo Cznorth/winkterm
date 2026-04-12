@@ -1,118 +1,137 @@
 from __future__ import annotations
 
 import asyncio
-import os
+import logging
 import sys
-import subprocess
+import threading
 from collections import deque
-from typing import Callable, Deque
+from typing import Callable
 
-# ptyprocess 只能在 Unix 上用（依赖 fcntl），Windows 需要 fallback
-try:
-    import ptyprocess
-    _HAS_PTY = True
-except (ImportError, OSError):
-    _HAS_PTY = False
+logger = logging.getLogger("pty_manager")
+
+# Windows: pywinpty | Unix: ptyprocess
+if sys.platform == "win32":
+    try:
+        import winpty
+
+        _HAS_PTY = True
+    except ImportError:
+        _HAS_PTY = False
+        logger.warning("pywinpty 未安装，PTY 功能不可用")
+else:
+    try:
+        import ptyprocess
+
+        _HAS_PTY = True
+    except ImportError:
+        _HAS_PTY = False
+        logger.warning("ptyprocess 未安装，PTY 功能不可用")
 
 
 class PtyManager:
-    """管理单个 pty 进程，封装 spawn / read / write / resize。
+    """PTY 管理器：纯透传字节，不做任何解析。
 
-    Unix: 使用真实的 ptyprocess
-    Windows: 使用 subprocess + dummy 实现（终端交互不可用，但 API 可正常启动测试）
+    Windows: 使用 pywinpty（真正的 PTY）
+    Unix:    使用 ptyprocess
     """
 
     BUFFER_LINES = 500
 
     def __init__(self) -> None:
-        self._is_windows = sys.platform == "win32"
-        self._proc: ptyprocess.PtyProcess | subprocess.Popen | None = None
-        self._output_buffer: Deque[str] = deque(maxlen=self.BUFFER_LINES)
+        self._proc = None  # winpty.PtyProcess | ptyprocess.PtyProcess
+        self._output_buffer: deque[str] = deque(maxlen=self.BUFFER_LINES)
         self._read_callbacks: list[Callable[[bytes], None]] = []
-        self._loop: asyncio.AbstractEventLoop | None = None
+        self._queue: asyncio.Queue[bytes | None] | None = None
+        self._read_thread: threading.Thread | None = None
         self._alive = False
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     # ------------------------------------------------------------------
     # 生命周期
     # ------------------------------------------------------------------
 
     def spawn(self, shell: str | None = None, cols: int = 80, rows: int = 24) -> None:
-        if shell is None:
-            if self._is_windows:
-                shell = os.environ.get("COMSPEC", "cmd.exe")
-            else:
-                shell = os.environ.get("SHELL", "/bin/bash")
+        """启动 PTY 进程。"""
+        if not _HAS_PTY:
+            raise RuntimeError("PTY not available: install pywinpty (Windows) or ptyprocess (Unix)")
 
-        if _HAS_PTY and not self._is_windows:
+        if sys.platform == "win32":
+            # Windows: pywinpty
+            shell = shell or "powershell.exe"
+            logger.info(f"[SPAWN] Windows: 启动 {shell}, dimensions=({rows}, {cols})")
+            self._proc = winpty.PtyProcess.spawn(
+                shell,
+                dimensions=(rows, cols),
+            )
+            self._pid = getattr(self._proc, "pid", "N/A")
+            logger.info(f"[SPAWN] PTY 进程已启动, pid={self._pid}")
+        else:
+            # Unix: ptyprocess
+            import os
+            shell = shell or os.environ.get("SHELL", "/bin/bash")
+            logger.info(f"[SPAWN] Unix: 启动 {shell}, dimensions=({rows}, {cols})")
             self._proc = ptyprocess.PtyProcess.spawn(
                 [shell],
                 dimensions=(rows, cols),
-                env={**os.environ, "TERM": "xterm-256color"},
             )
-        else:
-            # Windows fallback：使用普通 subprocess（无真正 pty）
-            self._proc = subprocess.Popen(
-                [shell],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                env={**os.environ, "TERM": "xterm-256color"},
-            )
+            self._pid = getattr(self._proc, "pid", "N/A")
+            logger.info(f"[SPAWN] PTY 进程已启动, pid={self._pid}")
+
         self._alive = True
 
     def is_alive(self) -> bool:
-        if self._is_windows and isinstance(self._proc, subprocess.Popen):
-            return self._proc.poll() is None
-        if _HAS_PTY and isinstance(self._proc, ptyprocess.PtyProcess):
+        if self._proc is None:
+            return False
+        if hasattr(self._proc, "isalive"):
             return self._proc.isalive()
-        return self._alive and self._proc is not None
+        return self._alive
 
     def terminate(self) -> None:
         self._alive = False
-        if isinstance(self._proc, subprocess.Popen):
-            self._proc.terminate()
-        elif hasattr(self._proc, "terminate"):
-            self._proc.terminate(force=True)
+        if self._proc:
+            try:
+                if hasattr(self._proc, "terminate"):
+                    self._proc.terminate(force=True)
+                elif hasattr(self._proc, "close"):
+                    self._proc.close()
+            except Exception:
+                pass
+        self._proc = None
 
     # ------------------------------------------------------------------
-    # 读写
+    # 写操作（透传字节）
     # ------------------------------------------------------------------
 
     def write(self, data: bytes) -> None:
-        if not self.is_alive():
+        """透传原始字节给 PTY。"""
+        if self._proc is None:
+            logger.warning("[WRITE] PTY 进程未启动，忽略写入")
             return
-        if isinstance(self._proc, subprocess.Popen) and self._proc.stdin:
-            try:
-                self._proc.stdin.write(data)
-                self._proc.stdin.flush()
-            except BrokenPipeError:
-                self._alive = False
-        elif hasattr(self._proc, "write"):
-            self._proc.write(data)
-
-    def write_command(self, command: str) -> None:
-        """将命令写入终端输入行，不发送回车。"""
-        if isinstance(self._proc, subprocess.Popen):
-            # subprocess 没有 pty，回显到 buffer 模拟
-            self._output_buffer.append(f"$ {command}")
-            self._notify_callbacks(f"$ {command}\r\n".encode())
-        else:
-            self.write(command.encode())
-
-    def write_message(self, message: str) -> None:
-        """打印 AI 消息到终端（青色 ANSI）。"""
-        formatted = f"\r\n\033[36m[WinkTerm] {message}\033[0m\r\n"
-        if isinstance(self._proc, subprocess.Popen):
-            self._notify_callbacks(formatted.encode())
-        else:
-            self.write(formatted.encode())
+        if not hasattr(self._proc, "write"):
+            logger.warning("[WRITE] PTY 没有 write 方法")
+            return
+        try:
+            # winpty 需要 str, ptyprocess 需要 bytes
+            if sys.platform == "win32":
+                text = data.decode("utf-8", errors="replace")
+                logger.debug(f"[WRITE] Windows: 写入 {len(text)} 字符: {repr(text[:50])}")
+                self._proc.write(text)
+            else:
+                logger.debug(f"[WRITE] Unix: 写入 {len(data)} 字节: {repr(data[:50])}")
+                self._proc.write(data)
+        except Exception as e:
+            logger.error(f"[WRITE] 写入失败: {e}")
 
     def resize(self, cols: int, rows: int) -> None:
-        if hasattr(self._proc, "setwinsize"):
-            self._proc.setwinsize(rows, cols)
+        """调整 PTY 大小。"""
+        if self._proc and hasattr(self._proc, "setwinsize"):
+            try:
+                self._proc.setwinsize(rows, cols)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
-    # 异步读取循环
+    # 异步读取（后台线程 + asyncio queue）
     # ------------------------------------------------------------------
 
     def add_output_callback(self, cb: Callable[[bytes], None]) -> None:
@@ -122,32 +141,40 @@ class PtyManager:
         self._read_callbacks = [c for c in self._read_callbacks if c is not cb]
 
     async def start_read_loop(self) -> None:
+        """启动读取循环：后台线程读 PTY，放入 asyncio queue。"""
+        if self._proc is None or not hasattr(self._proc, "read"):
+            return
+
         self._loop = asyncio.get_event_loop()
-        while self.is_alive():
-            try:
-                if isinstance(self._proc, subprocess.Popen) and self._proc.stdout:
-                    data = await self._loop.run_in_executor(
-                        None, self._proc.stdout.readline
-                    )
+        self._queue = asyncio.Queue()
+
+        def _reader():
+            while self.is_alive():
+                try:
+                    data = self._proc.read(4096)
                     if not data:
                         break
-                else:
-                    data = await self._loop.run_in_executor(None, self._blocking_read)
-            except (EOFError, BrokenPipeError, OSError):
-                break
-            except Exception:
-                break
-            else:
-                if data:
-                    text = data.decode(errors="replace")
-                    for line in text.splitlines():
-                        self._output_buffer.append(line)
-                    self._notify_callbacks(data.encode() if isinstance(data, str) else data)
+                    raw = data.encode("utf-8") if isinstance(data, str) else data
+                    if self._loop:
+                        self._loop.call_soon_threadsafe(self._queue.put_nowait, raw)
+                except EOFError:
+                    break
+                except Exception:
+                    break
+            # 终止信号
+            if self._loop:
+                self._loop.call_soon_threadsafe(self._queue.put_nowait, None)
 
-    def _blocking_read(self) -> bytes:
-        if hasattr(self._proc, "read"):
-            return self._proc.read(4096)  # type: ignore[union-attr]
-        return b""
+        self._read_thread = threading.Thread(target=_reader, daemon=True)
+        self._read_thread.start()
+
+        # 主循环：从 queue 取数据，回调处理
+        while True:
+            data = await self._queue.get()
+            if data is None:
+                break
+            self._output_buffer.append(data.decode("utf-8", errors="replace"))
+            self._notify_callbacks(data)
 
     def _notify_callbacks(self, data: bytes) -> None:
         for cb in list(self._read_callbacks):
@@ -157,7 +184,7 @@ class PtyManager:
                 pass
 
     # ------------------------------------------------------------------
-    # 上下文
+    # 上下文（用于 AI 分析，暂时保留接口）
     # ------------------------------------------------------------------
 
     def get_context(self, lines: int = 50) -> str:

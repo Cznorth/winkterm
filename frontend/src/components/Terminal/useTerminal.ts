@@ -2,18 +2,23 @@ import { useEffect, useRef, useCallback } from "react";
 import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import { getWebSocket } from "@/lib/websocket";
-import type { WsMessage } from "@/types";
+
+const DEBUG = process.env.NODE_ENV === "development";
 
 export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>) {
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef(getWebSocket());
+  const initRef = useRef(false);
 
-  // 初始化 xterm
-  const initTerminal = useCallback(async () => {
-    if (!containerRef.current || termRef.current) return;
+  const init = useCallback(async () => {
+    if (initRef.current) return;
+    if (!containerRef.current) return;
 
-    // 动态导入避免 SSR 问题
+    initRef.current = true;
+    DEBUG && console.log("[useTerminal] 开始初始化");
+
+    // 动态导入
     const { Terminal } = await import("@xterm/xterm");
     const { FitAddon } = await import("@xterm/addon-fit");
     const { WebLinksAddon } = await import("@xterm/addon-web-links");
@@ -60,40 +65,36 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
     fitAddonRef.current = fitAddon;
 
     // 键盘输入 → WebSocket
-    term.onData((data: string) => {
-      wsRef.current.send({ type: "input", data });
+    term.onData((data) => {
+      wsRef.current.send(data);
     });
 
-    return { term, fitAddon };
-  }, [containerRef]);
+    term.focus();
 
-  // WebSocket 消息处理
-  useEffect(() => {
+    // 初始化 WebSocket
     const ws = wsRef.current;
+    const { cols, rows } = term;
 
-    const unsubMsg = ws.onMessage((msg: WsMessage) => {
-      if (msg.type === "output" && termRef.current) {
-        termRef.current.write(msg.data);
+    ws.onMessage((data: string) => {
+      term.write(data);
+    });
+
+    ws.onStatus((connected: boolean) => {
+      if (!connected) {
+        term.write("\r\n\x1b[31m[WinkTerm] 断开，重连中...\x1b[0m\r\n");
       }
     });
 
-    const unsubStatus = ws.onStatus((connected: boolean) => {
-      if (!termRef.current) return;
-      if (connected) {
-        termRef.current.write("\r\n\x1b[32m[WinkTerm] 已连接\x1b[0m\r\n");
-      } else {
-        termRef.current.write("\r\n\x1b[31m[WinkTerm] 连接断开，正在重连...\x1b[0m\r\n");
-      }
-    });
-
+    ws.reset();
     ws.connect();
 
-    return () => {
-      unsubMsg();
-      unsubStatus();
-      ws.disconnect();
-    };
-  }, []);
+    // 延迟发送 resize，确保 PTY 已启动
+    requestAnimationFrame(() => {
+      ws.sendResize(cols, rows);
+    });
+
+    DEBUG && console.log("[useTerminal] 初始化完成, cols=", cols, "rows=", rows);
+  }, [containerRef]);
 
   // resize 监听
   useEffect(() => {
@@ -101,7 +102,7 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
       if (fitAddonRef.current && termRef.current) {
         fitAddonRef.current.fit();
         const { cols, rows } = termRef.current;
-        wsRef.current.send({ type: "resize", cols, rows });
+        wsRef.current.sendResize(cols, rows);
       }
     };
 
@@ -109,9 +110,12 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const init = useCallback(async () => {
-    await initTerminal();
-  }, [initTerminal]);
+  // 清理
+  useEffect(() => {
+    return () => {
+      wsRef.current.disconnect();
+    };
+  }, []);
 
   return { init, term: termRef };
 }
