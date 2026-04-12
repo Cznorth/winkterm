@@ -80,9 +80,9 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
     const unsubStatus = ws.onStatus((connected: boolean) => {
       if (!termRef.current) return;
       if (connected) {
-        termRef.current.write("\r\n\033[32m[WinkTerm] 已连接\033[0m\r\n");
+        termRef.current.write("\r\n\x1b[32m[WinkTerm] 已连接\x1b[0m\r\n");
       } else {
-        termRef.current.write("\r\n\033[31m[WinkTerm] 连接断开，正在重连...\033[0m\r\n");
+        termRef.current.write("\r\n\x1b[31m[WinkTerm] 连接断开，正在重连...\x1b[0m\r\n");
       }
     });
 
