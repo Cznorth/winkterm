@@ -135,19 +135,28 @@ class ChatWSHandler:
                                 "content": token
                             })
 
-                # 工具调用（暂时忽略，先实现对话）
+                # 工具调用
                 elif event_type == "on_tool_start":
                     tool_name = event.get("name", "unknown")
+                    # LangGraph 的参数在 data.input 中
+                    tool_args = event.get("data", {}).get("input", {})
+                    logger.debug(f"[TOOL_START] {tool_name}, args: {tool_args}")
                     await self._send({
                         "type": "tool_start",
-                        "tool": tool_name
+                        "tool": tool_name,
+                        "args": tool_args
                     })
 
                 elif event_type == "on_tool_end":
                     tool_name = event.get("name", "unknown")
+                    tool_result = event.get("data", {}).get("output", "")
+                    # 截断过长的结果
+                    if isinstance(tool_result, str) and len(tool_result) > 500:
+                        tool_result = tool_result[:500] + "...(已截断)"
                     await self._send({
                         "type": "tool_end",
-                        "tool": tool_name
+                        "tool": tool_name,
+                        "result": tool_result
                     })
 
             # 发送结束标记

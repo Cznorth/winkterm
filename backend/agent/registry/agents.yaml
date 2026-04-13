@@ -14,7 +14,8 @@ agents:
     model: default
 
   craft:
-    description: 代码创作助手
-    tools: []  # 暂无工具
+    description: 代码创作助手，可直接操作终端
+    tools:
+      - terminal
     prompt: craft.yaml
     model: default

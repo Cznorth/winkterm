@@ -44,6 +44,71 @@ def get_terminal_context_raw(lines: int = 50) -> str:
 # 工具定义
 # ---------------------------------------------------------------------------
 
+# 控制键映射
+CONTROL_KEYS = {
+    "Ctrl+C": b"\x03",
+    "Ctrl+D": b"\x04",
+    "Ctrl+Z": b"\x1a",
+    "Ctrl+L": b"\x0c",
+    "Ctrl+A": b"\x01",
+    "Ctrl+E": b"\x05",
+    "Ctrl+K": b"\x0b",
+    "Ctrl+U": b"\x15",
+    "Ctrl+W": b"\x17",
+    "Ctrl+R": b"\x12",
+    "Enter": b"\r",
+    "Tab": b"\t",
+    "Backspace": b"\x7f",
+    "Up": b"\x1b[A",
+    "Down": b"\x1b[B",
+    "Right": b"\x1b[C",
+    "Left": b"\x1b[D",
+    "Home": b"\x1b[H",
+    "End": b"\x1b[F",
+    "Escape": b"\x1b",
+}
+
+
+@tool
+def terminal_input(input: str) -> str:
+    """在终端执行输入并返回结果。
+
+    Args:
+        input: 要输入的内容
+            - 命令: "ls -la", "npm install"
+            - 控制键: "Ctrl+C", "Ctrl+D", "Up", "Down", "Enter"
+            - 文本: 直接输入的字符串
+
+    Returns:
+        执行后的终端上下文（最近50行）
+    """
+    import logging
+    import time
+
+    logger = logging.getLogger("tools")
+    pty = _require_pty()
+    logger.info(f"[terminal_input] pty={pty}, input={input}")
+
+    if pty is None:
+        return "[无终端会话]"
+
+    # 检查是否是控制键
+    if input in CONTROL_KEYS:
+        logger.info(f"[terminal_input] 发送控制键: {input}")
+        pty.write(CONTROL_KEYS[input])
+    else:
+        # 普通命令：写入并执行
+        logger.info(f"[terminal_input] 执行命令: {input}")
+        pty.write_command(input)
+        pty.write(b"\r\n")
+
+    # 等待输出
+    time.sleep(0.3)
+
+    # 返回终端上下文
+    context = pty.get_context(50)
+    return context if context else "[终端无内容]"
+
 
 @tool
 def write_command(command: str) -> str:
@@ -91,4 +156,4 @@ def get_terminal_context(lines: int = 50) -> str:
 
 
 # 模块导出的工具列表
-TERMINAL_TOOLS = [write_command, get_terminal_context]
+TERMINAL_TOOLS = [terminal_input, write_command, get_terminal_context]

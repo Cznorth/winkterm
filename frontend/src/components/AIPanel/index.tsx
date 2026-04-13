@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useChatWs, ChatMessage, ChatMode } from "@/lib/chatWs";
+import { useChatWs, ChatMessage, ChatMode, ToolCall } from "@/lib/chatWs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -84,8 +84,139 @@ const markdownStyles = `
   }
 `;
 
+function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
+  const [expanded, setExpanded] = useState(false);
+  const argsStr = Object.keys(toolCall.args).length > 0
+    ? JSON.stringify(toolCall.args, null, 2)
+    : "";
+
+  // 提取第一个参数值作为简要展示
+  const firstArgValue = Object.values(toolCall.args)[0];
+  const argPreview = typeof firstArgValue === "string"
+    ? firstArgValue.length > 50 ? firstArgValue.slice(0, 50) + "..." : firstArgValue
+    : argsStr.length > 50 ? argsStr.slice(0, 50) + "..." : argsStr;
+
+  return (
+    <div
+      style={{
+        background: "#0a0a15",
+        borderRadius: "6px",
+        marginBottom: "8px",
+        border: "1px solid #1a1a3a",
+        overflow: "hidden",
+      }}
+    >
+      {/* 工具头部 */}
+      <div
+        onClick={() => toolCall.status === "done" && setExpanded(!expanded)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "8px 10px",
+          background: "#12121f",
+          cursor: toolCall.status === "done" ? "pointer" : "default",
+        }}
+      >
+        <div
+          style={{
+            width: "14px",
+            height: "14px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {toolCall.status === "running" ? (
+            <span style={{ color: "#f1fa8c", fontSize: "11px" }}>⏳</span>
+          ) : (
+            <span style={{ color: "#00ff88", fontSize: "11px" }}>✓</span>
+          )}
+        </div>
+        <span
+          style={{
+            color: toolCall.status === "running" ? "#f1fa8c" : "#00ff88",
+            fontSize: "12px",
+            fontWeight: 500,
+          }}
+        >
+          {toolCall.tool}
+        </span>
+        {/* 参数预览 */}
+        {argPreview && (
+          <span
+            style={{
+              color: "#888",
+              fontSize: "11px",
+              flex: 1,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {argPreview}
+          </span>
+        )}
+        {/* 展开/收起箭头 */}
+        {toolCall.status === "done" && toolCall.result && (
+          <span style={{ color: "#666", fontSize: "10px" }}>
+            {expanded ? "▲" : "▼"}
+          </span>
+        )}
+        {toolCall.status === "running" && (
+          <span style={{ color: "#666", fontSize: "11px" }}>执行中...</span>
+        )}
+      </div>
+
+      {/* 展开内容 */}
+      {expanded && toolCall.status === "done" && (
+        <>
+          {/* 参数详情 */}
+          {argsStr && (
+            <div style={{ padding: "8px 10px", borderTop: "1px solid #1a1a3a" }}>
+              <div style={{ color: "#666", fontSize: "10px", marginBottom: "4px" }}>参数:</div>
+              <pre
+                style={{
+                  margin: 0,
+                  fontSize: "11px",
+                  color: "#a0a0b0",
+                  overflow: "auto",
+                  maxHeight: "100px",
+                }}
+              >
+                {argsStr}
+              </pre>
+            </div>
+          )}
+
+          {/* 结果 */}
+          {toolCall.result && (
+            <div style={{ padding: "8px 10px", borderTop: "1px solid #1a1a3a" }}>
+              <div style={{ color: "#666", fontSize: "10px", marginBottom: "4px" }}>结果:</div>
+              <pre
+                style={{
+                  margin: 0,
+                  fontSize: "11px",
+                  color: "#888",
+                  overflow: "auto",
+                  maxHeight: "200px",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                }}
+              >
+                {toolCall.result}
+              </pre>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
+
   return (
     <div
       style={{
@@ -107,13 +238,23 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         }}
         className={isUser ? "" : "md-content"}
       >
+        {/* 工具调用显示 */}
+        {msg.toolCalls && msg.toolCalls.length > 0 && (
+          <div style={{ marginBottom: msg.content ? "12px" : 0 }}>
+            {msg.toolCalls.map((tc) => (
+              <ToolCallDisplay key={tc.id} toolCall={tc} />
+            ))}
+          </div>
+        )}
+
+        {/* 内容 */}
         {isUser ? (
           msg.content
-        ) : (
+        ) : msg.content ? (
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {msg.content}
           </ReactMarkdown>
-        )}
+        ) : null}
       </div>
     </div>
   );

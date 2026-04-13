@@ -8,11 +8,20 @@ const WS_URL =
       "ws://localhost:8000/ws/chat")
     : "";
 
+export interface ToolCall {
+  id: string;
+  tool: string;
+  args: Record<string, unknown>;
+  status: "running" | "done";
+  result?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  toolCalls?: ToolCall[];
 }
 
 export type ChatMode = "chat" | "craft";
@@ -36,6 +45,7 @@ export function useChatWs() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const currentMessageRef = useRef<string>("");
+  const toolCallsRef = useRef<ToolCall[]>([]);
 
   // 连接 WebSocket
   const connect = useCallback(() => {
@@ -71,17 +81,25 @@ export function useChatWs() {
   }, []);
 
   // 处理消息
-  const handleMessage = useCallback((data: { type: string; content?: string; message?: string; mode?: string }) => {
+  const handleMessage = useCallback((data: {
+    type: string;
+    content?: string;
+    message?: string;
+    mode?: string;
+    tool?: string;
+    args?: Record<string, unknown>;
+    result?: string;
+  }) => {
     switch (data.type) {
       case "start":
         currentMessageRef.current = "";
+        toolCallsRef.current = [];
         setState((s) => ({ ...s, isStreaming: true }));
         break;
 
       case "token":
         if (data.content) {
           currentMessageRef.current += data.content;
-          // 更新最后一条 assistant 消息
           setState((s) => {
             const messages = [...s.messages];
             const lastMsg = messages[messages.length - 1];
@@ -89,6 +107,7 @@ export function useChatWs() {
               messages[messages.length - 1] = {
                 ...lastMsg,
                 content: currentMessageRef.current,
+                toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
               };
             } else {
               messages.push({
@@ -96,7 +115,53 @@ export function useChatWs() {
                 role: "assistant",
                 content: currentMessageRef.current,
                 timestamp: Date.now(),
+                toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
               });
+            }
+            return { ...s, messages };
+          });
+        }
+        break;
+
+      case "tool_start":
+        if (data.tool) {
+          const newToolCall: ToolCall = {
+            id: `${Date.now()}-${data.tool}`,
+            tool: data.tool,
+            args: data.args || {},
+            status: "running",
+          };
+          toolCallsRef.current = [...toolCallsRef.current, newToolCall];
+          setState((s) => {
+            const messages = [...s.messages];
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg?.role === "assistant") {
+              messages[messages.length - 1] = {
+                ...lastMsg,
+                content: currentMessageRef.current,
+                toolCalls: [...toolCallsRef.current],
+              };
+            }
+            return { ...s, messages };
+          });
+        }
+        break;
+
+      case "tool_end":
+        if (data.tool) {
+          toolCallsRef.current = toolCallsRef.current.map((tc) =>
+            tc.tool === data.tool
+              ? { ...tc, status: "done" as const, result: data.result }
+              : tc
+          );
+          setState((s) => {
+            const messages = [...s.messages];
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg?.role === "assistant") {
+              messages[messages.length - 1] = {
+                ...lastMsg,
+                toolCalls: [...toolCallsRef.current],
+              };
             }
             return { ...s, messages };
           });
@@ -107,7 +172,6 @@ export function useChatWs() {
         setState((s) => {
           const messages = [...s.messages];
           const lastMsg = messages[messages.length - 1];
-          // 确保最终内容完整
           if (lastMsg?.role === "assistant" && data.content) {
             messages[messages.length - 1] = {
               ...lastMsg,
