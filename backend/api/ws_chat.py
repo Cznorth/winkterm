@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
 
 from backend.agent.factory import get_agent
 from backend.agent.core.state import AgentState
+from backend.agent.tools.terminal import get_terminal_context_raw
 
 if TYPE_CHECKING:
     from langgraph.graph import CompiledGraph
@@ -72,10 +73,27 @@ class ChatWSHandler:
 
         logger.info(f"[CHAT] 用户: {content[:50]}")
 
+        # 获取终端上下文
+        terminal_output = get_terminal_context_raw(50)
+        if terminal_output:
+            # 清理 ANSI 转义序列
+            ansi_escape = re.compile(
+                r"\x1b\[[\?0-9;]*[A-Za-z]"
+                r"|\x1b\].*?(?:\x07|\x1b\\)"
+                r"|\x1b[()][AB012]"
+                r"|\x1b[78]"
+                r"|\x1b[=>]"
+            )
+            terminal_output = ansi_escape.sub("", terminal_output)
+            terminal_output = "".join(c for c in terminal_output if c.isprintable() or c in "\n\t")
+            if len(terminal_output) > 4000:
+                terminal_output = "...(省略前面内容)...\n" + terminal_output[-4000:]
+            logger.debug(f"[CHAT] 终端上下文: {len(terminal_output)} 字符")
+
         # 初始状态
         state: AgentState = {
             "messages": [HumanMessage(content=content)],
-            "terminal_output": "",
+            "terminal_output": terminal_output,
             "analysis_result": "",
             "llm_calls": 0,
             "waiting_user": False,

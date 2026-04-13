@@ -30,6 +30,16 @@ def _require_pty() -> "PtyManager | None":
     return _pty_manager
 
 
+def get_terminal_context_raw(lines: int = 50) -> str:
+    """获取终端上下文的普通函数（非工具），供其他模块直接调用。"""
+    pty = _require_pty()
+    if pty is None:
+        return ""
+
+    context = pty.get_context(lines)
+    return context if context else ""
+
+
 # ---------------------------------------------------------------------------
 # 工具定义
 # ---------------------------------------------------------------------------
