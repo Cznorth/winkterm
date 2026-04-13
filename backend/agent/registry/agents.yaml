@@ -1,0 +1,15 @@
+# Agent 配置注册表
+agents:
+  terminal:
+    description: 终端内Agent，直接操作终端
+    tools:
+      - terminal  # 使用 terminal 模块的所有工具
+    prompt: terminal.yaml
+    model: default  # 使用默认模型
+
+  analysis:
+    description: 终端外Agent，分析和查询工具
+    tools:
+      - monitoring  # 监控工具
+    prompt: analysis.yaml
+    model: default

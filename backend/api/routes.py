@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 
 from backend.agent.graph import get_graph
-from backend.agent.tools import _pty_manager
+from backend.agent.tools.terminal import _pty_manager
 
 router = APIRouter()
 
