@@ -38,6 +38,7 @@ desktop.ini
 .vscode/
 *.swp
 *.swo
+.claude/
 
 # Docker
 *.log
