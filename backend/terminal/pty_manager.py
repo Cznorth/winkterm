@@ -114,13 +114,17 @@ class PtyManager:
             # winpty 需要 str, ptyprocess 需要 bytes
             if sys.platform == "win32":
                 text = data.decode("utf-8", errors="replace")
-                logger.debug(f"[WRITE] Windows: 写入 {len(text)} 字符: {repr(text[:50])}")
+                # logger.debug(f"[WRITE] Windows: 写入 {len(text)} 字符: {repr(text[:50])}")
                 self._proc.write(text)
             else:
-                logger.debug(f"[WRITE] Unix: 写入 {len(data)} 字节: {repr(data[:50])}")
+                # logger.debug(f"[WRITE] Unix: 写入 {len(data)} 字节: {repr(data[:50])}")
                 self._proc.write(data)
         except Exception as e:
             logger.error(f"[WRITE] 写入失败: {e}")
+
+    def write_command(self, command: str) -> None:
+        """写入命令到输入行（不执行，不发送回车）。"""
+        self.write(command.encode("utf-8"))
 
     def resize(self, cols: int, rows: int) -> None:
         """调整 PTY 大小。"""

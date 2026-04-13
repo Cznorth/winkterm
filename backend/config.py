@@ -11,10 +11,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # MiniMax
-    minimax_api_key: str = ""
-    minimax_base_url: str = "https://api.minimaxi.com/v1/text/chatcompletion_v2"
-    model_name: str = "MiniMax-M2.7"
+    # LLM (OpenAI 协议兼容)
+    llm_api_key: str = ""
+    llm_base_url: str = "https://qianfan.baidubce.com/v2/coding"
+    llm_model: str = "glm-5"
 
     # 外部服务
     prometheus_url: str = "http://localhost:9090"

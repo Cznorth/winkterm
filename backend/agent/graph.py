@@ -1,30 +1,33 @@
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
-from langchain_community.chat_models import MiniMaxChat
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
-from langgraph.prebuilt import ToolNode
 
 from backend.agent.state import AgentState
 from backend.agent.prompts import SYSTEM_PROMPT
 from backend.agent.tools import ALL_TOOLS
 from backend.config import settings
 
+logger = logging.getLogger("agent.graph")
+
 # ---------------------------------------------------------------------------
 # LLM 初始化
 # ---------------------------------------------------------------------------
 
-def _build_llm() -> MiniMaxChat:
-    return MiniMaxChat(
-        model=settings.model_name,
+def _build_llm() -> ChatOpenAI:
+    llm = ChatOpenAI(
+        model=settings.llm_model,
         temperature=0,
-        api_key=settings.minimax_api_key,
-        base_url=settings.minimax_base_url,
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
     )
-    # 暂时不绑定工具
-    # ).bind_tools(ALL_TOOLS)
+    bound = llm.bind_tools(ALL_TOOLS)
+    logger.debug(f"[LLM] 绑定工具: {[t.name for t in ALL_TOOLS]}")
+    return bound
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +67,11 @@ async def llm_call(state: AgentState) -> AgentState:
 
     response: AIMessage = await llm.ainvoke(messages)
 
+    # 日志：响应内容
+    logger.debug(f"[LLM] 响应内容: {response.content[:200] if response.content else '空'}")
+    logger.debug(f"[LLM] tool_calls: {response.tool_calls}")
+    logger.debug(f"[LLM] additional_kwargs: {response.additional_kwargs}")
+
     return {
         **state,
         "messages": [response],
@@ -76,11 +84,89 @@ async def llm_call(state: AgentState) -> AgentState:
 # ---------------------------------------------------------------------------
 
 def should_continue(state: AgentState) -> Literal["tool_node", "__end__"]:
-    """判断最后一条消息是否包含工具调用。"""
+    """判断最后一条消息是否包含工具调用，或是否需要等待用户。"""
+    # 如果已在等待用户，直接结束
+    if state.get("waiting_user"):
+        logger.debug("[ROUTER] waiting_user=True, 结束")
+        return END
+
     last = state["messages"][-1]
-    if isinstance(last, AIMessage) and last.tool_calls:
+    has_tools = isinstance(last, AIMessage) and last.tool_calls
+    logger.debug(f"[ROUTER] last type: {type(last).__name__}, has_tools: {has_tools}")
+
+    if has_tools:
+        logger.debug(f"[ROUTER] 进入 tool_node, tools: {[tc['name'] for tc in last.tool_calls]}")
         return "tool_node"
+    logger.debug("[ROUTER] 无工具调用, 结束")
     return END
+
+
+# ---------------------------------------------------------------------------
+# 自定义 Tool Node
+# ---------------------------------------------------------------------------
+
+async def tool_node(state: AgentState) -> AgentState:
+    """执行工具调用，检测 write_command 后设置等待用户标志。"""
+    from langchain_core.messages import ToolMessage
+
+    last = state["messages"][-1]
+    if not isinstance(last, AIMessage) or not last.tool_calls:
+        logger.warning("[TOOL_NODE] 无工具调用")
+        return state
+
+    # 执行所有工具调用
+    new_messages = []
+    waiting_user = False
+
+    for tool_call in last.tool_calls:
+        tool_name = tool_call["name"]
+        tool_args = tool_call.get("args", {})
+        tool_call_id = tool_call.get("id", "")
+
+        logger.info(f"[TOOL_NODE] 执行工具: {tool_name}, args: {tool_args}")
+
+        # 查找并执行工具
+        tool_func = None
+        for t in ALL_TOOLS:
+            if t.name == tool_name:
+                tool_func = t
+                break
+
+        if tool_func is None:
+            result = f"工具 {tool_name} 不存在"
+            logger.error(f"[TOOL_NODE] {result}")
+        else:
+            try:
+                result = tool_func.invoke(tool_args)
+                logger.info(f"[TOOL_NODE] 结果: {result}")
+            except Exception as e:
+                result = f"工具执行错误: {e}"
+                logger.exception(f"[TOOL_NODE] 执行失败: {e}")
+
+        new_messages.append(ToolMessage(content=result, tool_call_id=tool_call_id))
+
+        # 检测 write_command 被调用
+        if tool_name == "write_command":
+            waiting_user = True
+            logger.info("[TOOL_NODE] write_command 已调用，设置 waiting_user=True")
+
+    return {
+        **state,
+        "messages": new_messages,
+        "waiting_user": waiting_user,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 条件路由（tool_node 后）
+# ---------------------------------------------------------------------------
+
+def should_continue_after_tool(state: AgentState) -> Literal["llm_call", "__end__"]:
+    """工具执行后判断是否继续。"""
+    if state.get("waiting_user"):
+        logger.debug("[ROUTER] waiting_user=True, 工具执行后结束")
+        return END
+    return "llm_call"
 
 
 # ---------------------------------------------------------------------------
@@ -88,8 +174,6 @@ def should_continue(state: AgentState) -> Literal["tool_node", "__end__"]:
 # ---------------------------------------------------------------------------
 
 def build_graph() -> StateGraph:
-    tool_node = ToolNode(ALL_TOOLS)
-
     graph = StateGraph(AgentState)
     graph.add_node("llm_call", llm_call)
     graph.add_node("tool_node", tool_node)
@@ -101,7 +185,12 @@ def build_graph() -> StateGraph:
         should_continue,
         {"tool_node": "tool_node", END: END},
     )
-    graph.add_edge("tool_node", "llm_call")
+    # tool_node 后也走条件路由，检查是否需要继续
+    graph.add_conditional_edges(
+        "tool_node",
+        should_continue_after_tool,
+        {"llm_call": "llm_call", END: END},
+    )
 
     return graph.compile()
 

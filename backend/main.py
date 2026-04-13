@@ -15,12 +15,12 @@ from backend.api.ws_routes import router as ws_router
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     print("=" * 50)
     print("  WinkTerm Backend starting...")
-    print(f"  Model       : {settings.model_name}")
-    print(f"  MiniMax URL : {settings.minimax_base_url}")
+    print(f"  Model       : {settings.llm_model}")
+    print(f"  LLM URL     : {settings.llm_base_url}")
     print(f"  Prometheus  : {settings.prometheus_url}")
     print(f"  Loki        : {settings.loki_url}")
     print(f"  CORS origins: {settings.cors_origins}")
-    print(f"  API key set : {'yes' if settings.minimax_api_key else 'NO - please set MINIMAX_API_KEY'}")
+    print(f"  API key set : {'yes' if settings.llm_api_key else 'NO - please set LLM_API_KEY'}")
     print("=" * 50)
     yield
     print("WinkTerm Backend stopped.")

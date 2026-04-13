@@ -10,7 +10,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.terminal.pty_manager import PtyManager
 from backend.agent.graph import get_graph
-from backend.agent.tools import set_pty_manager
+from backend.agent.tools import set_pty_manager, set_has_ai_output
 from backend.agent.state import AgentState
 from langchain_core.messages import HumanMessage
 
@@ -165,9 +165,6 @@ class TerminalWSHandler:
         """调用 AI Agent 并流式输出到终端。"""
         logger.info(f"[AGENT] 开始处理: {user_input}")
 
-        # 先打印提示，让用户知道 AI 正在思考
-        self.pty.write("winkterm: ".encode("utf-8"))
-
         try:
             graph = get_graph()
 
@@ -176,10 +173,17 @@ class TerminalWSHandler:
                 "terminal_output": self.pty.get_context(lines=50),
                 "analysis_result": "",
                 "llm_calls": 0,
+                "waiting_user": False,
             }
+
+            # 重置 AI 输出标志
+            set_has_ai_output(False)
 
             # 使用 astream_events 获取流式输出
             collected_content = ""
+            final_state = None
+            has_output = False  # 是否有文本输出
+
             async for event in graph.astream_events(initial_state, version="v2"):
                 event_type = event.get("event", "")
                 event_name = event.get("name", "")
@@ -191,6 +195,11 @@ class TerminalWSHandler:
                     if chunk and hasattr(chunk, "content"):
                         content = chunk.content
                         if content:
+                            if not has_output:
+                                has_output = True
+                                set_has_ai_output(True)  # 标记有 AI 输出
+                                self.pty.write("winkterm: ".encode("utf-8"))
+
                             logger.debug(f"[AGENT] AI 输出: {repr(content)}")
                             ansi_escape = re.compile(
                                 r"\x1b\[[\?0-9;]*[A-Za-z]"
@@ -204,20 +213,20 @@ class TerminalWSHandler:
                             collected_content += clean_content
                             self.pty.write(clean_content.encode("utf-8"))
 
-                # 监听工具调用开始
-                elif event_type == "on_tool_start":
-                    tool_name = event.get("name", "unknown")
-                    logger.debug(f"[AGENT] 工具调用: {tool_name}")
-                    self.pty.write(f"🔧 调用工具: {tool_name}".encode("utf-8"))
-
                 # 监听工具调用结束
                 elif event_type == "on_tool_end":
                     tool_name = event.get("name", "unknown")
                     logger.debug(f"[AGENT] 工具完成: {tool_name}")
 
-            # 完成后发送 Ctrl+C 重置命令行
-            logger.info(f"[AGENT] 处理完成")
-            self.pty.write(b"\x03")  # Ctrl+C
+                # 获取最终状态
+                elif event_type == "on_chain_end" and event_name == "LangGraph":
+                    final_state = event.get("data", {}).get("output")
+
+            # 根据状态决定是否发送 Ctrl+C
+            waiting_user = final_state.get("waiting_user", False) if final_state else False
+            logger.info(f"[AGENT] 处理完成, waiting_user={waiting_user}")
+            if has_output and not waiting_user:
+                self.pty.write(b"\x03")  # Ctrl+C
 
         except Exception as e:
             logger.exception(f"[AGENT] 调用失败: {e}")
@@ -227,7 +236,7 @@ class TerminalWSHandler:
         """PTY 输出回调：直接发送给 WebSocket。"""
         text = data.decode(errors="replace")
         self._bytes_sent += len(data)
-        logger.debug(f"[OUTPUT] len={len(data)} data={_truncate(text)}")
+        # logger.debug(f"[OUTPUT] len={len(data)} data={_truncate(text)}")
 
         # 如果正在捕获历史命令，保存到缓冲区
         if self._capturing_history:
