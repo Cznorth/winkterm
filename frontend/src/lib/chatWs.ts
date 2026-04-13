@@ -40,7 +40,7 @@ export function useChatWs() {
     isStreaming: false,
     isConnected: false,
     error: null,
-    mode: "chat",
+    mode: "craft",
   });
 
   const wsRef = useRef<WebSocket | null>(null);

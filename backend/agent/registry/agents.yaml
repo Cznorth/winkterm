@@ -3,19 +3,21 @@ agents:
   terminal:
     description: 终端内Agent，直接操作终端
     tools:
-      - terminal  # 使用 terminal 模块的所有工具
+      - write_command  # 写入命令等待用户确认
+      - get_terminal_context
     prompt: terminal.yaml
-    model: default  # 使用默认模型
+    model: default
 
   chat:
     description: 通用对话助手
-    tools: []  # 暂无工具
+    tools: []
     prompt: chat.yaml
     model: default
 
   craft:
     description: 代码创作助手，可直接操作终端
     tools:
-      - terminal
+      - terminal_input  # 直接执行命令
+      - get_terminal_context
     prompt: craft.yaml
     model: default

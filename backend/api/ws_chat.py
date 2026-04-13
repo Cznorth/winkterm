@@ -26,7 +26,7 @@ class ChatWSHandler:
     def __init__(self, websocket: WebSocket):
         self.ws = websocket
         self.agents: dict[str, CompiledGraph] = {}
-        self.current_mode = "chat"  # 默认 chat 模式
+        self.current_mode = "craft"  # 默认 craft 模式
 
     async def handle(self) -> None:
         await self.ws.accept()

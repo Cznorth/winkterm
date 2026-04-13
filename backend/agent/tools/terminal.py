@@ -157,3 +157,10 @@ def get_terminal_context(lines: int = 50) -> str:
 
 # 模块导出的工具列表
 TERMINAL_TOOLS = [terminal_input, write_command, get_terminal_context]
+
+# 按名称导出，供精细化配置
+TOOLS_BY_NAME = {
+    "terminal_input": terminal_input,
+    "write_command": write_command,
+    "get_terminal_context": get_terminal_context,
+}
