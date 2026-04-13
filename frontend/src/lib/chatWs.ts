@@ -15,11 +15,14 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export type ChatMode = "chat" | "craft";
+
 export interface ChatState {
   messages: ChatMessage[];
   isStreaming: boolean;
   isConnected: boolean;
   error: string | null;
+  mode: ChatMode;
 }
 
 export function useChatWs() {
@@ -28,6 +31,7 @@ export function useChatWs() {
     isStreaming: false,
     isConnected: false,
     error: null,
+    mode: "chat",
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -67,7 +71,7 @@ export function useChatWs() {
   }, []);
 
   // 处理消息
-  const handleMessage = useCallback((data: { type: string; content?: string; message?: string }) => {
+  const handleMessage = useCallback((data: { type: string; content?: string; message?: string; mode?: string }) => {
     switch (data.type) {
       case "start":
         currentMessageRef.current = "";
@@ -117,6 +121,12 @@ export function useChatWs() {
       case "error":
         setState((s) => ({ ...s, error: data.message || "未知错误", isStreaming: false }));
         break;
+
+      case "mode_changed":
+        if (data.mode === "chat" || data.mode === "craft") {
+          setState((s) => ({ ...s, mode: data.mode as ChatMode }));
+        }
+        break;
     }
   }, []);
 
@@ -150,6 +160,15 @@ export function useChatWs() {
     setState((s) => ({ ...s, messages: [] }));
   }, []);
 
+  // 切换模式
+  const switchMode = useCallback((mode: ChatMode) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      setState((s) => ({ ...s, error: "未连接" }));
+      return;
+    }
+    wsRef.current.send(JSON.stringify({ type: "switch_mode", mode }));
+  }, []);
+
   // 自动连接
   useEffect(() => {
     connect();
@@ -162,6 +181,7 @@ export function useChatWs() {
     ...state,
     sendMessage,
     clearMessages,
+    switchMode,
     reconnect: connect,
   };
 }

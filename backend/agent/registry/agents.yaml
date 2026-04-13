@@ -7,9 +7,14 @@ agents:
     prompt: terminal.yaml
     model: default  # 使用默认模型
 
-  analysis:
-    description: 终端外Agent，分析和查询工具
-    tools:
-      - monitoring  # 监控工具
-    prompt: analysis.yaml
+  chat:
+    description: 通用对话助手
+    tools: []  # 暂无工具
+    prompt: chat.yaml
+    model: default
+
+  craft:
+    description: 代码创作助手
+    tools: []  # 暂无工具
+    prompt: craft.yaml
     model: default

@@ -21,20 +21,22 @@ logger = logging.getLogger("ws_chat")
 
 
 class ChatWSHandler:
-    """侧边栏对话 WebSocket 处理器，使用 analysis agent。"""
+    """侧边栏对话 WebSocket 处理器，支持多种模式。"""
 
     def __init__(self, websocket: WebSocket):
         self.ws = websocket
-        self.agent: CompiledGraph | None = None
+        self.agents: dict[str, CompiledGraph] = {}
+        self.current_mode = "chat"  # 默认 chat 模式
 
     async def handle(self) -> None:
         await self.ws.accept()
         logger.info("[ACCEPT] Chat WebSocket 已连接")
 
-        # 编译 agent
+        # 预加载常用 agent
         try:
-            self.agent = get_agent("analysis")
-            logger.info("[AGENT] Analysis agent 已加载")
+            self.agents["chat"] = get_agent("chat")
+            self.agents["craft"] = get_agent("craft")
+            logger.info(f"[AGENT] 已加载: {list(self.agents.keys())}")
         except Exception as e:
             logger.error(f"[AGENT] 加载失败: {e}")
             await self._send_error("Agent 加载失败")
@@ -56,6 +58,14 @@ class ChatWSHandler:
 
                 if msg_type == "chat":
                     await self._handle_chat(msg.get("content", ""))
+                elif msg_type == "switch_mode":
+                    mode = msg.get("mode", "chat")
+                    if mode in self.agents:
+                        self.current_mode = mode
+                        logger.info(f"[MODE] 切换到: {mode}")
+                        await self._send({"type": "mode_changed", "mode": mode})
+                    else:
+                        await self._send_error(f"未知模式: {mode}")
                 else:
                     logger.warning(f"[MSG] 未知消息类型: {msg_type}")
 
@@ -71,7 +81,12 @@ class ChatWSHandler:
         if not content.strip():
             return
 
-        logger.info(f"[CHAT] 用户: {content[:50]}")
+        agent = self.agents.get(self.current_mode)
+        if not agent:
+            await self._send_error(f"Agent 未加载: {self.current_mode}")
+            return
+
+        logger.info(f"[CHAT] 用户 ({self.current_mode}): {content[:50]}")
 
         # 获取终端上下文
         terminal_output = get_terminal_context_raw(50)
@@ -105,7 +120,7 @@ class ChatWSHandler:
         # 流式处理
         collected_content = ""
         try:
-            async for event in self.agent.astream_events(state, version="v2"):
+            async for event in agent.astream_events(state, version="v2"):
                 event_type = event.get("event", "")
 
                 # LLM 流式输出

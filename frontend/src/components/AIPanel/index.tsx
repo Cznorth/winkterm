@@ -1,9 +1,25 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useChatWs, ChatMessage } from "@/lib/chatWs";
+import { useChatWs, ChatMessage, ChatMode } from "@/lib/chatWs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+// 模式图标 (SVG)
+const MODE_ICONS: Record<ChatMode, JSX.Element> = {
+  chat: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  ),
+  craft: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="14" rx="2"/>
+      <path d="M3 8h18"/>
+      <path d="M7 3v5"/>
+    </svg>
+  ),
+};
 
 // Markdown 样式
 const markdownStyles = `
@@ -103,15 +119,33 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   );
 }
 
+const MODE_INFO: Record<ChatMode, { label: string; desc: string }> = {
+  chat: { label: "Chat", desc: "对话助手，回答问题、提供建议" },
+  craft: { label: "Craft", desc: "创作助手，编写代码、生成配置" },
+};
+
 export default function AIPanel() {
-  const { messages, isStreaming, isConnected, error, sendMessage, clearMessages, reconnect } = useChatWs();
+  const { messages, isStreaming, isConnected, error, mode, sendMessage, clearMessages, switchMode, reconnect } = useChatWs();
   const [input, setInput] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // 点击外部关闭下拉菜单
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,9 +155,15 @@ export default function AIPanel() {
     }
   };
 
+  const handleModeSelect = (m: ChatMode) => {
+    switchMode(m);
+    setDropdownOpen(false);
+  };
+
+  const modeInfo = MODE_INFO[mode];
+
   return (
     <>
-      {/* 注入 Markdown 样式 */}
       <style>{markdownStyles}</style>
 
       <div
@@ -147,8 +187,9 @@ export default function AIPanel() {
             flexShrink: 0,
           }}
         >
-          <span style={{ fontSize: "13px", color: "#00ff88", fontWeight: 700 }}>
-            AI 分析助手
+          <span style={{ fontSize: "13px", color: "#00ff88", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ width: "16px", height: "16px", display: "flex" }}>{MODE_ICONS[mode]}</span>
+            {modeInfo.label}
           </span>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             <span
@@ -194,13 +235,7 @@ export default function AIPanel() {
                 lineHeight: "1.8",
               }}
             >
-              分析助手，可以帮你：
-              <br />
-              • 查询监控指标
-              <br />
-              • 搜索日志
-              <br />
-              • 分析系统问题
+              {modeInfo.desc}
             </div>
           )}
           {messages.map((msg) => (
@@ -256,12 +291,18 @@ export default function AIPanel() {
             flexShrink: 0,
           }}
         >
-          <input
-            type="text"
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isConnected ? "输入问题..." : "等待连接..."}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
+            placeholder={isConnected ? "输入问题... (Enter发送, Shift+Enter换行)" : "等待连接..."}
             disabled={!isConnected || isStreaming}
+            rows={2}
             style={{
               flex: 1,
               padding: "10px 14px",
@@ -271,6 +312,8 @@ export default function AIPanel() {
               color: "#e0e0e0",
               fontSize: "13px",
               outline: "none",
+              resize: "none",
+              lineHeight: "1.5",
             }}
           />
           <button
@@ -284,11 +327,112 @@ export default function AIPanel() {
               color: isConnected && input.trim() ? "#fff" : "#555",
               fontSize: "13px",
               cursor: isConnected && input.trim() ? "pointer" : "not-allowed",
+              alignSelf: "flex-end",
             }}
           >
             发送
           </button>
         </form>
+
+        {/* 模式选择器 - 底部 */}
+        <div
+          ref={dropdownRef}
+          style={{
+            padding: "8px 16px",
+            borderTop: "1px solid #1a1a3a",
+            flexShrink: 0,
+            position: "relative",
+          }}
+        >
+          {/* 下拉菜单 */}
+          {dropdownOpen && isConnected && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: "100%",
+                left: "16px",
+                marginBottom: "6px",
+                background: "#2a2a2e",
+                borderRadius: "10px",
+                padding: "6px",
+                minWidth: "180px",
+                border: "0.5px solid rgba(255,255,255,0.08)",
+                boxShadow: "0 -4px 16px rgba(0,0,0,0.4)",
+              }}
+            >
+              {(Object.keys(MODE_INFO) as ChatMode[]).map((m) => (
+                <div
+                  key={m}
+                  onClick={() => handleModeSelect(m)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "9px 10px",
+                    borderRadius: "7px",
+                    cursor: "pointer",
+                    background: m === mode ? "#3a3a40" : "transparent",
+                    transition: "background 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (m !== mode) e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (m !== mode) e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div
+                      style={{
+                        width: "20px",
+                        height: "20px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#a0a0b0",
+                      }}
+                    >
+                      {MODE_ICONS[m]}
+                    </div>
+                    <span style={{ color: "#e0e0e8", fontSize: "13.5px" }}>{MODE_INFO[m].label}</span>
+                  </div>
+                  {m === mode && (
+                    <span style={{ color: "#a0a0b0", fontSize: "13px" }}>✓</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 状态栏 / 触发按钮 */}
+          <div
+            onClick={() => isConnected && setDropdownOpen(!dropdownOpen)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 12px",
+              background: "#2a2a2e",
+              borderRadius: "7px",
+              border: "0.5px solid rgba(255,255,255,0.08)",
+              cursor: isConnected ? "pointer" : "not-allowed",
+              transition: "background 0.15s",
+              opacity: isConnected ? 1 : 0.5,
+            }}
+            onMouseEnter={(e) => {
+              if (isConnected) e.currentTarget.style.background = "#32323a";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#2a2a2e";
+            }}
+          >
+            <div style={{ width: "14px", height: "14px", color: "#a0a0b0", display: "flex" }}>
+              {MODE_ICONS[mode]}
+            </div>
+            <span style={{ color: "#e0e0e8", fontSize: "13px" }}>{MODE_INFO[mode].label}</span>
+            <span style={{ color: "#a0a0b0", fontSize: "10px", marginLeft: "2px" }}>▾</span>
+          </div>
+        </div>
       </div>
     </>
   );
