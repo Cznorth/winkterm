@@ -8,7 +8,7 @@ import re
 from typing import TYPE_CHECKING
 
 from fastapi import WebSocket, WebSocketDisconnect
-from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.agent.factory import get_agent
 from backend.agent.core.state import AgentState
@@ -27,6 +27,7 @@ class ChatWSHandler:
         self.ws = websocket
         self.agents: dict[str, CompiledGraph] = {}
         self.current_mode = "craft"  # 默认 craft 模式
+        self.history: list[HumanMessage | AIMessage] = []  # 会话历史
 
     async def handle(self) -> None:
         await self.ws.accept()
@@ -58,8 +59,12 @@ class ChatWSHandler:
 
                 if msg_type == "chat":
                     await self._handle_chat(msg.get("content", ""))
+                elif msg_type == "clear":
+                    # 清空历史
+                    self.history = []
+                    logger.info("[CLEAR] 会话历史已清空")
                 elif msg_type == "switch_mode":
-                    mode = msg.get("mode", "chat")
+                    mode = msg.get("mode", "craft")
                     if mode in self.agents:
                         self.current_mode = mode
                         logger.info(f"[MODE] 切换到: {mode}")
@@ -88,6 +93,10 @@ class ChatWSHandler:
 
         logger.info(f"[CHAT] 用户 ({self.current_mode}): {content[:50]}")
 
+        # 添加用户消息到历史
+        user_msg = HumanMessage(content=content)
+        self.history.append(user_msg)
+
         # 获取终端上下文
         terminal_output = get_terminal_context_raw(50)
         if terminal_output:
@@ -105,9 +114,13 @@ class ChatWSHandler:
                 terminal_output = "...(省略前面内容)...\n" + terminal_output[-4000:]
             logger.debug(f"[CHAT] 终端上下文: {len(terminal_output)} 字符")
 
+        # 构建消息：历史 + 当前用户消息
+        # 注意：history 已包含当前用户消息，所以直接使用
+        messages = list(self.history)
+
         # 初始状态
         state: AgentState = {
-            "messages": [HumanMessage(content=content)],
+            "messages": messages,
             "terminal_output": terminal_output,
             "analysis_result": "",
             "llm_calls": 0,
@@ -159,6 +172,10 @@ class ChatWSHandler:
                         "result": tool_result
                     })
 
+            # 添加 AI 回复到历史
+            if collected_content:
+                self.history.append(AIMessage(content=collected_content))
+
             # 发送结束标记
             await self._send({
                 "type": "end",
@@ -166,6 +183,9 @@ class ChatWSHandler:
             })
 
         except Exception as e:
+            # 出错时移除已添加的用户消息
+            if self.history and self.history[-1] == user_msg:
+                self.history.pop()
             logger.exception(f"[CHAT] 处理失败: {e}")
             await self._send_error(str(e))
 

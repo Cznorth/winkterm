@@ -221,6 +221,9 @@ export function useChatWs() {
 
   // 清空消息
   const clearMessages = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "clear" }));
+    }
     setState((s) => ({ ...s, messages: [] }));
   }, []);
 
