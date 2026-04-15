@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from langchain_core.tools import tool
@@ -70,7 +71,7 @@ CONTROL_KEYS = {
 
 
 @tool
-def terminal_input(input: str) -> str:
+async def terminal_input(input: str) -> str:
     """在终端执行输入并返回结果。
 
     Args:
@@ -83,7 +84,6 @@ def terminal_input(input: str) -> str:
         执行后的终端上下文（最近50行）
     """
     import logging
-    import time
 
     logger = logging.getLogger("tools")
     pty = _require_pty()
@@ -102,8 +102,8 @@ def terminal_input(input: str) -> str:
         pty.write_command(input)
         pty.write(b"\r\n")
 
-    # 等待输出
-    time.sleep(0.3)
+    # 异步等待输出（不阻塞事件循环）
+    await asyncio.sleep(0.3)
 
     # 返回终端上下文
     context = pty.get_context(50)

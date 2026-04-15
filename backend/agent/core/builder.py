@@ -122,7 +122,7 @@ class AgentBuilder:
                 logger.error(f"[{self.name}] {result}")
             else:
                 try:
-                    result = tool_func.invoke(tool_args)
+                    result = await tool_func.ainvoke(tool_args)
                     logger.info(f"[{self.name}] 结果: {result}")
                 except Exception as e:
                     result = f"工具执行错误: {e}"
