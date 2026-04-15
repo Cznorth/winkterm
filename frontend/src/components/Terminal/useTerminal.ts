@@ -1,15 +1,19 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
+import type { SerializeAddon } from "@xterm/addon-serialize";
 import { getWebSocket } from "@/lib/websocket";
 
 const DEBUG = process.env.NODE_ENV === "development";
+const SCREEN_SYNC_DELAY = 200; // 防抖延迟（毫秒）
 
 export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>) {
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const serializeAddonRef = useRef<SerializeAddon | null>(null);
   const wsRef = useRef(getWebSocket());
   const initRef = useRef(false);
+  const screenSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 保存清理函数
   const unsubRef = useRef<{ msg?: () => void; status?: () => void }>({});
 
@@ -24,6 +28,7 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
     const { Terminal } = await import("@xterm/xterm");
     const { FitAddon } = await import("@xterm/addon-fit");
     const { WebLinksAddon } = await import("@xterm/addon-web-links");
+    const { SerializeAddon } = await import("@xterm/addon-serialize");
 
     const term = new Terminal({
       theme: {
@@ -58,13 +63,16 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
     });
 
     const fitAddon = new FitAddon();
+    const serializeAddon = new SerializeAddon();
     term.loadAddon(fitAddon);
+    term.loadAddon(serializeAddon);
     term.loadAddon(new WebLinksAddon());
     term.open(containerRef.current);
     fitAddon.fit();
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
+    serializeAddonRef.current = serializeAddon;
 
     // 键盘输入 → WebSocket
     term.onData((data) => {
@@ -83,6 +91,16 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
 
     unsubRef.current.msg = ws.onMessage((data: string) => {
       term.write(data);
+      // 每次输出后同步屏幕内容（防抖）
+      if (screenSyncTimerRef.current) {
+        clearTimeout(screenSyncTimerRef.current);
+      }
+      screenSyncTimerRef.current = setTimeout(() => {
+        if (serializeAddonRef.current && termRef.current) {
+          const screenContent = serializeAddonRef.current.serialize({ rows: termRef.current.rows });
+          ws.send(`\x1b[?9999;screen;${encodeURIComponent(screenContent)}h`);
+        }
+      }, SCREEN_SYNC_DELAY);
     });
 
     let resizeOnConnect: (() => void) | null = () => {
@@ -130,6 +148,9 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
   // 清理
   useEffect(() => {
     return () => {
+      if (screenSyncTimerRef.current) {
+        clearTimeout(screenSyncTimerRef.current);
+      }
       if (unsubRef.current.msg) unsubRef.current.msg();
       if (unsubRef.current.status) unsubRef.current.status();
       wsRef.current.disconnect();

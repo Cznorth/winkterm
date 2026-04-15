@@ -23,6 +23,8 @@ logging.basicConfig(
 
 # resize 事件格式: ESC[8;rows;colst
 _RESIZE_PATTERN = re.compile(r"\x1b\[8;(\d+);(\d+)t")
+# 屏幕内容响应格式: ESC[?9999;screen;<encoded_content>h
+_SCREEN_CONTENT_PATTERN = re.compile(r"\x1b\[\?9999;screen;([^\x1b]*)h")
 
 
 def _truncate(data: str, max_len: int = 100) -> str:
@@ -77,6 +79,15 @@ class TerminalWSHandler:
                 data = await self.ws.receive_text()
                 self._msg_count += 1
                 self._bytes_received += len(data.encode("utf-8"))
+
+                # 检查是否是屏幕内容响应
+                screen_match = _SCREEN_CONTENT_PATTERN.fullmatch(data)
+                if screen_match:
+                    from urllib.parse import unquote
+                    content = unquote(screen_match.group(1))
+                    self.pty.set_screen_content(content)
+                    logger.debug(f"[SCREEN_CONTENT] 收到屏幕内容, 长度={len(content)}")
+                    continue
 
                 # 检查是否是 resize 事件
                 match = _RESIZE_PATTERN.fullmatch(data)
@@ -231,7 +242,7 @@ class TerminalWSHandler:
         except Exception as e:
             logger.exception(f"[AGENT] 调用失败: {e}")
             await self._send(f"\r\n\033[31m❌ AI 调用出错: {e}\033[0m\r\n")
-        
+
     def _on_pty_output(self, data: bytes) -> None:
         """PTY 输出回调：直接发送给 WebSocket。"""
         text = data.decode(errors="replace")

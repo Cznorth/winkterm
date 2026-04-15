@@ -40,6 +40,7 @@ class PtyManager:
     def __init__(self) -> None:
         self._proc = None  # winpty.PtyProcess | ptyprocess.PtyProcess
         self._output_buffer: deque[str] = deque(maxlen=self.BUFFER_LINES)
+        self._screen_content: str = ""  # 前端序列化的屏幕内容
         self._read_callbacks: list[Callable[[bytes], None]] = []
         self._queue: asyncio.Queue[bytes | None] | None = None
         self._read_thread: threading.Thread | None = None
@@ -188,9 +189,28 @@ class PtyManager:
                 pass
 
     # ------------------------------------------------------------------
-    # 上下文（用于 AI 分析，暂时保留接口）
+    # 屏幕内容（从前端 xterm.js 序列化）
+    # ------------------------------------------------------------------
+
+    def set_screen_content(self, content: str) -> None:
+        """更新屏幕内容缓存（由 ws_handler 调用）。"""
+        self._screen_content = content
+
+    def get_screen_content(self) -> str:
+        """获取当前屏幕内容。"""
+        return self._screen_content
+
+    # ------------------------------------------------------------------
+    # 上下文（用于 AI 分析）
     # ------------------------------------------------------------------
 
     def get_context(self, lines: int = 500) -> str:
+        """获取终端上下文，优先使用屏幕内容。
+
+        如果有前端序列化的屏幕内容，直接返回（这是最准确的渲染结果）。
+        否则回退到 output buffer（原始 ANSI 流）。
+        """
+        if self._screen_content:
+            return self._screen_content
         recent = list(self._output_buffer)[-lines:]
         return "\n".join(recent)
