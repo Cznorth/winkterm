@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Literal, Union
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langgraph.graph import END, StateGraph
 
 from backend.agent.core.state import AgentState
-from backend.config import settings
+from backend.config import settings, UserConfig
 
 logger = logging.getLogger("agent.builder")
 
@@ -24,19 +25,36 @@ class AgentBuilder:
         self.tools = tools
         self.model = model
 
-    def _build_llm(self) -> ChatOpenAI:
+    def _build_llm(self) -> Union[ChatOpenAI, ChatAnthropic]:
         """构建 LLM 并绑定工具。"""
-        model_name = (
+        # 优先使用用户配置
+        user_config = UserConfig.load()
+        api_format = user_config.get("api_format", "openai")
+        base_url = user_config.get("base_url") or settings.llm_base_url
+        api_key = user_config.get("api_key") or settings.llm_api_key
+        selected_model = user_config.get("selected_model")
+
+        # 模型优先级: 用户选择 > 配置默认
+        model_name = selected_model or (
             settings.llm_model if self.model == "default" else self.model
         )
-        llm = ChatOpenAI(
-            model=model_name,
-            temperature=0,
-            api_key=settings.llm_api_key,
-            base_url=settings.llm_base_url,
-        )
+
+        if api_format == "anthropic":
+            llm = ChatAnthropic(
+                model=model_name,
+                temperature=0,
+                api_key=api_key,
+                base_url=base_url.split("/v1")[0] if base_url else None,
+            )
+        else:
+            llm = ChatOpenAI(
+                model=model_name,
+                temperature=0,
+                api_key=api_key,
+                base_url=base_url if base_url else None,
+            )
         bound = llm.bind_tools(self.tools)
-        logger.debug(f"[{self.name}] 绑定工具: {[t.name for t in self.tools]}")
+        logger.debug(f"[{self.name}] 绑定工具: {[t.name for t in self.tools]}, 模型: {model_name}, 格式: {api_format}")
         return bound
 
     async def _llm_call(self, state: AgentState) -> AgentState:

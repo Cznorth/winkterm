@@ -32,6 +32,7 @@ export interface ChatState {
   isConnected: boolean;
   error: string | null;
   mode: ChatMode;
+  model: string;
 }
 
 export function useChatWs() {
@@ -41,6 +42,7 @@ export function useChatWs() {
     isConnected: false,
     error: null,
     mode: "craft",
+    model: "",
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -191,6 +193,12 @@ export function useChatWs() {
           setState((s) => ({ ...s, mode: data.mode as ChatMode }));
         }
         break;
+
+      case "model_changed":
+        if (data.model) {
+          setState((s) => ({ ...s, model: data.model as string }));
+        }
+        break;
     }
   }, []);
 
@@ -236,6 +244,16 @@ export function useChatWs() {
     wsRef.current.send(JSON.stringify({ type: "switch_mode", mode }));
   }, []);
 
+  // 切换模型
+  const switchModel = useCallback((model: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      setState((s) => ({ ...s, error: "未连接" }));
+      return;
+    }
+    wsRef.current.send(JSON.stringify({ type: "switch_model", model }));
+    setState((s) => ({ ...s, model }));
+  }, []);
+
   // 自动连接
   useEffect(() => {
     connect();
@@ -249,6 +267,7 @@ export function useChatWs() {
     sendMessage,
     clearMessages,
     switchMode,
+    switchModel,
     reconnect: connect,
   };
 }

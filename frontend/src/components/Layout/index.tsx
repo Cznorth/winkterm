@@ -4,6 +4,7 @@ import { ReactNode, useMemo, useState } from "react";
 import TabBar from "@/components/TabBar";
 import { useTabs } from "@/hooks/useTabs";
 import Terminal from "@/components/Terminal";
+import SettingsPanel from "@/components/SettingsPanel";
 import "./Layout.css";
 
 interface LayoutProps {
@@ -33,7 +34,7 @@ const Icons = {
   ),
 };
 
-type ActivityItem = "terminal" | "ai";
+type ActivityItem = "terminal" | "ai" | "settings";
 
 export default function SplitLayout({ aiPanel }: LayoutProps) {
   const { tabs, activeTabId, addTab, closeTab, switchTab, renameTab } = useTabs();
@@ -77,7 +78,11 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
             </div>
           </div>
           <div className="activity-bar-bottom">
-            <div className="activity-item" title="设置">
+            <div
+              className={`activity-item ${activeActivity === "settings" ? "active" : ""}`}
+              title="设置"
+              onClick={() => setActiveActivity("settings")}
+            >
               {Icons.settings}
             </div>
           </div>
@@ -100,7 +105,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
 
         {/* AI 面板 */}
         <div className="ai-section">
-          {aiPanel}
+          {activeActivity === "settings" ? <SettingsPanel /> : aiPanel}
         </div>
       </div>
 

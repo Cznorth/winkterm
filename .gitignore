@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# 用户配置
+config.json
+
 # Python
 __pycache__/
 *.py[cod]

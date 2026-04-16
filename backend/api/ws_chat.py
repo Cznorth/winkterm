@@ -13,6 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from backend.agent.factory import get_agent
 from backend.agent.core.state import AgentState
 from backend.agent.tools.terminal import get_terminal_context_raw
+from backend.config import UserConfig
 
 if TYPE_CHECKING:
     from langgraph.graph import CompiledGraph
@@ -32,6 +33,12 @@ class ChatWSHandler:
     async def handle(self) -> None:
         await self.ws.accept()
         logger.info("[ACCEPT] Chat WebSocket 已连接")
+
+        # 发送当前模型
+        config = UserConfig.load()
+        current_model = config.get("selected_model", "")
+        if current_model:
+            await self._send({"type": "model_changed", "model": current_model})
 
         # 预加载常用 agent
         try:
@@ -71,6 +78,14 @@ class ChatWSHandler:
                         await self._send({"type": "mode_changed", "mode": mode})
                     else:
                         await self._send_error(f"未知模式: {mode}")
+                elif msg_type == "switch_model":
+                    model = msg.get("model", "")
+                    # 保存到配置
+                    config = UserConfig.load()
+                    config["selected_model"] = model
+                    UserConfig.save(config)
+                    logger.info(f"[MODEL] 切换到: {model}")
+                    await self._send({"type": "model_changed", "model": model})
                 else:
                     logger.warning(f"[MSG] 未知消息类型: {msg_type}")
 
@@ -141,12 +156,12 @@ class ChatWSHandler:
                     chunk = event.get("data", {}).get("chunk")
                     if chunk and hasattr(chunk, "content"):
                         token = chunk.content
+                        # Anthropic 返回 list[dict]，需要转换
+                        if isinstance(token, list):
+                            token = "".join(t.get("text", "") if isinstance(t, dict) else str(t) for t in token)
                         if token:
                             collected_content += token
-                            await self._send({
-                                "type": "token",
-                                "content": token
-                            })
+                            await self._send({"type": "token", "content": token})
 
                 # 工具调用
                 elif event_type == "on_tool_start":

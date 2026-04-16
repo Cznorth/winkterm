@@ -2,9 +2,15 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useChatWs, ChatMessage, ChatMode, ToolCall } from "@/lib/chatWs";
+import axios from "@/lib/axios";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./AIPanel.css";
+
+interface ModelInfo {
+  id: string;
+  name: string;
+}
 
 // 模式图标 (SVG)
 const MODE_ICONS: Record<ChatMode, JSX.Element> = {
@@ -108,11 +114,21 @@ const MODE_INFO: Record<ChatMode, { label: string; desc: string }> = {
 };
 
 export default function AIPanel() {
-  const { messages, isStreaming, isConnected, error, mode, sendMessage, clearMessages, switchMode, reconnect } = useChatWs();
+  const { messages, isStreaming, isConnected, error, mode, model, sendMessage, clearMessages, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [models, setModels] = useState<ModelInfo[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+
+  // 加载模型列表
+  useEffect(() => {
+    axios.get("/api/settings").then((res) => {
+      setModels(res.data.models || []);
+    });
+  }, []);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -124,6 +140,9 @@ export default function AIPanel() {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setModelDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -141,6 +160,11 @@ export default function AIPanel() {
   const handleModeSelect = (m: ChatMode) => {
     switchMode(m);
     setDropdownOpen(false);
+  };
+
+  const handleModelSelect = (m: string) => {
+    switchModel(m);
+    setModelDropdownOpen(false);
   };
 
   const modeInfo = MODE_INFO[mode];
@@ -252,6 +276,38 @@ export default function AIPanel() {
         >
           {MODE_ICONS[mode]}
           <span>{modeInfo.label}</span>
+          <span className="ai-mode-arrow">▾</span>
+        </button>
+      </div>
+
+      {/* 模型选择器 */}
+      <div className="ai-mode-selector" ref={modelDropdownRef} style={{ marginLeft: "8px" }}>
+        {/* 下拉菜单 */}
+        {modelDropdownOpen && isConnected && models.length > 0 && (
+          <div className="ai-mode-dropdown">
+            {models.map((m) => (
+              <div
+                key={m.id}
+                className={`ai-mode-option ${m.id === model ? "active" : ""}`}
+                onClick={() => handleModelSelect(m.id)}
+              >
+                <span className="ai-mode-option-name">{m.name || m.id}</span>
+                {m.id === model && <span className="ai-mode-check">✓</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 模型按钮 */}
+        <button
+          className="ai-mode-btn"
+          onClick={() => isConnected && models.length > 0 && setModelDropdownOpen(!modelDropdownOpen)}
+          disabled={!isConnected || models.length === 0}
+          title={model || "选择模型"}
+        >
+          <span style={{ maxWidth: "100px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {model ? (models.find(m => m.id === model)?.name || model) : "模型"}
+          </span>
           <span className="ai-mode-arrow">▾</span>
         </button>
       </div>
