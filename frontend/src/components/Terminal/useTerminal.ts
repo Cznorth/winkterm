@@ -34,30 +34,32 @@ export function useTerminal(
     const { WebLinksAddon } = await import("@xterm/addon-web-links");
     const { SerializeAddon } = await import("@xterm/addon-serialize");
 
+    // VS Code 风格终端主题
     const term = new Terminal({
       theme: {
-        background: "#1a1a2e",
-        foreground: "#e0e0e0",
-        cursor: "#00ff88",
-        cursorAccent: "#1a1a2e",
-        black: "#1a1a2e",
-        brightBlack: "#555",
-        red: "#ff5555",
-        brightRed: "#ff6e6e",
-        green: "#50fa7b",
-        brightGreen: "#69ff94",
-        yellow: "#f1fa8c",
-        brightYellow: "#ffffa5",
-        blue: "#6272a4",
-        brightBlue: "#d6acff",
-        magenta: "#ff79c6",
-        brightMagenta: "#ff92df",
-        cyan: "#8be9fd",
-        brightCyan: "#a4ffff",
-        white: "#f8f8f2",
-        brightWhite: "#ffffff",
+        background: "#1e1e1e",
+        foreground: "#d4d4d4",
+        cursor: "#aeafad",
+        cursorAccent: "#1e1e1e",
+        selectionBackground: "#264f78",
+        black: "#1e1e1e",
+        brightBlack: "#6e6e6e",
+        red: "#f14c4c",
+        brightRed: "#f14c4c",
+        green: "#23d18b",
+        brightGreen: "#3fcf8e",
+        yellow: "#e2e084",
+        brightYellow: "#e2e084",
+        blue: "#3794ff",
+        brightBlue: "#3794ff",
+        magenta: "#c586c0",
+        brightMagenta: "#d679d1",
+        cyan: "#4ec9b0",
+        brightCyan: "#4ec9b0",
+        white: "#d4d4d4",
+        brightWhite: "#d4d4d4",
       },
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace",
       fontSize: 14,
       lineHeight: 1.4,
       cursorBlink: true,
@@ -119,7 +121,7 @@ export function useTerminal(
           resizeOnConnect = null;
         }
       } else {
-        term.write("\r\n\x1b[31m[WinkTerm] 断开，重连中...\x1b[0m\r\n");
+        term.write("\r\n\x1b[33m[WinkTerm] 断开，重连中...\x1b[0m\r\n");
         resizeOnConnect = () => {
           if (termRef.current) {
             const { cols, rows } = termRef.current;

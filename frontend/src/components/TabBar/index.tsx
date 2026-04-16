@@ -13,6 +13,14 @@ interface TabBarProps {
   onTabRename: (id: string, title: string) => void;
 }
 
+// 终端图标
+const TerminalIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="4 17 10 11 4 5" />
+    <line x1="12" y1="19" x2="20" y2="19" />
+  </svg>
+);
+
 export default function TabBar({
   tabs,
   activeTabId,
@@ -53,6 +61,7 @@ export default function TabBar({
           onClick={() => onTabClick(tab.id)}
           onDoubleClick={() => handleDoubleClick(tab)}
         >
+          <span className="tab-icon">{TerminalIcon}</span>
           {editingId === tab.id ? (
             <input
               type="text"
@@ -81,9 +90,10 @@ export default function TabBar({
           )}
         </div>
       ))}
-      <button className="tab-add" onClick={onTabAdd} title="新建标签">
+      <button className="tab-add" onClick={onTabAdd} title="新建终端">
         +
       </button>
+      <div className="tab-bar-spacer" />
     </div>
   );
 }

@@ -1,38 +1,75 @@
+/* TabBar - VS Code 风格 */
+
 .tab-bar {
   display: flex;
-  align-items: center;
-  background: #1a1a2e;
-  border-bottom: 1px solid #2a2a4a;
-  height: 36px;
-  padding: 0 4px;
+  align-items: stretch;
+  background: var(--bg-tertiary);
+  height: 35px;
+  padding: 0;
   user-select: none;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
+.tab-bar::-webkit-scrollbar {
+  height: 3px;
+}
+
+/* 标签项 */
 .tab {
   display: flex;
   align-items: center;
-  padding: 6px 12px;
-  margin-right: 2px;
-  background: #16162a;
-  border-radius: 6px 6px 0 0;
-  cursor: pointer;
-  color: #888;
+  padding: 0 12px;
+  background: var(--bg-secondary);
+  color: var(--fg-secondary);
   font-size: 13px;
-  min-width: 80px;
-  max-width: 160px;
-  transition: background 0.15s, color 0.15s;
+  min-width: 100px;
+  max-width: 200px;
+  cursor: pointer;
+  position: relative;
+  border-right: 1px solid var(--border-default);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .tab:hover {
-  background: #1e1e3a;
-  color: #bbb;
+  background: var(--bg-hover);
+  color: var(--fg-primary);
 }
 
 .tab.active {
-  background: #0f0f1a;
-  color: #fff;
+  background: var(--bg-primary);
+  color: var(--fg-primary);
 }
 
+/* 活动标签顶部指示线 */
+.tab.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--accent-primary);
+}
+
+/* 标签图标 */
+.tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  color: var(--accent-light);
+  flex-shrink: 0;
+}
+
+.tab-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 标签标题 */
 .tab-title {
   flex: 1;
   overflow: hidden;
@@ -40,32 +77,35 @@
   white-space: nowrap;
 }
 
+/* 标签标题输入框 */
 .tab-title-input {
-  background: #2a2a4a;
-  border: 1px solid #4a4a6a;
-  border-radius: 3px;
-  color: #fff;
+  background: var(--bg-input);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
   font-size: 13px;
-  padding: 2px 4px;
+  padding: 2px 6px;
   width: 100%;
   outline: none;
 }
 
+/* 关闭按钮 */
 .tab-close {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: 6px;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
   background: transparent;
   border: none;
-  border-radius: 3px;
-  color: #666;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
   font-size: 16px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
 }
 
 .tab:hover .tab-close {
@@ -73,27 +113,38 @@
 }
 
 .tab-close:hover {
-  background: #ff5555;
-  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg-primary);
 }
 
+.tab.active .tab-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* 添加按钮 */
 .tab-add {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-left: 4px;
+  width: 35px;
+  height: 35px;
   background: transparent;
-  border: 1px dashed #3a3a5a;
-  border-radius: 4px;
-  color: #666;
+  border: none;
+  color: var(--fg-secondary);
   font-size: 18px;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .tab-add:hover {
-  border-color: #6a6a8a;
-  color: #aaa;
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+/* 空白填充区域 */
+.tab-bar-spacer {
+  flex: 1;
+  background: var(--bg-tertiary);
+  min-width: 20px;
 }
