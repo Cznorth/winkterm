@@ -10,15 +10,8 @@ from langchain_core.tools import tool
 if TYPE_CHECKING:
     from backend.terminal.pty_manager import PtyManager
 
-# pty_manager 由外部注入
-_pty_manager: "PtyManager | None" = None
+# has_ai_output 标志
 _has_ai_output: bool = False
-
-
-def set_pty_manager(manager: "PtyManager") -> None:
-    """注入 pty_manager 实例。"""
-    global _pty_manager
-    _pty_manager = manager
 
 
 def set_has_ai_output(value: bool) -> None:
@@ -27,13 +20,16 @@ def set_has_ai_output(value: bool) -> None:
     _has_ai_output = value
 
 
-def _require_pty() -> "PtyManager | None":
-    return _pty_manager
+def _get_active_pty() -> "PtyManager | None":
+    """获取当前激活会话的 PTY。"""
+    from backend.terminal.session_manager import get_session_manager
+    session = get_session_manager().get_active_session()
+    return session.pty if session else None
 
 
 def get_terminal_context_raw(lines: int = 50) -> str:
     """获取终端上下文的普通函数（非工具），供其他模块直接调用。"""
-    pty = _require_pty()
+    pty = _get_active_pty()
     if pty is None:
         return ""
 
@@ -86,7 +82,7 @@ async def terminal_input(input: str) -> str:
     import logging
 
     logger = logging.getLogger("tools")
-    pty = _require_pty()
+    pty = _get_active_pty()
     logger.info(f"[terminal_input] pty={pty}, input={input}")
 
     if pty is None:
@@ -103,7 +99,7 @@ async def terminal_input(input: str) -> str:
         pty.write(b"\r\n")
 
     # 异步等待输出（不阻塞事件循环）
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.8)
 
     # 返回终端上下文
     context = pty.get_context(50)

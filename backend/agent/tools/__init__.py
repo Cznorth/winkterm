@@ -1,6 +1,6 @@
 # 工具模块
 from backend.agent.tools.terminal import TERMINAL_TOOLS, TOOLS_BY_NAME, get_terminal_context
-from backend.agent.tools.terminal import set_pty_manager, set_has_ai_output
+from backend.agent.tools.terminal import set_has_ai_output
 from backend.agent.tools.monitoring import MONITORING_TOOLS
 
 # 工具注册表：模块名 -> 工具列表

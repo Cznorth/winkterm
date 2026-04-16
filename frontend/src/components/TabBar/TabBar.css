@@ -1,0 +1,99 @@
+.tab-bar {
+  display: flex;
+  align-items: center;
+  background: #1a1a2e;
+  border-bottom: 1px solid #2a2a4a;
+  height: 36px;
+  padding: 0 4px;
+  user-select: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  margin-right: 2px;
+  background: #16162a;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  color: #888;
+  font-size: 13px;
+  min-width: 80px;
+  max-width: 160px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab:hover {
+  background: #1e1e3a;
+  color: #bbb;
+}
+
+.tab.active {
+  background: #0f0f1a;
+  color: #fff;
+}
+
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-title-input {
+  background: #2a2a4a;
+  border: 1px solid #4a4a6a;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 13px;
+  padding: 2px 4px;
+  width: 100%;
+  outline: none;
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: #ff5555;
+  color: #fff;
+}
+
+.tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  background: transparent;
+  border: 1px dashed #3a3a5a;
+  border-radius: 4px;
+  color: #666;
+  font-size: 18px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.tab-add:hover {
+  border-color: #6a6a8a;
+  color: #aaa;
+}

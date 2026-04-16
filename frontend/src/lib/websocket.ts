@@ -1,7 +1,7 @@
 type MessageHandler = (data: string) => void;
 type StatusHandler = (connected: boolean) => void;
 
-const WS_URL =
+const WS_BASE_URL =
   typeof window !== "undefined"
     ? (process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/terminal")
     : "";
@@ -41,11 +41,20 @@ export class TerminalWebSocket {
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private intentionallyClosed = false;
+  private sessionId: string;
   // 调试统计
   private _connectTime = 0;
   private _msgCount = 0;
   private _bytesReceived = 0;
   private _bytesSent = 0;
+
+  constructor(sessionId: string = "default") {
+    this.sessionId = sessionId;
+  }
+
+  private getWsUrl(): string {
+    return `${WS_BASE_URL}/${this.sessionId}`;
+  }
 
   connect(): void {
     this.intentionallyClosed = false;
@@ -60,12 +69,13 @@ export class TerminalWebSocket {
       log.info("[connect] 正在连接中，跳过");
       return;
     }
-    log.info(`[connect] 开始连接: ${WS_URL}`);
-    this._connect();
+    const wsUrl = this.getWsUrl();
+    log.info(`[connect] 开始连接: ${wsUrl}`);
+    this._connect(wsUrl);
   }
 
-  private _connect(): void {
-    if (!WS_URL) {
+  private _connect(wsUrl: string): void {
+    if (!wsUrl) {
       log.warn("[_connect] WS_URL 为空，跳过");
       return;
     }
@@ -77,7 +87,7 @@ export class TerminalWebSocket {
 
     let ws: WebSocket;
     try {
-      ws = new WebSocket(WS_URL);
+      ws = new WebSocket(wsUrl);
       log.info("[_connect] WebSocket 实例已创建");
     } catch (err) {
       log.error("[_connect] 创建失败:", err);
@@ -139,7 +149,7 @@ export class TerminalWebSocket {
       `[_scheduleReconnect] ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} ` +
         `延迟 ${RECONNECT_DELAY_MS}ms 后重连`
     );
-    this.reconnectTimer = setTimeout(() => this._connect(), RECONNECT_DELAY_MS);
+    this.reconnectTimer = setTimeout(() => this.connect(), RECONNECT_DELAY_MS);
   }
 
   private _cleanupWs(): void {
@@ -203,6 +213,14 @@ export class TerminalWebSocket {
     this.send(`\x1b[8;${rows};${cols}t`);
   }
 
+  /**
+   * 发送激活消息（通知后端此会话被激活）。
+   */
+  sendActivate(): void {
+    log.info(`[sendActivate] session=${this.sessionId}`);
+    this.send(`\x1b[?9999;activateh`);
+  }
+
   onMessage(handler: MessageHandler): () => void {
     this.messageHandlers.push(handler);
     return () => {
@@ -230,11 +248,20 @@ export class TerminalWebSocket {
   }
 }
 
-let _instance: TerminalWebSocket | null = null;
+// 多实例缓存（按 session_id）
+const _instances: Map<string, TerminalWebSocket> = new Map();
 
-export function getWebSocket(): TerminalWebSocket {
-  if (!_instance) {
-    _instance = new TerminalWebSocket();
+export function getWebSocket(sessionId: string = "default"): TerminalWebSocket {
+  if (!_instances.has(sessionId)) {
+    _instances.set(sessionId, new TerminalWebSocket(sessionId));
   }
-  return _instance;
+  return _instances.get(sessionId)!;
+}
+
+export function closeWebSocket(sessionId: string): void {
+  const instance = _instances.get(sessionId);
+  if (instance) {
+    instance.disconnect();
+    _instances.delete(sessionId);
+  }
 }

@@ -9,8 +9,9 @@ import time
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.terminal.pty_manager import PtyManager
+from backend.terminal.session_manager import get_session_manager, TerminalSession
 from backend.agent.graph import get_graph
-from backend.agent.tools import set_pty_manager, set_has_ai_output
+from backend.agent.tools import set_has_ai_output
 from backend.agent.state import AgentState
 from langchain_core.messages import HumanMessage
 
@@ -25,6 +26,8 @@ logging.basicConfig(
 _RESIZE_PATTERN = re.compile(r"\x1b\[8;(\d+);(\d+)t")
 # 屏幕内容响应格式: ESC[?9999;screen;<encoded_content>h
 _SCREEN_CONTENT_PATTERN = re.compile(r"\x1b\[\?9999;screen;([^\x1b]*)h")
+# 激活会话: ESC[?9999;activateh
+_ACTIVATE_PATTERN = re.compile(r"\x1b\[\?9999;activateh")
 
 
 def _truncate(data: str, max_len: int = 100) -> str:
@@ -36,11 +39,14 @@ def _truncate(data: str, max_len: int = 100) -> str:
 
 
 class TerminalWSHandler:
-    """WebSocket 终端处理：纯透传字节。"""
+    """WebSocket 终端处理：支持多会话。"""
 
-    def __init__(self, websocket: WebSocket) -> None:
+    def __init__(self, websocket: WebSocket, session_id: str = "default") -> None:
         self.ws = websocket
-        self.pty = PtyManager()
+        self.session_id = session_id
+        self.session_manager = get_session_manager()
+        self.session: TerminalSession | None = None
+        self.pty: PtyManager | None = None
         self._start_time = time.time()
         self._msg_count = 0
         self._bytes_sent = 0
@@ -48,10 +54,7 @@ class TerminalWSHandler:
         self._capturing_history = False  # 是否正在捕获历史命令
         self._history_buffer: list[str] = []  # 历史命令缓冲区
         client = websocket.client or "unknown"
-        logger.info(f"[INIT] 客户端连接: {client}")
-
-        # 设置 pty_manager 给 agent tools 使用
-        set_pty_manager(self.pty)
+        logger.info(f"[INIT] 客户端连接: {client}, session_id: {session_id}")
 
     async def hookinput(self, data: str) -> None:
         """hook用户输入，用于自定义操作"""
@@ -65,11 +68,21 @@ class TerminalWSHandler:
 
     async def handle(self) -> None:
         await self.ws.accept()
-        logger.info("[ACCEPT] WebSocket 已接受连接")
+        logger.info(f"[ACCEPT] WebSocket 已接受连接, session_id: {self.session_id}")
 
-        self.pty.spawn()
+        # 创建或获取会话
+        self.session = self.session_manager.create_session(self.session_id)
+        self.pty = self.session.pty
+
+        # 如果 PTY 未启动，则启动
+        if not self.pty.is_alive():
+            self.pty.spawn()
+            logger.info(f"[SPAWN] PTY 已启动: pid={getattr(self.pty, '_pid', 'N/A')}")
+
         self.pty.add_output_callback(self._on_pty_output)
-        logger.info(f"[SPAWN] PTY 已启动: pid={getattr(self.pty, '_pid', 'N/A')}")
+
+        # 激活此会话（agent tools 会使用激活会话的 PTY）
+        self.session_manager.set_active_session(self.session_id)
 
         read_task = asyncio.create_task(self.pty.start_read_loop())
 
@@ -89,6 +102,12 @@ class TerminalWSHandler:
                     logger.debug(f"[SCREEN_CONTENT] 收到屏幕内容, 长度={len(content)}")
                     continue
 
+                # 检查是否是激活消息
+                if _ACTIVATE_PATTERN.fullmatch(data):
+                    self.session_manager.set_active_session(self.session_id)
+                    logger.debug(f"[ACTIVATE] 激活会话: {self.session_id}")
+                    continue
+
                 # 检查是否是 resize 事件
                 match = _RESIZE_PATTERN.fullmatch(data)
                 if match:
@@ -102,16 +121,18 @@ class TerminalWSHandler:
                 await self.hookinput(data) # 自定义操作
 
         except WebSocketDisconnect:
-            logger.info(f"[DISCONNECT] 客户端断开, 统计: msgs={self._msg_count}, "
+            logger.info(f"[DISCONNECT] 客户端断开, session_id={self.session_id}, 统计: msgs={self._msg_count}, "
                         f"rx={self._bytes_received}B, tx={self._bytes_sent}B, "
                         f"duration={time.time() - self._start_time:.1f}s")
         except Exception as exc:
             logger.exception(f"[ERROR] 异常: {exc}")
         finally:
             read_task.cancel()
-            self.pty.terminate()
-            self.pty.remove_output_callback(self._on_pty_output)
-            logger.debug("[CLEANUP] 资源已释放")
+            if self.pty:
+                self.pty.remove_output_callback(self._on_pty_output)
+            if self.session:
+                self.session_manager.close_session(self.session_id)
+            logger.debug(f"[CLEANUP] 会话 {self.session_id} 资源已释放")
 
     async def _fetch_last_command(self) -> None:
         """发送上键和下键来获取上一条命令"""

@@ -8,10 +8,10 @@ from backend.api.ws_chat import ChatWSHandler
 router = APIRouter()
 
 
-@router.websocket("/terminal")
-async def terminal_ws(websocket: WebSocket) -> None:
-    """WebSocket 终端连接入口。"""
-    handler = TerminalWSHandler(websocket)
+@router.websocket("/terminal/{session_id}")
+async def terminal_ws(websocket: WebSocket, session_id: str) -> None:
+    """WebSocket 终端连接入口（支持多会话）。"""
+    handler = TerminalWSHandler(websocket, session_id)
     await handler.handle()
 
 

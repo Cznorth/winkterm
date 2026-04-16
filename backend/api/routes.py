@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 
 from backend.agent.graph import get_graph
-from backend.agent.tools.terminal import _pty_manager
+from backend.agent.tools.terminal import get_terminal_context_raw
 
 router = APIRouter()
 
@@ -24,38 +24,6 @@ class AnalyzeRequest(BaseModel):
 class AnalyzeResponse(BaseModel):
     result: str
     timestamp: str
-
-
-@router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
-    """手动触发根因分析。"""
-    graph = get_graph()
-
-    terminal_output = req.terminal_context
-    if not terminal_output and _pty_manager is not None:
-        terminal_output = _pty_manager.get_context()
-
-    initial_state = {
-        "messages": [HumanMessage(content=req.message)],
-        "terminal_output": terminal_output,
-        "analysis_result": "",
-        "llm_calls": 0,
-    }
-
-    result_state = await graph.ainvoke(initial_state)
-
-    # 提取最后一条 AI 消息作为分析结果
-    last_msg = result_state["messages"][-1]
-    result_text = getattr(last_msg, "content", str(last_msg))
-
-    record = {
-        "message": req.message,
-        "result": result_text,
-        "timestamp": datetime.now().isoformat(),
-    }
-    _analysis_history.append(record)
-
-    return AnalyzeResponse(result=result_text, timestamp=record["timestamp"])
 
 
 @router.get("/history")

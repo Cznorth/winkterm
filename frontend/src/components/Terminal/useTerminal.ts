@@ -7,11 +7,15 @@ import { getWebSocket } from "@/lib/websocket";
 const DEBUG = process.env.NODE_ENV === "development";
 const SCREEN_SYNC_DELAY = 200; // 防抖延迟（毫秒）
 
-export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>) {
+export function useTerminal(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  sessionId: string = "default",
+  isActive: boolean = true
+) {
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
-  const wsRef = useRef(getWebSocket());
+  const wsRef = useRef(getWebSocket(sessionId));
   const initRef = useRef(false);
   const screenSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 保存清理函数
@@ -22,7 +26,7 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
     if (!containerRef.current) return;
 
     initRef.current = true;
-    DEBUG && console.log("[useTerminal] 开始初始化");
+    DEBUG && console.log(`[useTerminal] 开始初始化, sessionId=${sessionId}`);
 
     // 动态导入
     const { Terminal } = await import("@xterm/xterm");
@@ -97,7 +101,7 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
       }
       screenSyncTimerRef.current = setTimeout(() => {
         if (serializeAddonRef.current && termRef.current) {
-          const screenContent = serializeAddonRef.current.serialize({ rows: termRef.current.rows });
+          const screenContent = serializeAddonRef.current.serialize();
           ws.send(`\x1b[?9999;screen;${encodeURIComponent(screenContent)}h`);
         }
       }, SCREEN_SYNC_DELAY);
@@ -128,8 +132,8 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
     ws.reset();
     ws.connect();
 
-    DEBUG && console.log("[useTerminal] 初始化完成, cols=", cols, "rows=", rows);
-  }, [containerRef]);
+    DEBUG && console.log(`[useTerminal] 初始化完成, sessionId=${sessionId}, cols=`, cols, "rows=", rows);
+  }, [containerRef, sessionId]);
 
   // resize 监听
   useEffect(() => {
@@ -156,6 +160,13 @@ export function useTerminal(containerRef: React.RefObject<HTMLDivElement | null>
       wsRef.current.disconnect();
     };
   }, []);
+
+  // 激活会话（当标签页切换为激活状态时）
+  useEffect(() => {
+    if (isActive && wsRef.current.isConnected) {
+      wsRef.current.sendActivate();
+    }
+  }, [isActive]);
 
   return { init, term: termRef };
 }

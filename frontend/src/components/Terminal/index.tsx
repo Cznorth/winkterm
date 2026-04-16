@@ -4,9 +4,14 @@ import { useEffect, useRef } from "react";
 import { useTerminal } from "./useTerminal";
 import "./terminal.css";
 
-export default function TerminalPanel() {
+interface TerminalPanelProps {
+  sessionId?: string;
+  isActive?: boolean;
+}
+
+export default function TerminalPanel({ sessionId = "default", isActive = true }: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { init } = useTerminal(containerRef);
+  const { init } = useTerminal(containerRef, sessionId, isActive);
 
   useEffect(() => {
     init();
