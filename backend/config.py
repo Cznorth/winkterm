@@ -46,12 +46,18 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-# 配置文件路径
-_CONFIG_FILE = Path(__file__).parent.parent / "config.json"
+# 配置文件路径（桌面模式：~/.winkterm/config.json）
+_CONFIG_DIR = Path.home() / ".winkterm"
+_CONFIG_FILE = _CONFIG_DIR / "config.json"
+
+
+def _ensure_config_dir():
+    """确保配置目录存在"""
+    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class UserConfig:
-    """用户配置（持久化到 config.json）"""
+    """用户配置（持久化到 ~/.winkterm/config.json）"""
 
     @staticmethod
     def load() -> dict:
@@ -69,6 +75,7 @@ class UserConfig:
     @staticmethod
     def save(config: dict) -> None:
         """保存配置"""
+        _ensure_config_dir()
         _CONFIG_FILE.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
 
     @staticmethod
