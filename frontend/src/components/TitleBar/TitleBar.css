@@ -22,13 +22,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: var(--accent-primary);
-  color: white;
-  font-weight: 700;
-  font-size: 12px;
-  border-radius: 4px;
+  color: var(--accent-primary);
 }
 
 .title-bar-title {

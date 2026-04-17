@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { WinkTermLogo } from "@/components/Logo";
 import "./TitleBar.css";
 
 // 声明 pywebview API 类型
@@ -298,7 +299,7 @@ export default function TitleBar() {
           onMouseDown={startDrag}
           onDoubleClick={handleMaximize}
         >
-          <span className="title-bar-logo">W</span>
+          <WinkTermLogo size={18} className="title-bar-logo" />
           <span className="title-bar-title">WinkTerm</span>
         </div>
         <div className="title-bar-controls">

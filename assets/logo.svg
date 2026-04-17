@@ -1,0 +1,7 @@
+<svg viewBox="-45 -40 90 80" xmlns="http://www.w3.org/2000/svg">
+  <!-- WinkTerm Logo -->
+  <ellipse cx="0" cy="0" rx="38" ry="16" fill="none" stroke="#4af" stroke-width="3"/>
+  <path d="M-38,0 Q-10,-28 0,-28 Q10,-28 38,0" fill="none" stroke="#4af" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="8" cy="-8" r="7" fill="#4af"/>
+  <path d="M-20,-22 Q-14,-32 -6,-30" fill="none" stroke="#4af" stroke-width="2.5" stroke-linecap="round"/>
+</svg>
