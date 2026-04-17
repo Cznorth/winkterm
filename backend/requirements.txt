@@ -8,10 +8,11 @@ langgraph>=0.2.0
 langchain-core>=0.3.0
 langchain-community>=0.3.0
 langchain-openai>=0.3.0
+langchain-anthropic>=0.3.0
 
 # Terminal
-ptyprocess>=0.7.0      # Unix PTY
-pywinpty>=2.0.0        # Windows PTY
+ptyprocess>=0.7.0; sys_platform != 'win32'   # Unix PTY (仅非 Windows)
+pywinpty>=2.0.0; sys_platform == 'win32'     # Windows PTY (仅 Windows)
 
 # Config
 pydantic>=2.7.0
