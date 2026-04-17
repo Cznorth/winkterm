@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.config import settings
 from backend.api.routes import router as http_router
 from backend.api.ws_routes import router as ws_router
+from backend.api.ssh_routes import router as ssh_router
 
 # 判断是否在打包环境
 IS_FROZEN = getattr(sys, 'frozen', False)
@@ -51,6 +52,7 @@ app.add_middleware(
 # 挂载路由
 app.include_router(http_router, prefix="/api", tags=["analysis"])
 app.include_router(ws_router, prefix="/ws", tags=["terminal"])
+app.include_router(ssh_router, tags=["ssh"])
 
 
 @app.get("/health")

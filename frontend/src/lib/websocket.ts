@@ -42,18 +42,34 @@ export class TerminalWebSocket {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private intentionallyClosed = false;
   private sessionId: string;
+  private terminalType: "local" | "ssh";
+  private sshConnectionId?: string;
   // 调试统计
   private _connectTime = 0;
   private _msgCount = 0;
   private _bytesReceived = 0;
   private _bytesSent = 0;
 
-  constructor(sessionId: string = "default") {
+  constructor(
+    sessionId: string = "default",
+    terminalType: "local" | "ssh" = "local",
+    sshConnectionId?: string
+  ) {
     this.sessionId = sessionId;
+    this.terminalType = terminalType;
+    this.sshConnectionId = sshConnectionId;
   }
 
   private getWsUrl(): string {
-    return `${WS_BASE_URL}/${this.sessionId}`;
+    const baseUrl = `${WS_BASE_URL}/${this.sessionId}`;
+    const params = new URLSearchParams();
+
+    if (this.terminalType === "ssh" && this.sshConnectionId) {
+      params.set("type", "ssh");
+      params.set("connection_id", this.sshConnectionId);
+    }
+
+    return params.toString() ? `${baseUrl}?${params}` : baseUrl;
   }
 
   connect(): void {
@@ -251,17 +267,28 @@ export class TerminalWebSocket {
 // 多实例缓存（按 session_id）
 const _instances: Map<string, TerminalWebSocket> = new Map();
 
-export function getWebSocket(sessionId: string = "default"): TerminalWebSocket {
-  if (!_instances.has(sessionId)) {
-    _instances.set(sessionId, new TerminalWebSocket(sessionId));
+export function getWebSocket(
+  sessionId: string = "default",
+  terminalType: "local" | "ssh" = "local",
+  sshConnectionId?: string
+): TerminalWebSocket {
+  // 对于 SSH 连接，使用不同的缓存 key（包含 connection_id）
+  const cacheKey = terminalType === "ssh" && sshConnectionId
+    ? `${sessionId}:ssh:${sshConnectionId}`
+    : sessionId;
+
+  if (!_instances.has(cacheKey)) {
+    _instances.set(cacheKey, new TerminalWebSocket(sessionId, terminalType, sshConnectionId));
   }
-  return _instances.get(sessionId)!;
+  return _instances.get(cacheKey)!;
 }
 
 export function closeWebSocket(sessionId: string): void {
-  const instance = _instances.get(sessionId);
-  if (instance) {
-    instance.disconnect();
-    _instances.delete(sessionId);
+  // 查找并关闭所有以该 sessionId 开头的实例
+  for (const [key, instance] of _instances.entries()) {
+    if (key === sessionId || key.startsWith(`${sessionId}:`)) {
+      instance.disconnect();
+      _instances.delete(key);
+    }
   }
 }

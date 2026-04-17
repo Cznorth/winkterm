@@ -7,11 +7,18 @@ import "./terminal.css";
 interface TerminalPanelProps {
   sessionId?: string;
   isActive?: boolean;
+  type?: "local" | "ssh";
+  sshConnectionId?: string;
 }
 
-export default function TerminalPanel({ sessionId = "default", isActive = true }: TerminalPanelProps) {
+export default function TerminalPanel({
+  sessionId = "default",
+  isActive = true,
+  type = "local",
+  sshConnectionId,
+}: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { init } = useTerminal(containerRef, sessionId, isActive);
+  const { init } = useTerminal(containerRef, sessionId, isActive, type, sshConnectionId);
 
   useEffect(() => {
     init();

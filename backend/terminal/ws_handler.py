@@ -41,9 +41,17 @@ def _truncate(data: str, max_len: int = 100) -> str:
 class TerminalWSHandler:
     """WebSocket 终端处理：支持多会话。"""
 
-    def __init__(self, websocket: WebSocket, session_id: str = "default") -> None:
+    def __init__(
+        self,
+        websocket: WebSocket,
+        session_id: str = "default",
+        terminal_type: str = "local",
+        ssh_connection_id: str | None = None,
+    ) -> None:
         self.ws = websocket
         self.session_id = session_id
+        self.terminal_type = terminal_type
+        self.ssh_connection_id = ssh_connection_id
         self.session_manager = get_session_manager()
         self.session: TerminalSession | None = None
         self.pty: PtyManager | None = None
@@ -54,7 +62,7 @@ class TerminalWSHandler:
         self._capturing_history = False  # 是否正在捕获历史命令
         self._history_buffer: list[str] = []  # 历史命令缓冲区
         client = websocket.client or "unknown"
-        logger.info(f"[INIT] 客户端连接: {client}, session_id: {session_id}")
+        logger.info(f"[INIT] 客户端连接: {client}, session_id: {session_id}, type: {terminal_type}")
 
     async def hookinput(self, data: str) -> None:
         """hook用户输入，用于自定义操作"""
@@ -76,8 +84,24 @@ class TerminalWSHandler:
 
         # 如果 PTY 未启动，则启动
         if not self.pty.is_alive():
-            self.pty.spawn()
-            logger.info(f"[SPAWN] PTY 已启动: pid={getattr(self.pty, '_pid', 'N/A')}")
+            if self.terminal_type == "ssh" and self.ssh_connection_id:
+                # SSH 连接
+                from backend.ssh.connection_manager import SSHConnectionManager
+                conn = SSHConnectionManager.get_connection(self.ssh_connection_id)
+                if conn:
+                    ssh_config = conn.to_dict()
+                    self.pty.spawn(ssh_config=ssh_config)
+                    # 更新最后连接时间
+                    SSHConnectionManager.update_last_connected(self.ssh_connection_id)
+                    logger.info(f"[SPAWN SSH] SSH 已启动: {conn.username}@{conn.host}:{conn.port}")
+                else:
+                    logger.error(f"[SPAWN SSH] SSH 连接不存在: {self.ssh_connection_id}")
+                    await self._send(f"\r\n\033[31m❌ SSH 连接不存在: {self.ssh_connection_id}\033[0m\r\n")
+                    return
+            else:
+                # 本地 shell
+                self.pty.spawn()
+                logger.info(f"[SPAWN] PTY 已启动: pid={getattr(self.pty, '_pid', 'N/A')}")
 
         self.pty.add_output_callback(self._on_pty_output)
 

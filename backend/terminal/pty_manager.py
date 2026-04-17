@@ -5,7 +5,7 @@ import logging
 import sys
 import threading
 from collections import deque
-from typing import Callable
+from typing import Callable, Optional
 
 logger = logging.getLogger("pty_manager")
 
@@ -46,16 +46,38 @@ class PtyManager:
         self._read_thread: threading.Thread | None = None
         self._alive = False
         self._loop: asyncio.AbstractEventLoop | None = None
+        # SSH 相关
+        self._ssh_password_handler = None
+        self._ssh_connection_id: Optional[str] = None
 
     # ------------------------------------------------------------------
     # 生命周期
     # ------------------------------------------------------------------
 
-    def spawn(self, shell: str | None = None, cols: int = 80, rows: int = 24) -> None:
-        """启动 PTY 进程。"""
+    def spawn(
+        self,
+        shell: str | None = None,
+        cols: int = 80,
+        rows: int = 24,
+        ssh_config: dict | None = None,
+    ) -> None:
+        """启动 PTY 进程。
+
+        Args:
+            shell: 本地 shell 路径
+            cols: 列数
+            rows: 行数
+            ssh_config: SSH 连接配置，包含 host, port, username, password 等
+        """
         if not _HAS_PTY:
             raise RuntimeError("PTY not available: install pywinpty (Windows) or ptyprocess (Unix)")
 
+        # SSH 模式
+        if ssh_config:
+            self._spawn_ssh(ssh_config, cols, rows)
+            return
+
+        # 本地 shell 模式
         if sys.platform == "win32":
             # Windows: pywinpty
             shell = shell or "powershell.exe"
@@ -77,6 +99,56 @@ class PtyManager:
             )
             self._pid = getattr(self._proc, "pid", "N/A")
             logger.info(f"[SPAWN] PTY 进程已启动, pid={self._pid}")
+
+        self._alive = True
+
+    def _spawn_ssh(self, ssh_config: dict, cols: int, rows: int) -> None:
+        """启动 SSH 连接。"""
+        from backend.ssh.pty_spawner import SSHPtySpawner, PasswordAutoInput
+        from backend.ssh.models import SSHConnection
+
+        # 构建 SSHConnection 对象
+        conn = SSHConnection(
+            host=ssh_config.get("host", ""),
+            port=ssh_config.get("port", 22),
+            username=ssh_config.get("username", ""),
+            auth_type=ssh_config.get("auth_type", "password"),
+            password=ssh_config.get("password"),
+            private_key_path=ssh_config.get("private_key_path"),
+        )
+
+        # 存储 SSH 连接 ID
+        self._ssh_connection_id = ssh_config.get("id")
+
+        # 构建 SSH 命令
+        if sys.platform == "win32":
+            # Windows: winpty 需要字符串
+            ssh_cmd = SSHPtySpawner.build_ssh_command_str(conn)
+            logger.info(f"[SPAWN SSH] Windows: 启动 SSH {conn.username}@{conn.host}:{conn.port}")
+            self._proc = winpty.PtyProcess.spawn(
+                ssh_cmd,
+                dimensions=(rows, cols),
+            )
+        else:
+            # Unix: ptyprocess 需要列表
+            ssh_cmd = SSHPtySpawner.build_ssh_command(conn)
+            logger.info(f"[SPAWN SSH] Unix: 启动 SSH {conn.username}@{conn.host}:{conn.port}")
+            self._proc = ptyprocess.PtyProcess.spawn(
+                ssh_cmd,
+                dimensions=(rows, cols),
+            )
+
+        self._pid = getattr(self._proc, "pid", "N/A")
+        logger.info(f"[SPAWN SSH] PTY 进程已启动, pid={self._pid}")
+
+        # 设置密码自动输入处理器（注册为回调）
+        if conn.auth_type == "password" and conn.password:
+            self._ssh_password_handler = PasswordAutoInput(
+                password=conn.password,
+                write_func=self.write,
+            )
+            self.add_output_callback(self._ssh_password_handler)
+            logger.info("[SPAWN SSH] 密码自动输入处理器已启用")
 
         self._alive = True
 
@@ -182,6 +254,7 @@ class PtyManager:
             self._notify_callbacks(data)
 
     def _notify_callbacks(self, data: bytes) -> None:
+        """通知所有输出回调。"""
         for cb in list(self._read_callbacks):
             try:
                 cb(data)

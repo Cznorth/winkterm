@@ -6,12 +6,15 @@ import type { Terminal } from "@xterm/xterm";
 export interface TabState {
   id: string;
   title: string;
+  type: "local" | "ssh";      // 连接类型
+  sshConnectionId?: string;   // SSH 连接 ID
+  color?: string;             // 标签颜色
 }
 
 export interface UseTabsReturn {
   tabs: TabState[];
   activeTabId: string;
-  addTab: () => string;
+  addTab: (options?: { type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => string;
   closeTab: (id: string) => void;
   switchTab: (id: string) => void;
   renameTab: (id: string, title: string) => void;
@@ -21,17 +24,23 @@ let tabIdCounter = 0;
 
 export function useTabs(): UseTabsReturn {
   const [tabs, setTabs] = useState<TabState[]>([
-    { id: "tab-0", title: "Terminal 1" },
+    { id: "tab-0", title: "Terminal 1", type: "local" },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>("tab-0");
 
-  const addTab = useCallback(() => {
+  const addTab = useCallback((options?: { type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => {
     tabIdCounter++;
     const newId = `tab-${tabIdCounter}`;
+    const tabType = options?.type || "local";
+
     const newTab: TabState = {
       id: newId,
-      title: `Terminal ${tabs.length + 1}`,
+      title: options?.title || `Terminal ${tabs.length + 1}`,
+      type: tabType,
+      sshConnectionId: options?.sshConnectionId,
+      color: options?.color,
     };
+
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newId);
     return newId;

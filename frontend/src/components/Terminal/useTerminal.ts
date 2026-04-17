@@ -10,12 +10,14 @@ const SCREEN_SYNC_DELAY = 200; // 防抖延迟（毫秒）
 export function useTerminal(
   containerRef: React.RefObject<HTMLDivElement | null>,
   sessionId: string = "default",
-  isActive: boolean = true
+  isActive: boolean = true,
+  terminalType: "local" | "ssh" = "local",
+  sshConnectionId?: string
 ) {
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
-  const wsRef = useRef(getWebSocket(sessionId));
+  const wsRef = useRef(getWebSocket(sessionId, terminalType, sshConnectionId));
   const initRef = useRef(false);
   const screenSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 保存清理函数
@@ -26,7 +28,7 @@ export function useTerminal(
     if (!containerRef.current) return;
 
     initRef.current = true;
-    DEBUG && console.log(`[useTerminal] 开始初始化, sessionId=${sessionId}`);
+    DEBUG && console.log(`[useTerminal] 开始初始化, sessionId=${sessionId}, type=${terminalType}`);
 
     // 动态导入
     const { Terminal } = await import("@xterm/xterm");
@@ -134,8 +136,8 @@ export function useTerminal(
     ws.reset();
     ws.connect();
 
-    DEBUG && console.log(`[useTerminal] 初始化完成, sessionId=${sessionId}, cols=`, cols, "rows=", rows);
-  }, [containerRef, sessionId]);
+    DEBUG && console.log(`[useTerminal] 初始化完成, sessionId=${sessionId}, type=${terminalType}, cols=`, cols, "rows=", rows);
+  }, [containerRef, sessionId, terminalType, sshConnectionId]);
 
   // resize 监听
   useEffect(() => {

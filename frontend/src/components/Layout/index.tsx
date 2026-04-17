@@ -5,6 +5,7 @@ import TabBar from "@/components/TabBar";
 import { useTabs } from "@/hooks/useTabs";
 import Terminal from "@/components/Terminal";
 import SettingsPanel from "@/components/SettingsPanel";
+import SSHPanel from "@/components/SSHPanel";
 import TitleBar from "@/components/TitleBar";
 import "./Layout.css";
 
@@ -27,6 +28,12 @@ const Icons = {
       <circle cx="16" cy="14" r="1.5" fill="currentColor" />
     </svg>
   ),
+  ssh: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  ),
   settings: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
@@ -35,7 +42,7 @@ const Icons = {
   ),
 };
 
-type ActivityItem = "terminal" | "ai" | "settings";
+type ActivityItem = "terminal" | "ai" | "ssh" | "settings";
 
 export default function SplitLayout({ aiPanel }: LayoutProps) {
   const { tabs, activeTabId, addTab, closeTab, switchTab, renameTab } = useTabs();
@@ -52,10 +59,26 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           height: "100%",
         }}
       >
-        <Terminal sessionId={tab.id} isActive={tab.id === activeTabId} />
+        <Terminal
+          sessionId={tab.id}
+          isActive={tab.id === activeTabId}
+          type={tab.type}
+          sshConnectionId={tab.sshConnectionId}
+        />
       </div>
     ));
   }, [tabs, activeTabId]);
+
+  // 处理 SSH 连接
+  const handleSSHConnect = (conn: { id: string; title: string; host: string; color?: string }) => {
+    addTab({
+      type: "ssh",
+      sshConnectionId: conn.id,
+      title: conn.title || conn.host,
+      color: conn.color,
+    });
+    setActiveActivity("terminal");
+  };
 
   return (
     <div className="layout-container">
@@ -77,6 +100,13 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
               title="AI 助手"
             >
               {Icons.ai}
+            </div>
+            <div
+              className={`activity-item ${activeActivity === "ssh" ? "active" : ""}`}
+              onClick={() => setActiveActivity("ssh")}
+              title="SSH 连接"
+            >
+              {Icons.ssh}
             </div>
           </div>
           <div className="activity-bar-bottom">
@@ -105,12 +135,17 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           </div>
         </div>
 
-        {/* AI 面板 */}
+        {/* 右侧面板 */}
         <div className="ai-section">
-          {activeActivity === "settings" ? <SettingsPanel /> : aiPanel}
+          {activeActivity === "settings" ? (
+            <SettingsPanel />
+          ) : activeActivity === "ssh" ? (
+            <SSHPanel onConnect={handleSSHConnect} />
+          ) : (
+            aiPanel
+          )}
         </div>
       </div>
-
     </div>
   );
 }
