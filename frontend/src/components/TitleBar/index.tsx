@@ -269,9 +269,21 @@ export default function TitleBar() {
 
   const handleClose = async () => {
     try {
-      await window.pywebview?.api?.close?.();
+      // 先尝试 pywebview API
+      if (window.pywebview?.api?.close) {
+        await window.pywebview.api.close();
+      } else {
+        // 降级到 HTTP 请求
+        await fetch("/exit", { method: "POST" });
+      }
     } catch (e) {
       console.error("Close failed:", e);
+      // 尝试 HTTP 请求作为备选
+      try {
+        await fetch("/exit", { method: "POST" });
+      } catch (e2) {
+        console.error("HTTP exit also failed:", e2);
+      }
     }
   };
 

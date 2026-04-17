@@ -1,7 +1,6 @@
 """WebView 桌面应用 - 无边框窗口 + 自定义标题栏"""
 from __future__ import annotations
 
-import ctypes
 import logging
 import sys
 import threading
@@ -14,63 +13,86 @@ logger = logging.getLogger(__name__)
 
 # 判断运行环境
 IS_FROZEN = getattr(sys, "frozen", False)
-
-# Windows API 常量
-SM_CXSCREEN = 0
-SM_CYSCREEN = 1
-SPI_GETWORKAREA = 0x0030
-SWP_NOZORDER = 0x0004
-SWP_SHOWWINDOW = 0x0040
+IS_WINDOWS = sys.platform == "win32"
+IS_MACOS = sys.platform == "darwin"
 
 # 全局状态
 _window = None
 _is_maximized = False
+_is_fullscreen = False
 _saved_rect = None
-_hwnd = None
+
+# Windows API 常量和导入
+if IS_WINDOWS:
+    import ctypes
+    SM_CXSCREEN = 0
+    SM_CYSCREEN = 1
+    SPI_GETWORKAREA = 0x0030
+    SWP_NOZORDER = 0x0004
+    SWP_SHOWWINDOW = 0x0040
+    _hwnd = None
 
 
 def get_work_area():
-    """获取屏幕工作区大小（排除任务栏）"""
-    rect = ctypes.wintypes.RECT()
-    ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
-    return rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top
+    """获取屏幕工作区大小（排除任务栏/Dock）"""
+    if IS_WINDOWS:
+        rect = ctypes.wintypes.RECT()
+        ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
+        return rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top
+    elif IS_MACOS:
+        # macOS: 返回屏幕尺寸
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", 'tell application "Finder" to get bounds of window of desktop'],
+                capture_output=True, text=True, timeout=2
+            )
+            if result.returncode == 0:
+                parts = result.stdout.strip().split(", ")
+                if len(parts) == 4:
+                    return int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
+        except Exception:
+            pass
+        return None
+    return None
 
 
-def find_window_handle():
-    """查找窗口句柄"""
-    global _hwnd
-
-    if _hwnd:
-        return _hwnd
-
-    try:
-        user32 = ctypes.windll.user32
-        hwnd = user32.FindWindowW(None, "WinkTerm")
-        if hwnd:
-            _hwnd = hwnd
-            return _hwnd
-
-        EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-
-        def enum_callback(hwnd, _):
-            global _hwnd
-            length = user32.GetWindowTextLengthW(hwnd) + 1
-            buffer = ctypes.create_unicode_buffer(length)
-            user32.GetWindowTextW(hwnd, buffer, length)
-            if "WinkTerm" in buffer.value:
-                _hwnd = hwnd
-                return False
-            return True
-
-        user32.EnumWindows(EnumWindowsProc(enum_callback), 0)
+if IS_WINDOWS:
+    def find_window_handle():
+        """查找窗口句柄 (Windows only)"""
+        global _hwnd
 
         if _hwnd:
             return _hwnd
 
-    except Exception as e:
-        logger.error(f"Error finding window: {e}")
+        try:
+            user32 = ctypes.windll.user32
+            hwnd = user32.FindWindowW(None, "WinkTerm")
+            if hwnd:
+                _hwnd = hwnd
+                return _hwnd
 
-    return None
+            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+            def enum_callback(hwnd, _):
+                global _hwnd
+                length = user32.GetWindowTextLengthW(hwnd) + 1
+                buffer = ctypes.create_unicode_buffer(length)
+                user32.GetWindowTextW(hwnd, buffer, length)
+                if "WinkTerm" in buffer.value:
+                    _hwnd = hwnd
+                    return False
+                return True
+
+            user32.EnumWindows(EnumWindowsProc(enum_callback), 0)
+
+            if _hwnd:
+                return _hwnd
+
+        except Exception as e:
+            logger.error(f"Error finding window: {e}")
+
+        return None
 
 
 class WindowAPI:
@@ -83,64 +105,71 @@ class WindowAPI:
             _window.minimize()
 
     def maximize(self):
-        """最大化窗口（不覆盖任务栏）- 使用 Windows API"""
-        global _is_maximized, _saved_rect, _hwnd, _window
+        """最大化窗口"""
+        global _is_maximized, _saved_rect, _window
 
         if not _window:
-            return
-
-        hwnd = find_window_handle()
-        if not hwnd:
-            logger.error("maximize: hwnd not found")
-            # 降级到 pywebview 方式
-            _saved_rect = (_window.x, _window.y, _window.width, _window.height)
-            work_x, work_y, work_w, work_h = get_work_area()
-            _window.resize(work_w, work_h)
-            _window.move(work_x, work_y)
-            _is_maximized = True
             return
 
         # 保存当前窗口位置
         _saved_rect = (_window.x, _window.y, _window.width, _window.height)
         logger.info(f"maximize: saved_rect = {_saved_rect}")
 
-        # 获取工作区大小
-        work_x, work_y, work_w, work_h = get_work_area()
-        logger.info(f"maximize: work_area = ({work_x}, {work_y}, {work_w}, {work_h})")
-
-        # 使用 Windows API 设置窗口位置和大小
-        user32 = ctypes.windll.user32
-        user32.SetWindowPos(hwnd, 0, work_x, work_y, work_w, work_h, SWP_NOZORDER | SWP_SHOWWINDOW)
+        if IS_WINDOWS:
+            hwnd = find_window_handle()
+            if hwnd:
+                work_x, work_y, work_w, work_h = get_work_area()
+                user32 = ctypes.windll.user32
+                user32.SetWindowPos(hwnd, 0, work_x, work_y, work_w, work_h, SWP_NOZORDER | SWP_SHOWWINDOW)
+            else:
+                work = get_work_area()
+                if work:
+                    _window.resize(work[2], work[3])
+                    _window.move(work[0], work[1])
+        elif IS_MACOS:
+            # macOS: 使用系统原生全屏
+            global _is_fullscreen
+            if not _is_fullscreen:
+                _window.toggle_fullscreen()
+                _is_fullscreen = True
+                return
 
         _is_maximized = True
-        logger.info(f"maximize: done via Windows API")
+        logger.info("maximize: done")
 
     def restore(self):
         """还原窗口"""
-        global _is_maximized, _saved_rect, _hwnd, _window
+        global _is_maximized, _is_fullscreen, _saved_rect, _window
 
-        if not _window or not _saved_rect:
+        if not _window:
             return
 
-        hwnd = find_window_handle()
+        if IS_MACOS and _is_fullscreen:
+            _window.toggle_fullscreen()
+            _is_fullscreen = False
+            _is_maximized = False
+            return
 
-        if hwnd:
-            # 使用 Windows API
-            user32 = ctypes.windll.user32
-            user32.SetWindowPos(hwnd, 0, _saved_rect[0], _saved_rect[1],
-                               _saved_rect[2], _saved_rect[3], SWP_NOZORDER | SWP_SHOWWINDOW)
-        else:
-            # 降级到 pywebview
-            _window.resize(_saved_rect[2], _saved_rect[3])
-            _window.move(_saved_rect[0], _saved_rect[1])
+        if not _saved_rect:
+            return
+
+        if IS_WINDOWS:
+            hwnd = find_window_handle()
+            if hwnd:
+                user32 = ctypes.windll.user32
+                user32.SetWindowPos(hwnd, 0, _saved_rect[0], _saved_rect[1],
+                                   _saved_rect[2], _saved_rect[3], SWP_NOZORDER | SWP_SHOWWINDOW)
+            else:
+                _window.resize(_saved_rect[2], _saved_rect[3])
+                _window.move(_saved_rect[0], _saved_rect[1])
 
         _is_maximized = False
         logger.info(f"restore: restored to {_saved_rect}")
 
     def toggle_maximize(self):
         """切换最大化/还原"""
-        global _is_maximized
-        if _is_maximized:
+        global _is_maximized, _is_fullscreen
+        if _is_maximized or _is_fullscreen:
             self.restore()
         else:
             self.maximize()
@@ -148,12 +177,15 @@ class WindowAPI:
     def close(self):
         """关闭窗口"""
         global _window
-        if _window:
-            _window.destroy()
+        logger.info("close() called, exiting...")
+        # 强制退出进程
+        import os
+        os._exit(0)
 
     def is_maximized(self):
         """检查窗口是否最大化"""
-        return _is_maximized
+        global _is_maximized, _is_fullscreen
+        return _is_maximized or _is_fullscreen
 
     def resize(self, width: int, height: int):
         """调整窗口大小"""
@@ -183,8 +215,10 @@ class WindowAPI:
 
     def get_work_area(self):
         """获取工作区大小"""
-        work_x, work_y, work_w, work_h = get_work_area()
-        return {"x": work_x, "y": work_y, "width": work_w, "height": work_h}
+        work = get_work_area()
+        if work:
+            return {"x": work[0], "y": work[1], "width": work[2], "height": work[3]}
+        return {"x": 0, "y": 0, "width": 1920, "height": 1080}
 
 
 # 创建 API 实例

@@ -60,6 +60,20 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "version": "0.1.0"}
 
 
+@app.post("/exit")
+async def exit_app():
+    """退出应用程序（桌面模式）"""
+    import os
+    import threading
+    # 延迟退出，让响应先发送
+    def do_exit():
+        import time
+        time.sleep(0.1)
+        os._exit(0)
+    threading.Thread(target=do_exit, daemon=True).start()
+    return {"status": "exiting"}
+
+
 # 静态文件服务（桌面模式）
 def get_static_dir() -> Path | None:
     """获取前端静态文件目录"""
