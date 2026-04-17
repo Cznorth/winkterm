@@ -92,6 +92,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 16px;
+  user-select: text;
 }
 
 /* 空状态 */
@@ -156,6 +157,7 @@
   font-size: 13px;
   line-height: 1.6;
   word-break: break-word;
+  user-select: text;
 }
 
 .ai-message.user .ai-message-bubble {
@@ -284,6 +286,7 @@
   white-space: pre-wrap;
   word-break: break-all;
   line-height: 1.5;
+  user-select: text;
 }
 
 /* ========== 流式思考提示 ========== */
@@ -563,6 +566,7 @@
 .md-content {
   font-size: 13px;
   line-height: 1.6;
+  user-select: text;
 }
 
 .md-content h1,
