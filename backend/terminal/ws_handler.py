@@ -227,6 +227,14 @@ class TerminalWSHandler:
                     if chunk and hasattr(chunk, "content"):
                         content = chunk.content
                         if content:
+                            # content 可能是 string 或 list
+                            if isinstance(content, list):
+                                content = "".join(
+                                    part if isinstance(part, str) else part.get("text", "")
+                                    for part in content
+                                )
+                            if not content:
+                                continue
                             if not has_output:
                                 has_output = True
                                 set_has_ai_output(True)  # 标记有 AI 输出

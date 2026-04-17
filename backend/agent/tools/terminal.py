@@ -118,7 +118,7 @@ def write_command(command: str) -> str:
     import logging
 
     logger = logging.getLogger("tools")
-    pty = _require_pty()
+    pty = _get_active_pty()
     logger.info(f"[write_command] pty={pty}, command={command}")
     if pty is None:
         return "[无终端会话] 无法写入命令"
@@ -140,7 +140,7 @@ def get_terminal_context(lines: int = 50) -> str:
     Args:
         lines: 获取的行数，默认50行
     """
-    pty = _require_pty()
+    pty = _get_active_pty()
     if pty is None:
         return "[无终端会话]"
 
