@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import axios from "@/lib/axios";
+import "./SettingsPanel.css";
 
 interface ModelInfo {
   id: string;
@@ -16,6 +17,71 @@ interface Settings {
   selected_model: string;
 }
 
+// 图标组件
+const SettingsIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);
+
+const ApiIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+    <polyline points="22,6 12,13 2,6" />
+  </svg>
+);
+
+const ModelIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
+    <rect x="9" y="9" width="6" height="6" />
+    <line x1="9" y1="1" x2="9" y2="4" />
+    <line x1="15" y1="1" x2="15" y2="4" />
+    <line x1="9" y1="20" x2="9" y2="23" />
+    <line x1="15" y1="20" x2="15" y2="23" />
+    <line x1="20" y1="9" x2="23" y2="9" />
+    <line x1="20" y1="14" x2="23" y2="14" />
+    <line x1="1" y1="9" x2="4" y2="9" />
+    <line x1="1" y1="14" x2="4" y2="14" />
+  </svg>
+);
+
+const RefreshIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 4 23 10 17 10" />
+    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
+
+const PlusIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
+const ErrorIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
 export default function SettingsPanel() {
   const [settings, setSettings] = useState<Settings>({
     api_format: "openai",
@@ -27,6 +93,7 @@ export default function SettingsPanel() {
   const [newModelId, setNewModelId] = useState("");
   const [newModelName, setNewModelName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const [saved, setSaved] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
@@ -45,7 +112,7 @@ export default function SettingsPanel() {
 
   const handleFetchModels = async () => {
     if (!settings.base_url || !settings.api_key) return;
-    setLoading(true);
+    setFetching(true);
     setFetchError("");
     try {
       const res = await axios.post("/api/models/fetch", {
@@ -73,7 +140,7 @@ export default function SettingsPanel() {
       const err = e as { response?: { data?: { detail?: string } } };
       setFetchError(err.response?.data?.detail || "获取模型列表失败");
     } finally {
-      setLoading(false);
+      setFetching(false);
     }
   };
 
@@ -105,252 +172,205 @@ export default function SettingsPanel() {
     }
   };
 
+  const hasModels = (settings.models?.length ?? 0) > 0;
+
   return (
-    <div style={{
-      height: "100%",
-      display: "flex",
-      flexDirection: "column",
-      backgroundColor: "#1e1e1e",
-      color: "#cccccc",
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: "12px 16px",
-        borderBottom: "1px solid #3c3c3c",
-        fontSize: "14px",
-        fontWeight: 500,
-      }}>
-        设置
+    <div className="settings-panel">
+      {/* 标题栏 */}
+      <div className="settings-header">
+        <span className="settings-header-icon"><SettingsIcon /></span>
+        <span className="settings-header-title">设置</span>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, padding: "16px", overflow: "auto" }}>
-        {/* API Format */}
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", color: "#999" }}>
-            API 格式
-          </label>
-          <select
-            value={settings.api_format}
-            onChange={(e) => setSettings({ ...settings, api_format: e.target.value as "openai" | "anthropic" })}
-            style={{
-              width: "100%",
-              padding: "6px 10px",
-              backgroundColor: "#3c3c3c",
-              border: "1px solid #555",
-              borderRadius: "4px",
-              color: "#cccccc",
-              fontSize: "13px",
-            }}
-          >
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-          </select>
-        </div>
+      {/* 内容区域 */}
+      <div className="settings-content">
+        {/* API 配置组 */}
+        <div className="settings-group">
+          <div className="settings-group-title">
+            <ApiIcon />
+            API 配置
+          </div>
 
-        {/* Base URL */}
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", color: "#999" }}>
-            Base URL
-          </label>
-          <input
-            type="text"
-            value={settings.base_url}
-            onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
-            placeholder={settings.api_format === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
-            style={{
-              width: "100%",
-              padding: "6px 10px",
-              backgroundColor: "#3c3c3c",
-              border: "1px solid #555",
-              borderRadius: "4px",
-              color: "#cccccc",
-              fontSize: "13px",
-            }}
-          />
-        </div>
-
-        {/* API Key */}
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", color: "#999" }}>
-            API Key
-          </label>
-          <input
-            type="password"
-            value={settings.api_key}
-            onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
-            placeholder="sk-..."
-            style={{
-              width: "100%",
-              padding: "6px 10px",
-              backgroundColor: "#3c3c3c",
-              border: "1px solid #555",
-              borderRadius: "4px",
-              color: "#cccccc",
-              fontSize: "13px",
-            }}
-          />
-        </div>
-
-        {/* Fetch Models Button */}
-        <button
-          onClick={handleFetchModels}
-          disabled={loading || !settings.base_url || !settings.api_key}
-          style={{
-            width: "100%",
-            padding: "8px",
-            backgroundColor: "#2d5a88",
-            border: "none",
-            borderRadius: "4px",
-            color: "#fff",
-            fontSize: "13px",
-            cursor: loading ? "wait" : "pointer",
-            marginBottom: "16px",
-            opacity: (!settings.base_url || !settings.api_key) ? 0.5 : 1,
-          }}
-        >
-          {loading ? "获取中..." : "自动获取模型列表"}
-        </button>
-
-        {fetchError && (
-          <div style={{ color: "#f44", fontSize: "12px", marginBottom: "12px" }}>{fetchError}</div>
-        )}
-
-        {/* Current Model */}
-        {(settings.models?.length ?? 0) > 0 && (
-          <div style={{ marginBottom: "16px" }}>
-            <label style={{ display: "block", marginBottom: "6px", fontSize: "12px", color: "#999" }}>
-              当前模型
-            </label>
+          <div className="settings-field">
+            <label className="settings-label">API 格式</label>
             <select
-              value={settings.selected_model}
-              onChange={(e) => setSettings({ ...settings, selected_model: e.target.value })}
-              style={{
-                width: "100%",
-                padding: "6px 10px",
-                backgroundColor: "#3c3c3c",
-                border: "1px solid #555",
-                borderRadius: "4px",
-                color: "#cccccc",
-                fontSize: "13px",
-              }}
+              className="settings-select"
+              value={settings.api_format}
+              onChange={(e) => setSettings({ ...settings, api_format: e.target.value as "openai" | "anthropic" })}
             >
-              <option value="">选择模型</option>
-              {settings.models?.map((m) => (
-                <option key={m.id} value={m.id}>{m.name || m.id}</option>
-              ))}
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
             </select>
           </div>
-        )}
 
-        {/* Models List */}
-        <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "8px", fontSize: "12px", color: "#999" }}>
-            模型列表 {(settings.models?.length ?? 0) > 0 && `(${settings.models.length})`}
-          </label>
-          <div style={{ maxHeight: "150px", overflow: "auto", marginBottom: "8px" }}>
-            {settings.models?.map((m) => (
-              <div
-                key={m.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "6px 8px",
-                  backgroundColor: "#2d2d2d",
-                  borderRadius: "4px",
-                  marginBottom: "4px",
-                }}
-              >
-                <div>
-                  <span style={{ fontSize: "13px" }}>{m.id}</span>
-                  {m.name && m.name !== m.id && (
-                    <span style={{ fontSize: "11px", color: "#666", marginLeft: "8px" }}>{m.name}</span>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleRemoveModel(m.id)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#f44",
-                    cursor: "pointer",
-                    fontSize: "12px",
-                  }}
-                >
-                  删除
-                </button>
-              </div>
-            ))}
+          <div className="settings-field">
+            <label className="settings-label">Base URL</label>
+            <input
+              type="text"
+              className="settings-input"
+              value={settings.base_url}
+              onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
+              placeholder={settings.api_format === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
+            />
+            <div className="settings-help">
+              {settings.api_format === "openai"
+                ? "OpenAI 兼容 API 的基础地址"
+                : "Anthropic API 基础地址，通常无需修改"}
+            </div>
           </div>
 
-          {/* Add Model Manually */}
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div className="settings-field">
+            <label className="settings-label">API Key</label>
             <input
-              type="text"
-              value={newModelId}
-              onChange={(e) => setNewModelId(e.target.value)}
-              placeholder="模型 ID"
-              style={{
-                flex: 1,
-                padding: "6px 10px",
-                backgroundColor: "#3c3c3c",
-                border: "1px solid #555",
-                borderRadius: "4px",
-                color: "#cccccc",
-                fontSize: "13px",
-              }}
+              type="password"
+              className="settings-input"
+              value={settings.api_key}
+              onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
+              placeholder="sk-..."
             />
-            <input
-              type="text"
-              value={newModelName}
-              onChange={(e) => setNewModelName(e.target.value)}
-              placeholder="名称(可选)"
-              style={{
-                flex: 1,
-                padding: "6px 10px",
-                backgroundColor: "#3c3c3c",
-                border: "1px solid #555",
-                borderRadius: "4px",
-                color: "#cccccc",
-                fontSize: "13px",
-              }}
-            />
-            <button
-              onClick={handleAddModel}
-              disabled={!newModelId.trim()}
-              style={{
-                padding: "6px 12px",
-                backgroundColor: "#3c3c3c",
-                border: "1px solid #555",
-                borderRadius: "4px",
-                color: "#ccc",
-                fontSize: "13px",
-                cursor: "pointer",
-              }}
-            >
-              添加
-            </button>
+          </div>
+
+          <button
+            className="settings-btn settings-btn-secondary settings-btn-full"
+            onClick={handleFetchModels}
+            disabled={fetching || !settings.base_url || !settings.api_key}
+          >
+            {fetching ? (
+              <>
+                <span className="settings-spinner" />
+                获取中...
+              </>
+            ) : (
+              <>
+                <RefreshIcon />
+                自动获取模型列表
+              </>
+            )}
+          </button>
+
+          {fetchError && (
+            <div className="settings-error" style={{ marginTop: "12px" }}>
+              <span className="settings-error-icon"><ErrorIcon /></span>
+              {fetchError}
+            </div>
+          )}
+        </div>
+
+        {/* 模型配置组 */}
+        <div className="settings-group">
+          <div className="settings-group-title">
+            <ModelIcon />
+            模型配置
+          </div>
+
+          {/* 当前模型选择 */}
+          {hasModels && (
+            <div className="settings-field">
+              <label className="settings-label">当前模型</label>
+              <select
+                className="settings-select"
+                value={settings.selected_model}
+                onChange={(e) => setSettings({ ...settings, selected_model: e.target.value })}
+              >
+                <option value="">选择模型</option>
+                {settings.models?.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name || m.id}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* 模型列表 */}
+          <div className="settings-field">
+            <label className="settings-label">
+              已配置模型
+              {hasModels && <span className="settings-label-hint">({settings.models.length})</span>}
+            </label>
+
+            {hasModels ? (
+              <div className="settings-models-list">
+                {settings.models?.map((m) => (
+                  <div key={m.id} className="settings-model-item">
+                    <div className="settings-model-info">
+                      <span className="settings-model-id">{m.id}</span>
+                      {m.name && m.name !== m.id && (
+                        <span className="settings-model-name">{m.name}</span>
+                      )}
+                    </div>
+                    <button
+                      className="settings-model-remove"
+                      onClick={() => handleRemoveModel(m.id)}
+                      title="删除模型"
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="settings-empty">
+                <div className="settings-empty-icon"><ModelIcon /></div>
+                <div>暂无模型配置</div>
+                <div style={{ fontSize: "11px", marginTop: "4px" }}>点击上方按钮自动获取或手动添加</div>
+              </div>
+            )}
+          </div>
+
+          {/* 手动添加模型 */}
+          <div className="settings-field">
+            <label className="settings-label">手动添加模型</label>
+            <div className="settings-add-model">
+              <input
+                type="text"
+                className="settings-input"
+                value={newModelId}
+                onChange={(e) => setNewModelId(e.target.value)}
+                placeholder="模型 ID"
+                onKeyDown={(e) => e.key === "Enter" && handleAddModel()}
+              />
+              <input
+                type="text"
+                className="settings-input"
+                value={newModelName}
+                onChange={(e) => setNewModelName(e.target.value)}
+                placeholder="名称(可选)"
+                onKeyDown={(e) => e.key === "Enter" && handleAddModel()}
+              />
+              <button
+                className="settings-btn settings-btn-secondary"
+                onClick={handleAddModel}
+                disabled={!newModelId.trim()}
+                title="添加模型"
+              >
+                <PlusIcon />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Save Button */}
-        <button
-          onClick={handleSave}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "8px",
-            backgroundColor: "#0e639c",
-            border: "none",
-            borderRadius: "4px",
-            color: "#fff",
-            fontSize: "13px",
-            cursor: loading ? "wait" : "pointer",
-          }}
-        >
-          {loading ? "保存中..." : saved ? "已保存 ✓" : "保存"}
-        </button>
+        {/* 保存按钮 */}
+        <div className="settings-group">
+          {saved && (
+            <div className="settings-success" style={{ marginBottom: "12px" }}>
+              <CheckIcon />
+              设置已保存
+            </div>
+          )}
+          <button
+            className="settings-btn settings-btn-primary settings-btn-full"
+            onClick={handleSave}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <span className="settings-spinner" />
+                保存中...
+              </>
+            ) : (
+              "保存设置"
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

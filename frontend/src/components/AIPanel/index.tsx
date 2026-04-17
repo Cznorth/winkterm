@@ -28,6 +28,13 @@ const MODE_ICONS: Record<ChatMode, JSX.Element> = {
   ),
 };
 
+// 工具图标
+const ToolIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+  </svg>
+);
+
 function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
   const argsStr = Object.keys(toolCall.args).length > 0
@@ -37,8 +44,8 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
   // 提取第一个参数值作为简要展示
   const firstArgValue = Object.values(toolCall.args)[0];
   const argPreview = typeof firstArgValue === "string"
-    ? firstArgValue.length > 50 ? firstArgValue.slice(0, 50) + "..." : firstArgValue
-    : argsStr.length > 50 ? argsStr.slice(0, 50) + "..." : argsStr;
+    ? firstArgValue.length > 60 ? firstArgValue.slice(0, 60) + "..." : firstArgValue
+    : argsStr.length > 60 ? argsStr.slice(0, 60) + "..." : argsStr;
 
   return (
     <div className={`tool-call ${expanded ? "expanded" : ""}`}>
@@ -47,8 +54,9 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
         onClick={() => toolCall.status === "done" && setExpanded(!expanded)}
       >
         <div className={`tool-call-status ${toolCall.status}`}>
-          {toolCall.status === "running" ? "⏳" : "✓"}
+          {toolCall.status === "done" ? "✓" : ""}
         </div>
+        <span className="tool-call-icon"><ToolIcon /></span>
         <span className="tool-call-name">{toolCall.tool}</span>
         {argPreview && (
           <span className="tool-call-preview">{argPreview}</span>
@@ -57,7 +65,7 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
           <span className="tool-call-arrow">▼</span>
         )}
         {toolCall.status === "running" && (
-          <span style={{ color: "var(--fg-muted)", fontSize: "11px" }}>执行中...</span>
+          <span style={{ color: "var(--fg-muted)", fontSize: "11px", whiteSpace: "nowrap" }}>执行中...</span>
         )}
       </div>
 
@@ -116,11 +124,11 @@ const MODE_INFO: Record<ChatMode, { label: string; desc: string }> = {
 export default function AIPanel() {
   const { messages, isStreaming, isConnected, error, mode, model, sendMessage, clearMessages, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const modeDropdownRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   // 加载模型列表
@@ -138,8 +146,8 @@ export default function AIPanel() {
   // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) {
+        setModeDropdownOpen(false);
       }
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
         setModelDropdownOpen(false);
@@ -159,7 +167,7 @@ export default function AIPanel() {
 
   const handleModeSelect = (m: ChatMode) => {
     switchMode(m);
-    setDropdownOpen(false);
+    setModeDropdownOpen(false);
   };
 
   const handleModelSelect = (m: string) => {
@@ -168,15 +176,16 @@ export default function AIPanel() {
   };
 
   const modeInfo = MODE_INFO[mode];
+  const currentModelName = model ? (models.find(m => m.id === model)?.name || model) : null;
 
   return (
     <div className="ai-panel">
       {/* 标题栏 */}
       <div className="ai-header">
-        <span className="ai-header-title">
-          {MODE_ICONS[mode]}
-          {modeInfo.label}
-        </span>
+        <div className="ai-header-left">
+          <span className="ai-header-icon">{MODE_ICONS[mode]}</span>
+          <span className="ai-header-title">{modeInfo.label}</span>
+        </div>
         <div className="ai-header-actions">
           <div className="ai-status">
             <span className={`ai-status-dot ${isConnected ? "" : "disconnected"}`} />
@@ -193,7 +202,8 @@ export default function AIPanel() {
         {messages.length === 0 && (
           <div className="ai-empty">
             <div className="ai-empty-icon">{MODE_ICONS[mode]}</div>
-            {modeInfo.desc}
+            <div className="ai-empty-title">{modeInfo.label} 模式</div>
+            <div className="ai-empty-desc">{modeInfo.desc}</div>
           </div>
         )}
         {messages.map((msg) => (
@@ -233,7 +243,7 @@ export default function AIPanel() {
                 handleSubmit(e);
               }
             }}
-            placeholder={isConnected ? "输入问题... (Enter发送, Shift+Enter换行)" : "等待连接..."}
+            placeholder={isConnected ? "输入问题... (Enter 发送，Shift+Enter 换行)" : "等待连接..."}
             disabled={!isConnected || isStreaming}
             rows={2}
           />
@@ -247,69 +257,68 @@ export default function AIPanel() {
         </form>
       </div>
 
-      {/* 模式选择器 */}
-      <div className="ai-mode-selector" ref={dropdownRef}>
-        {/* 下拉菜单 */}
-        {dropdownOpen && isConnected && (
-          <div className="ai-mode-dropdown">
-            {(Object.keys(MODE_INFO) as ChatMode[]).map((m) => (
-              <div
-                key={m}
-                className={`ai-mode-option ${m === mode ? "active" : ""}`}
-                onClick={() => handleModeSelect(m)}
-              >
-                <div className="ai-mode-option-left">
-                  {MODE_ICONS[m]}
-                  <span className="ai-mode-option-name">{MODE_INFO[m].label}</span>
+      {/* 底部工具栏 */}
+      <div className="ai-toolbar">
+        {/* 模式选择器 */}
+        <div className="ai-mode-selector" ref={modeDropdownRef}>
+          {modeDropdownOpen && isConnected && (
+            <div className="ai-mode-dropdown">
+              {(Object.keys(MODE_INFO) as ChatMode[]).map((m) => (
+                <div
+                  key={m}
+                  className={`ai-mode-option ${m === mode ? "active" : ""}`}
+                  onClick={() => handleModeSelect(m)}
+                >
+                  <div className="ai-mode-option-left">
+                    {MODE_ICONS[m]}
+                    <span className="ai-mode-option-name">{MODE_INFO[m].label}</span>
+                  </div>
+                  {m === mode && <span className="ai-mode-check">✓</span>}
                 </div>
-                {m === mode && <span className="ai-mode-check">✓</span>}
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+          <button
+            className="ai-mode-btn"
+            onClick={() => isConnected && setModeDropdownOpen(!modeDropdownOpen)}
+            disabled={!isConnected}
+          >
+            {MODE_ICONS[mode]}
+            <span className="ai-mode-btn-text">{modeInfo.label}</span>
+            <span className="ai-mode-arrow">▼</span>
+          </button>
+        </div>
 
-        {/* 模式按钮 */}
-        <button
-          className="ai-mode-btn"
-          onClick={() => isConnected && setDropdownOpen(!dropdownOpen)}
-          disabled={!isConnected}
-        >
-          {MODE_ICONS[mode]}
-          <span>{modeInfo.label}</span>
-          <span className="ai-mode-arrow">▾</span>
-        </button>
-      </div>
+        <div className="ai-toolbar-divider" />
 
-      {/* 模型选择器 */}
-      <div className="ai-mode-selector" ref={modelDropdownRef} style={{ marginLeft: "8px" }}>
-        {/* 下拉菜单 */}
-        {modelDropdownOpen && isConnected && models.length > 0 && (
-          <div className="ai-mode-dropdown">
-            {models.map((m) => (
-              <div
-                key={m.id}
-                className={`ai-mode-option ${m.id === model ? "active" : ""}`}
-                onClick={() => handleModelSelect(m.id)}
-              >
-                <span className="ai-mode-option-name">{m.name || m.id}</span>
-                {m.id === model && <span className="ai-mode-check">✓</span>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* 模型按钮 */}
-        <button
-          className="ai-mode-btn"
-          onClick={() => isConnected && models.length > 0 && setModelDropdownOpen(!modelDropdownOpen)}
-          disabled={!isConnected || models.length === 0}
-          title={model || "选择模型"}
-        >
-          <span style={{ maxWidth: "100px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {model ? (models.find(m => m.id === model)?.name || model) : "模型"}
-          </span>
-          <span className="ai-mode-arrow">▾</span>
-        </button>
+        {/* 模型选择器 */}
+        <div className="ai-mode-selector" ref={modelDropdownRef}>
+          {modelDropdownOpen && isConnected && models.length > 0 && (
+            <div className="ai-mode-dropdown">
+              {models.map((m) => (
+                <div
+                  key={m.id}
+                  className={`ai-mode-option ${m.id === model ? "active" : ""}`}
+                  onClick={() => handleModelSelect(m.id)}
+                >
+                  <span className="ai-mode-option-name">{m.name || m.id}</span>
+                  {m.id === model && <span className="ai-mode-check">✓</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            className="ai-mode-btn"
+            onClick={() => isConnected && models.length > 0 && setModelDropdownOpen(!modelDropdownOpen)}
+            disabled={!isConnected || models.length === 0}
+            title={model || "选择模型"}
+          >
+            <span className="ai-mode-btn-text">
+              {currentModelName || "选择模型"}
+            </span>
+            <span className="ai-mode-arrow">▼</span>
+          </button>
+        </div>
       </div>
     </div>
   );

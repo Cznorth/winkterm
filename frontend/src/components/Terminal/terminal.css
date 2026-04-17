@@ -38,11 +38,6 @@
   background: transparent;
 }
 
-/* 终端光标样式增强 */
-.terminal-container .xterm-cursor {
-  background-color: var(--accent-light) !important;
-}
-
 /* 终端选中样式 */
 .terminal-container .xterm-selection div {
   background-color: var(--bg-selection) !important;
