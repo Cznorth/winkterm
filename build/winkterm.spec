@@ -17,14 +17,26 @@ ROOT = Path(SPECPATH).parent.resolve()
 # site-packages 路径
 site_packages = Path(sys.prefix) / "Lib" / "site-packages"
 
-# winpty 二进制文件
+# 判断平台
+IS_WINDOWS = sys.platform == "win32"
+IS_MACOS = sys.platform == "darwin"
+
+# winpty 二进制文件 (Windows)
 winpty_dir = site_packages / "winpty"
 winpty_binaries = []
-if winpty_dir.exists():
+if IS_WINDOWS and winpty_dir.exists():
     for f in ["conpty.dll", "winpty.dll", "winpty-agent.exe", "OpenConsole.exe"]:
         fp = winpty_dir / f
         if fp.exists():
             winpty_binaries.append((str(fp), "winpty"))
+
+# 图标路径
+if IS_WINDOWS:
+    icon_path = str(ROOT / "assets" / "logo.ico")
+elif IS_MACOS:
+    icon_path = str(ROOT / "assets" / "logo.icns")
+else:
+    icon_path = None
 
 a = Analysis(
     [str(ROOT / "desktop" / "entrypoint.py")],
@@ -126,25 +138,98 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name="WinkTerm",
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=True,  # 调试时显示控制台
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon=str(ROOT / "assets" / "logo.ico"),
-)
+if IS_WINDOWS:
+    # Windows: 单文件 .exe
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name="WinkTerm",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon=icon_path,
+    )
+elif IS_MACOS:
+    # macOS: .app bundle
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name="WinkTerm",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name="WinkTerm",
+    )
+
+    app = BUNDLE(
+        coll,
+        name="WinkTerm.app",
+        icon=icon_path,
+        bundle_identifier="com.winkterm.app",
+        info_plist={
+            "NSPrincipalClass": "NSApplication",
+            "NSAppleScriptEnabled": False,
+            "CFBundleName": "WinkTerm",
+            "CFBundleDisplayName": "WinkTerm",
+            "CFBundleVersion": "0.1.0",
+            "CFBundleShortVersionString": "0.1.0",
+            "CFBundleIdentifier": "com.winkterm.app",
+            "LSMinimumSystemVersion": "10.13",
+            "NSHighResolutionCapable": True,
+        },
+    )
+else:
+    # Linux: 单文件
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name="WinkTerm",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
