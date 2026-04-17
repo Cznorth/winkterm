@@ -5,6 +5,7 @@ import TabBar from "@/components/TabBar";
 import { useTabs } from "@/hooks/useTabs";
 import Terminal from "@/components/Terminal";
 import SettingsPanel from "@/components/SettingsPanel";
+import TitleBar from "@/components/TitleBar";
 import "./Layout.css";
 
 interface LayoutProps {
@@ -58,6 +59,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
 
   return (
     <div className="layout-container">
+      <TitleBar />
       <div className="main-content">
         {/* 活动栏 */}
         <div className="activity-bar">

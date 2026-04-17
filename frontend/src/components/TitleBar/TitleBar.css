@@ -1,0 +1,140 @@
+.title-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 32px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-default);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.title-bar-drag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  flex: 1;
+  height: 100%;
+}
+
+.title-bar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--accent-primary);
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.title-bar-title {
+  font-size: 12px;
+  color: var(--fg-secondary);
+  font-weight: 500;
+}
+
+.title-bar-controls {
+  display: flex;
+  height: 100%;
+}
+
+.title-bar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.title-bar-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.title-bar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.title-bar-btn.close:hover {
+  background: #e81123;
+  color: white;
+}
+
+/* 边缘调整大小区域 */
+.resize-edge {
+  position: fixed;
+  z-index: 9999;
+}
+
+.resize-edge.top {
+  top: 0;
+  left: 6px;
+  right: 6px;
+  height: 4px;
+  cursor: ns-resize;
+}
+
+.resize-edge.bottom {
+  bottom: 0;
+  left: 6px;
+  right: 6px;
+  height: 4px;
+  cursor: ns-resize;
+}
+
+.resize-edge.left {
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 4px;
+  cursor: ew-resize;
+}
+
+.resize-edge.right {
+  right: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 4px;
+  cursor: ew-resize;
+}
+
+.resize-corner {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  z-index: 10000;
+}
+
+.resize-corner.nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.resize-corner.ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.resize-corner.sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.resize-corner.se {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}

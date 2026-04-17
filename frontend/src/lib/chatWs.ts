@@ -88,6 +88,7 @@ export function useChatWs() {
     content?: string;
     message?: string;
     mode?: string;
+    model?: string;
     tool?: string;
     args?: Record<string, unknown>;
     result?: string;

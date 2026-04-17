@@ -1,0 +1,220 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import "./TitleBar.css";
+
+// 声明 pywebview API 类型
+declare global {
+  interface Window {
+    pywebview?: {
+      api: {
+        minimize: () => Promise<void>;
+        maximize: () => Promise<void>;
+        restore: () => Promise<void>;
+        toggle_maximize: () => Promise<void>;
+        close: () => Promise<void>;
+        is_maximized: () => Promise<boolean>;
+        resize: (width: number, height: number) => Promise<void>;
+        move: (x: number, y: number) => Promise<void>;
+        get_size: () => Promise<{ width: number; height: number }>;
+        get_position: () => Promise<{ x: number; y: number }>;
+      };
+    };
+  }
+}
+
+// 边缘调整大小钩子
+function useWindowResize() {
+  const resizingRef = useRef<{
+    edge: string;
+    startX: number;
+    startY: number;
+    startWidth: number;
+    startHeight: number;
+    startXPos: number;
+    startYPos: number;
+  } | null>(null);
+
+  const startResize = useCallback(async (edge: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.pywebview?.api) return;
+
+    try {
+      const size = await window.pywebview.api.get_size();
+      const pos = await window.pywebview.api.get_position();
+
+      resizingRef.current = {
+        edge,
+        startX: e.screenX,
+        startY: e.screenY,
+        startWidth: size.width,
+        startHeight: size.height,
+        startXPos: pos.x,
+        startYPos: pos.y,
+      };
+
+      const handleMove = async (moveEvent: MouseEvent) => {
+        if (!resizingRef.current) return;
+
+        const { edge, startX, startY, startWidth, startHeight, startXPos, startYPos } = resizingRef.current;
+        const deltaX = moveEvent.screenX - startX;
+        const deltaY = moveEvent.screenY - startY;
+
+        let newWidth = startWidth;
+        let newHeight = startHeight;
+        let newX = startXPos;
+        let newY = startYPos;
+
+        const minWidth = 800;
+        const minHeight = 600;
+
+        if (edge.includes("e")) {
+          newWidth = Math.max(minWidth, startWidth + deltaX);
+        }
+        if (edge.includes("w")) {
+          newWidth = Math.max(minWidth, startWidth - deltaX);
+          newX = startXPos + (startWidth - newWidth);
+        }
+        if (edge.includes("s")) {
+          newHeight = Math.max(minHeight, startHeight + deltaY);
+        }
+        if (edge.includes("n")) {
+          newHeight = Math.max(minHeight, startHeight - deltaY);
+          newY = startYPos + (startHeight - newHeight);
+        }
+
+        await window.pywebview?.api?.resize?.(Math.round(newWidth), Math.round(newHeight));
+        if (edge.includes("w") || edge.includes("n")) {
+          await window.pywebview?.api?.move?.(Math.round(newX), Math.round(newY));
+        }
+      };
+
+      const handleUp = () => {
+        resizingRef.current = null;
+        document.removeEventListener("mousemove", handleMove);
+        document.removeEventListener("mouseup", handleUp);
+        document.body.style.cursor = "";
+      };
+
+      document.body.style.cursor = edge.includes("n") || edge.includes("s") ? "ns-resize" :
+                                    edge.includes("e") || edge.includes("w") ? "ew-resize" :
+                                    edge === "nw" || edge === "se" ? "nwse-resize" : "nesw-resize";
+      document.addEventListener("mousemove", handleMove);
+      document.addEventListener("mouseup", handleUp);
+    } catch (err) {
+      console.error("Resize failed:", err);
+    }
+  }, []);
+
+  return { startResize };
+}
+
+export default function TitleBar() {
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const { startResize } = useWindowResize();
+
+  useEffect(() => {
+    const checkDesktop = async () => {
+      const hasApi = !!window.pywebview?.api;
+      setIsDesktop(hasApi);
+
+      if (hasApi) {
+        try {
+          const maximized = await window.pywebview?.api?.is_maximized?.();
+          setIsMaximized(!!maximized);
+        } catch (e) {
+          console.log("Check maximized failed");
+        }
+      }
+    };
+
+    // pywebview API 延迟加载
+    const timer = setTimeout(checkDesktop, 200);
+    const interval = setInterval(checkDesktop, 500);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleMinimize = async () => {
+    try {
+      await window.pywebview?.api?.minimize?.();
+    } catch (e) {
+      console.error("Minimize failed:", e);
+    }
+  };
+
+  const handleMaximize = async () => {
+    try {
+      await window.pywebview?.api?.toggle_maximize?.();
+      setTimeout(async () => {
+        const maximized = await window.pywebview?.api?.is_maximized?.();
+        setIsMaximized(!!maximized);
+      }, 100);
+    } catch (e) {
+      console.error("Maximize failed:", e);
+    }
+  };
+
+  const handleClose = async () => {
+    try {
+      await window.pywebview?.api?.close?.();
+    } catch (e) {
+      console.error("Close failed:", e);
+    }
+  };
+
+  // 非桌面模式下不显示标题栏
+  if (!isDesktop) {
+    return null;
+  }
+
+  return (
+    <>
+      {/* 边缘调整大小区域 */}
+      <div className="resize-edge top" onMouseDown={(e) => startResize("n", e)} />
+      <div className="resize-edge bottom" onMouseDown={(e) => startResize("s", e)} />
+      <div className="resize-edge left" onMouseDown={(e) => startResize("w", e)} />
+      <div className="resize-edge right" onMouseDown={(e) => startResize("e", e)} />
+      <div className="resize-corner nw" onMouseDown={(e) => startResize("nw", e)} />
+      <div className="resize-corner ne" onMouseDown={(e) => startResize("ne", e)} />
+      <div className="resize-corner sw" onMouseDown={(e) => startResize("sw", e)} />
+      <div className="resize-corner se" onMouseDown={(e) => startResize("se", e)} />
+
+      {/* 自定义标题栏 */}
+      <div className="title-bar">
+        <div className="title-bar-drag" onDoubleClick={handleMaximize}>
+          <span className="title-bar-logo">W</span>
+          <span className="title-bar-title">WinkTerm</span>
+        </div>
+        <div className="title-bar-controls">
+          <button className="title-bar-btn minimize" onClick={handleMinimize} title="最小化">
+            <svg viewBox="0 0 12 12">
+              <rect x="2" y="5.5" width="8" height="1" fill="currentColor" />
+            </svg>
+          </button>
+          <button className="title-bar-btn maximize" onClick={handleMaximize} title={isMaximized ? "还原" : "最大化"}>
+            {isMaximized ? (
+              <svg viewBox="0 0 12 12">
+                <rect x="3" y="1" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" />
+                <rect x="2" y="4" width="7" height="7" fill="var(--bg-primary)" stroke="currentColor" strokeWidth="1" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 12 12">
+                <rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1" />
+              </svg>
+            )}
+          </button>
+          <button className="title-bar-btn close" onClick={handleClose} title="关闭">
+            <svg viewBox="0 0 12 12">
+              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.2" fill="none" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
