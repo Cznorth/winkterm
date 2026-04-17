@@ -18,6 +18,7 @@ declare global {
         move: (x: number, y: number) => Promise<void>;
         get_size: () => Promise<{ width: number; height: number }>;
         get_position: () => Promise<{ x: number; y: number }>;
+        get_work_area: () => Promise<{ x: number; y: number; width: number; height: number }>;
       };
     };
   }
@@ -110,10 +111,117 @@ function useWindowResize() {
   return { startResize };
 }
 
+// 窗口拖拽钩子
+function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
+  const draggingRef = useRef<{
+    startX: number;
+    startY: number;
+    startWindowX: number;
+    startWindowY: number;
+  } | null>(null);
+
+  const pendingRestoreRef = useRef<{
+    startX: number;
+    startY: number;
+  } | null>(null);
+
+  const startDrag = useCallback(async (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if (!window.pywebview?.api) return;
+
+    try {
+      if (isMaximized) {
+        // 最大化时：先记录起始位置，等用户实际拖动时再还原窗口
+        pendingRestoreRef.current = {
+          startX: e.screenX,
+          startY: e.screenY,
+        };
+
+        const handleMove = async (moveEvent: MouseEvent) => {
+          if (!pendingRestoreRef.current) return;
+
+          // 检查是否真的在拖动（移动超过阈值）
+          const deltaX = Math.abs(moveEvent.screenX - pendingRestoreRef.current.startX);
+          const deltaY = Math.abs(moveEvent.screenY - pendingRestoreRef.current.startY);
+
+          if (deltaX > 5 || deltaY > 5) {
+            // 用户确实在拖动，现在还原窗口
+            const size = await window.pywebview?.api?.get_size?.();
+            const workArea = await window.pywebview?.api?.get_work_area?.();
+            if (!size || !workArea) return;
+
+            const screenW = workArea.width;
+            const ratio = pendingRestoreRef.current.startX / screenW;
+            const newWindowX = Math.max(0, Math.round(pendingRestoreRef.current.startX - size.width * ratio));
+            const newWindowY = 0;
+
+            await window.pywebview?.api?.restore?.();
+            await window.pywebview?.api?.move?.(newWindowX, newWindowY);
+            onRestored();
+
+            // 清理 pending 状态，开始正常拖动
+            pendingRestoreRef.current = null;
+            document.removeEventListener("mousemove", handleMove);
+            document.removeEventListener("mouseup", handleUp);
+
+            // 启动正常拖动
+            startDragImpl(moveEvent.screenX, moveEvent.screenY, newWindowX, newWindowY);
+          }
+        };
+
+        const handleUp = () => {
+          // 用户只是点击，没有拖动，不还原窗口
+          pendingRestoreRef.current = null;
+          document.removeEventListener("mousemove", handleMove);
+          document.removeEventListener("mouseup", handleUp);
+        };
+
+        document.addEventListener("mousemove", handleMove);
+        document.addEventListener("mouseup", handleUp);
+      } else {
+        const pos = await window.pywebview?.api?.get_position?.();
+        if (!pos) return;
+        startDragImpl(e.screenX, e.screenY, pos.x, pos.y);
+      }
+    } catch (err) {
+      console.error("Drag start failed:", err);
+    }
+  }, [isMaximized, onRestored]);
+
+  const startDragImpl = (startX: number, startY: number, startWindowX: number, startWindowY: number) => {
+    draggingRef.current = { startX, startY, startWindowX, startWindowY };
+
+    const handleMove = async (moveEvent: MouseEvent) => {
+      if (!draggingRef.current) return;
+
+      const { startX, startY, startWindowX, startWindowY } = draggingRef.current;
+      const deltaX = moveEvent.screenX - startX;
+      const deltaY = moveEvent.screenY - startY;
+
+      const newX = startWindowX + deltaX;
+      const newY = startWindowY + deltaY;
+
+      await window.pywebview?.api?.move?.(Math.round(newX), Math.round(newY));
+    };
+
+    const handleUp = () => {
+      draggingRef.current = null;
+      document.removeEventListener("mousemove", handleMove);
+      document.removeEventListener("mouseup", handleUp);
+    };
+
+    document.addEventListener("mousemove", handleMove);
+    document.addEventListener("mouseup", handleUp);
+  };
+
+  return { startDrag };
+}
+
 export default function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const { startResize } = useWindowResize();
+  const { startDrag } = useWindowDrag(isMaximized, () => setIsMaximized(false));
 
   useEffect(() => {
     const checkDesktop = async () => {
@@ -125,12 +233,11 @@ export default function TitleBar() {
           const maximized = await window.pywebview?.api?.is_maximized?.();
           setIsMaximized(!!maximized);
         } catch (e) {
-          console.log("Check maximized failed");
+          // ignore
         }
       }
     };
 
-    // pywebview API 延迟加载
     const timer = setTimeout(checkDesktop, 200);
     const interval = setInterval(checkDesktop, 500);
     return () => {
@@ -186,7 +293,11 @@ export default function TitleBar() {
 
       {/* 自定义标题栏 */}
       <div className="title-bar">
-        <div className="title-bar-drag" onDoubleClick={handleMaximize}>
+        <div
+          className="title-bar-drag"
+          onMouseDown={startDrag}
+          onDoubleClick={handleMaximize}
+        >
           <span className="title-bar-logo">W</span>
           <span className="title-bar-title">WinkTerm</span>
         </div>

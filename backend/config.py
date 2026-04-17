@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = False
 
-    # CORS
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # CORS（开发模式 + 桌面模式）
+    cors_origins: list[str] = ["*"]
 
     @field_validator("debug", mode="before")
     @classmethod

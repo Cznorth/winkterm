@@ -16,7 +16,10 @@ logger = logging.getLogger(__name__)
 IS_FROZEN = getattr(sys, "frozen", False)
 
 # Windows API 常量
+SM_CXSCREEN = 0
+SM_CYSCREEN = 1
 SPI_GETWORKAREA = 0x0030
+SWP_NOZORDER = 0x0004
 SWP_SHOWWINDOW = 0x0040
 
 # 全局状态
@@ -42,15 +45,11 @@ def find_window_handle():
 
     try:
         user32 = ctypes.windll.user32
-
-        # 通过窗口标题查找
         hwnd = user32.FindWindowW(None, "WinkTerm")
         if hwnd:
             _hwnd = hwnd
-            logger.info(f"Found window by title: {_hwnd}")
             return _hwnd
 
-        # 通过枚举窗口查找
         EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
 
         def enum_callback(hwnd, _):
@@ -58,9 +57,8 @@ def find_window_handle():
             length = user32.GetWindowTextLengthW(hwnd) + 1
             buffer = ctypes.create_unicode_buffer(length)
             user32.GetWindowTextW(hwnd, buffer, length)
-            if "WinkTerm" in buffer.value or "127.0.0.1:8000" in buffer.value:
+            if "WinkTerm" in buffer.value:
                 _hwnd = hwnd
-                logger.info(f"Found window by enum: {_hwnd}")
                 return False
             return True
 
@@ -85,60 +83,63 @@ class WindowAPI:
             _window.minimize()
 
     def maximize(self):
-        """最大化窗口（不覆盖任务栏）"""
-        global _is_maximized, _saved_rect, _hwnd
+        """最大化窗口（不覆盖任务栏）- 使用 Windows API"""
+        global _is_maximized, _saved_rect, _hwnd, _window
 
-        hwnd = find_window_handle()
-        logger.info(f"maximize called, hwnd={hwnd}")
-
-        if not hwnd:
-            logger.error("hwnd not found")
+        if not _window:
             return
 
-        user32 = ctypes.windll.user32
+        hwnd = find_window_handle()
+        if not hwnd:
+            logger.error("maximize: hwnd not found")
+            # 降级到 pywebview 方式
+            _saved_rect = (_window.x, _window.y, _window.width, _window.height)
+            work_x, work_y, work_w, work_h = get_work_area()
+            _window.resize(work_w, work_h)
+            _window.move(work_x, work_y)
+            _is_maximized = True
+            return
 
         # 保存当前窗口位置
-        rect = ctypes.wintypes.RECT()
-        user32.GetWindowRect(hwnd, ctypes.byref(rect))
-        _saved_rect = (rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top)
-        logger.info(f"Saved rect: {_saved_rect}")
+        _saved_rect = (_window.x, _window.y, _window.width, _window.height)
+        logger.info(f"maximize: saved_rect = {_saved_rect}")
 
         # 获取工作区大小
         work_x, work_y, work_w, work_h = get_work_area()
-        logger.info(f"Work area: x={work_x}, y={work_y}, w={work_w}, h={work_h}")
+        logger.info(f"maximize: work_area = ({work_x}, {work_y}, {work_w}, {work_h})")
 
-        # 设置窗口到工作区大小
-        user32.SetWindowPos(hwnd, 0, work_x, work_y, work_w, work_h, SWP_SHOWWINDOW)
+        # 使用 Windows API 设置窗口位置和大小
+        user32 = ctypes.windll.user32
+        user32.SetWindowPos(hwnd, 0, work_x, work_y, work_w, work_h, SWP_NOZORDER | SWP_SHOWWINDOW)
+
         _is_maximized = True
-        logger.info("Window maximized to work area")
+        logger.info(f"maximize: done via Windows API")
 
     def restore(self):
         """还原窗口"""
-        global _is_maximized, _saved_rect, _hwnd
+        global _is_maximized, _saved_rect, _hwnd, _window
+
+        if not _window or not _saved_rect:
+            return
 
         hwnd = find_window_handle()
-        logger.info(f"restore called, hwnd={hwnd}")
 
-        if not hwnd:
-            logger.error("hwnd not found")
-            return
-
-        if not _saved_rect:
-            logger.error("No saved rect")
-            return
-
-        user32 = ctypes.windll.user32
-        user32.SetWindowPos(hwnd, 0, _saved_rect[0], _saved_rect[1],
-                           _saved_rect[2], _saved_rect[3], SWP_SHOWWINDOW)
+        if hwnd:
+            # 使用 Windows API
+            user32 = ctypes.windll.user32
+            user32.SetWindowPos(hwnd, 0, _saved_rect[0], _saved_rect[1],
+                               _saved_rect[2], _saved_rect[3], SWP_NOZORDER | SWP_SHOWWINDOW)
+        else:
+            # 降级到 pywebview
+            _window.resize(_saved_rect[2], _saved_rect[3])
+            _window.move(_saved_rect[0], _saved_rect[1])
 
         _is_maximized = False
-        logger.info("Window restored")
+        logger.info(f"restore: restored to {_saved_rect}")
 
     def toggle_maximize(self):
         """切换最大化/还原"""
         global _is_maximized
-        logger.info(f"toggle_maximize called, is_maximized={_is_maximized}")
-
         if _is_maximized:
             self.restore()
         else:
@@ -180,6 +181,11 @@ class WindowAPI:
             return {"x": _window.x, "y": _window.y}
         return {"x": 0, "y": 0}
 
+    def get_work_area(self):
+        """获取工作区大小"""
+        work_x, work_y, work_w, work_h = get_work_area()
+        return {"x": work_x, "y": work_y, "width": work_w, "height": work_h}
+
 
 # 创建 API 实例
 window_api = WindowAPI()
@@ -199,7 +205,7 @@ def run_desktop_app(host: str, port: int, width: int, height: int):
         height=height,
         resizable=True,
         frameless=True,
-        easy_drag=True,
+        easy_drag=False,
         background_color="#1e1e1e",
         js_api=window_api,
     )
