@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import socket
 import sys
 import threading
 import time
@@ -225,6 +226,26 @@ class WindowAPI:
 window_api = WindowAPI()
 
 
+def find_free_port(start_port: int = 8000, max_attempts: int = 100) -> int:
+    """查找未被占用的端口。
+
+    Args:
+        start_port: 起始端口
+        max_attempts: 最大尝试次数
+
+    Returns:
+        可用的端口号
+    """
+    for port in range(start_port, start_port + max_attempts):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", port))
+                return port
+        except OSError:
+            continue
+    raise RuntimeError(f"无法找到可用端口 (尝试范围: {start_port}-{start_port + max_attempts})")
+
+
 def run_desktop_app(host: str, port: int, width: int, height: int):
     """启动桌面应用"""
     import webview
@@ -265,21 +286,27 @@ def main():
 
     parser = argparse.ArgumentParser(description="WinkTerm Desktop")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=None, help="指定端口，默认自动分配")
     parser.add_argument("--width", type=int, default=1400)
     parser.add_argument("--height", type=int, default=900)
     parser.add_argument("--headless", action="store_true", help="服务器模式（无窗口）")
     args = parser.parse_args()
 
-    if args.headless:
-        start_backend(args.host, args.port)
-    else:
-        url = f"http://{args.host}:{args.port}"
+    # 自动查找可用端口
+    port = args.port if args.port else find_free_port()
 
-        logger.info("Starting backend server...")
+    if args.headless:
+        if not args.port:
+            logger.error("headless 模式必须指定 --port")
+            sys.exit(1)
+        start_backend(args.host, port)
+    else:
+        url = f"http://{args.host}:{port}"
+
+        logger.info(f"Starting backend server on port {port}...")
         backend_thread = threading.Thread(
             target=start_backend,
-            args=(args.host, args.port),
+            args=(args.host, port),
             daemon=True,
         )
         backend_thread.start()
@@ -298,7 +325,7 @@ def main():
             sys.exit(1)
 
         logger.info(f"Server ready at {url}")
-        run_desktop_app(args.host, args.port, args.width, args.height)
+        run_desktop_app(args.host, port, args.width, args.height)
 
 
 if __name__ == "__main__":
