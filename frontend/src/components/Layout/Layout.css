@@ -27,6 +27,10 @@
 .activity-bar-bottom {
   padding: 4px 0;
   border-top: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
 .activity-item {
@@ -88,5 +92,41 @@
   min-width: 280px;
   max-width: 480px;
   background: var(--bg-secondary);
+}
+
+/* 布局切换按钮 */
+.layout-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.layout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 24px;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+}
+
+.layout-btn:hover {
+  color: var(--fg-primary);
+  background: var(--bg-hover);
+}
+
+.layout-btn.active {
+  color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
+.layout-btn svg {
+  width: 16px;
+  height: 16px;
 }
 

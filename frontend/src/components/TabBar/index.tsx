@@ -19,6 +19,8 @@ interface TabBarProps {
   onTabClose: (id: string) => void;
   onTabAdd: (options?: { type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => void;
   onTabRename: (id: string, title: string) => void;
+  paneId?: string;
+  onDragStart?: (e: React.DragEvent, tab: TabState) => void;
 }
 
 // 终端图标
@@ -58,6 +60,8 @@ export default function TabBar({
   onTabClose,
   onTabAdd,
   onTabRename,
+  paneId,
+  onDragStart,
 }: TabBarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -149,6 +153,8 @@ export default function TabBar({
             className={`tab ${tab.id === activeTabId ? "active" : ""}`}
             onClick={() => onTabClick(tab.id)}
             onDoubleClick={() => handleDoubleClick(tab)}
+            draggable={!!onDragStart}
+            onDragStart={(e) => onDragStart?.(e, tab)}
           >
             <span className="tab-icon">
               {tab.type === "ssh" ? (

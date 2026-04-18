@@ -1,12 +1,12 @@
 "use client";
 
-import { ReactNode, useMemo, useState } from "react";
-import TabBar from "@/components/TabBar";
-import { useTabs } from "@/hooks/useTabs";
+import { ReactNode, useState, useMemo } from "react";
+import { usePanes, LAYOUT_CONFIG, type LayoutType } from "@/hooks/usePanes";
 import Terminal from "@/components/Terminal";
 import SettingsPanel from "@/components/SettingsPanel";
 import SSHPanel from "@/components/SSHPanel";
 import TitleBar from "@/components/TitleBar";
+import SplitContainer from "@/components/SplitContainer";
 import "./Layout.css";
 
 interface LayoutProps {
@@ -40,38 +40,61 @@ const Icons = {
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   ),
+  // 布局图标
+  layoutSingle: (
+    <svg viewBox="0 0 16 16" fill="currentColor">
+      <rect x="1" y="1" width="14" height="14" rx="1" />
+    </svg>
+  ),
+  layoutHorizontal: (
+    <svg viewBox="0 0 16 16" fill="currentColor">
+      <rect x="1" y="1" width="6.5" height="14" rx="1" />
+      <rect x="8.5" y="1" width="6.5" height="14" rx="1" />
+    </svg>
+  ),
+  layoutVertical: (
+    <svg viewBox="0 0 16 16" fill="currentColor">
+      <rect x="1" y="1" width="14" height="6.5" rx="1" />
+      <rect x="1" y="8.5" width="14" height="6.5" rx="1" />
+    </svg>
+  ),
+  layoutGrid: (
+    <svg viewBox="0 0 16 16" fill="currentColor">
+      <rect x="1" y="1" width="6.5" height="6.5" rx="1" />
+      <rect x="8.5" y="1" width="6.5" height="6.5" rx="1" />
+      <rect x="1" y="8.5" width="6.5" height="6.5" rx="1" />
+      <rect x="8.5" y="8.5" width="6.5" height="6.5" rx="1" />
+    </svg>
+  ),
 };
 
 type ActivityItem = "terminal" | "ai" | "ssh" | "settings";
 
+const LAYOUT_BUTTONS: { layout: LayoutType; icon: ReactNode; title: string }[] = [
+  { layout: "single", icon: Icons.layoutSingle, title: "单分区" },
+  { layout: "horizontal", icon: Icons.layoutHorizontal, title: "左右双列" },
+  { layout: "vertical", icon: Icons.layoutVertical, title: "上下双行" },
+  { layout: "grid", icon: Icons.layoutGrid, title: "田字格 2x2" },
+];
+
 export default function SplitLayout({ aiPanel }: LayoutProps) {
-  const { tabs, activeTabId, addTab, closeTab, switchTab, renameTab } = useTabs();
+  const {
+    layout,
+    panes,
+    setLayout,
+    addTab,
+    closeTab,
+    switchTab,
+    renameTab,
+    moveTab,
+  } = usePanes();
+
   const [activeActivity, setActiveActivity] = useState<ActivityItem>("terminal");
 
-  // 为每个标签创建终端组件
-  const terminals = useMemo(() => {
-    return tabs.map((tab) => (
-      <div
-        key={tab.id}
-        style={{
-          display: tab.id === activeTabId ? "block" : "none",
-          width: "100%",
-          height: "100%",
-        }}
-      >
-        <Terminal
-          sessionId={tab.id}
-          isActive={tab.id === activeTabId}
-          type={tab.type}
-          sshConnectionId={tab.sshConnectionId}
-        />
-      </div>
-    ));
-  }, [tabs, activeTabId]);
-
-  // 处理 SSH 连接
+  // 处理 SSH 连接 - 添加到第一个分区
   const handleSSHConnect = (conn: { id: string; title: string; host: string; color?: string }) => {
-    addTab({
+    const firstPaneId = panes[0].id;
+    addTab(firstPaneId, {
       type: "ssh",
       sshConnectionId: conn.id,
       title: conn.title || conn.host,
@@ -110,6 +133,19 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
             </div>
           </div>
           <div className="activity-bar-bottom">
+            {/* 布局切换按钮 */}
+            <div className="layout-buttons">
+              {LAYOUT_BUTTONS.map((btn) => (
+                <div
+                  key={btn.layout}
+                  className={`layout-btn ${layout === btn.layout ? "active" : ""}`}
+                  onClick={() => setLayout(btn.layout)}
+                  title={btn.title}
+                >
+                  {btn.icon}
+                </div>
+              ))}
+            </div>
             <div
               className={`activity-item ${activeActivity === "settings" ? "active" : ""}`}
               title="设置"
@@ -120,19 +156,17 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           </div>
         </div>
 
-        {/* 终端区域 */}
+        {/* 终端区域 - 使用 SplitContainer */}
         <div className="terminal-section">
-          <TabBar
-            tabs={tabs}
-            activeTabId={activeTabId}
+          <SplitContainer
+            layout={layout}
+            panes={panes}
             onTabClick={switchTab}
             onTabClose={closeTab}
             onTabAdd={addTab}
             onTabRename={renameTab}
+            onTabDrop={moveTab}
           />
-          <div style={{ flex: 1, overflow: "hidden" }}>
-            {terminals}
-          </div>
         </div>
 
         {/* 右侧面板 */}

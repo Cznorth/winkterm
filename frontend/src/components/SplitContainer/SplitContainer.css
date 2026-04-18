@@ -1,0 +1,47 @@
+.split-container {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  gap: 2px;
+  background: var(--border-color, #1e1e1e);
+}
+
+.split-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-color, #0c0c0c);
+  overflow: hidden;
+}
+
+.pane-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 全局终端池 */
+.terminal-pool {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.terminal-instance {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.terminal-instance > div {
+  width: 100%;
+  height: 100%;
+}
+
+/* 拖拽悬停高亮 */
+.split-pane.drag-over {
+  outline: 2px dashed var(--accent-color, #0078d4);
+  outline-offset: -2px;
+}

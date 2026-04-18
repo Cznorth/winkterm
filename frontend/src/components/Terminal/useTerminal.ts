@@ -28,6 +28,13 @@ export function useTerminal(
     if (initRef.current) return;
     if (!containerRef.current) return;
 
+    // 检查容器是否有有效尺寸
+    if (containerRef.current.offsetWidth === 0 || containerRef.current.offsetHeight === 0) {
+      DEBUG && console.log(`[useTerminal] 容器尺寸为 0，跳过初始化, sessionId=${sessionId}`);
+      initRef.current = false; // 允许稍后重试
+      return;
+    }
+
     initRef.current = true;
     DEBUG && console.log(`[useTerminal] 开始初始化, sessionId=${sessionId}, type=${terminalType}`);
 
@@ -178,5 +185,29 @@ export function useTerminal(
     }
   }, [isActive]);
 
-  return { init, term: termRef };
+  // 手动触发 fit（用于布局切换后）
+  const fit = useCallback(() => {
+    if (fitAddonRef.current && termRef.current) {
+      // 始终执行 fit，即使容器不可见
+      try {
+        fitAddonRef.current.fit();
+        const { cols, rows } = termRef.current;
+        wsRef.current.sendResize(cols, rows);
+        DEBUG && console.log(`[useTerminal] fit 完成, sessionId=${sessionId}, cols=${cols}, rows=${rows}`);
+      } catch (e) {
+        // 容器不可见时可能会报错，忽略
+        DEBUG && console.log(`[useTerminal] fit 失败（容器可能不可见）, sessionId=${sessionId}`, e);
+      }
+    }
+  }, [sessionId]);
+
+  // 使用指定的尺寸发送 resize（用于隐藏的终端）
+  const fitWithSize = useCallback((cols: number, rows: number) => {
+    if (termRef.current && wsRef.current.isConnected) {
+      wsRef.current.sendResize(cols, rows);
+      DEBUG && console.log(`[useTerminal] fitWithSize 完成, sessionId=${sessionId}, cols=${cols}, rows=${rows}`);
+    }
+  }, [sessionId]);
+
+  return { init, term: termRef, fit, fitWithSize };
 }
