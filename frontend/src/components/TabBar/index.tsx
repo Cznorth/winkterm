@@ -76,7 +76,13 @@ export default function TabBar({
   }, []);
 
   const handleDropdownToggle = () => {
-    if (!showDropdown && dropdownRef.current) {
+    if (!showDropdown) {
+      // 每次打开下拉时重新加载 SSH 列表
+      axios.get("/api/ssh/connections").then((res) => {
+        setSSHConnections(res.data.connections || []);
+      }).catch(() => {});
+    }
+    if (dropdownRef.current) {
       const rect = dropdownRef.current.getBoundingClientRect();
       setDropdownPosition({ top: rect.bottom, left: rect.left });
     }
