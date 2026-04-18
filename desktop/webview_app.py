@@ -22,6 +22,7 @@ _window = None
 _is_maximized = False
 _is_fullscreen = False
 _saved_rect = None
+_backend_started = False  # 防止重复启动后端
 
 # Windows API 常量和导入
 if IS_WINDOWS:
@@ -246,6 +247,82 @@ def find_free_port(start_port: int = 8000, max_attempts: int = 100) -> int:
     raise RuntimeError(f"无法找到可用端口 (尝试范围: {start_port}-{start_port + max_attempts})")
 
 
+def get_loading_html() -> str:
+    """返回加载页面 HTML。"""
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .logo {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 24px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .logo svg {
+            width: 100%;
+            height: 100%;
+        }
+        .title {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #ffffff;
+            letter-spacing: 2px;
+        }
+        .status {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 32px;
+        }
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #333;
+            border-top-color: #4af;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(0.98); }
+        }
+    </style>
+</head>
+<body>
+    <div class="logo">
+        <svg viewBox="-45 -40 90 80" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="0" cy="0" rx="38" ry="16" fill="none" stroke="#4af" stroke-width="3"/>
+            <path d="M-38,0 Q-10,-28 0,-28 Q10,-28 38,0" fill="none" stroke="#4af" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="8" cy="-8" r="7" fill="#4af"/>
+            <path d="M-20,-22 Q-14,-32 -6,-30" fill="none" stroke="#4af" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+    </div>
+    <div class="title">WinkTerm</div>
+    <div class="status">正在启动服务...</div>
+    <div class="spinner"></div>
+</body>
+</html>
+"""
+
+
 def run_desktop_app(host: str, port: int, width: int, height: int):
     """启动桌面应用"""
     import webview
@@ -269,6 +346,67 @@ def run_desktop_app(host: str, port: int, width: int, height: int):
     webview.start(debug=True)
 
 
+def run_desktop_app_with_loading(host: str, port: int, width: int, height: int):
+    """启动桌面应用（先显示加载页面，后端就绪后切换）"""
+    import webview
+
+    global _window, _backend_started
+
+    def on_loaded():
+        """窗口加载完成后的回调：启动后端并等待就绪"""
+        global _backend_started
+
+        # 防止重复启动
+        if _backend_started:
+            return
+        _backend_started = True
+
+        import httpx
+        url = f"http://{host}:{port}"
+
+        logger.info(f"Starting backend server on port {port}...")
+        backend_thread = threading.Thread(
+            target=start_backend,
+            args=(host, port),
+            daemon=True,
+        )
+        backend_thread.start()
+
+        logger.info("Waiting for server...")
+        for _ in range(100):
+            try:
+                resp = httpx.get(f"{url}/health", timeout=0.5)
+                if resp.status_code == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(0.1)
+        else:
+            logger.error("Backend failed to start")
+            return
+
+        logger.info(f"Server ready at {url}")
+        # 后端就绪，切换到主页面
+        # 使用 evaluate_js 进行页面跳转，保持 js_api 绑定
+        _window.evaluate_js(f'window.location.href = "{url}";')
+
+    # 创建窗口，先显示加载页面
+    _window = webview.create_window(
+        title="WinkTerm",
+        html=get_loading_html(),
+        width=width,
+        height=height,
+        resizable=True,
+        frameless=True,
+        easy_drag=False,
+        background_color="#1e1e1e",
+        js_api=window_api,
+    )
+
+    _window.events.loaded += on_loaded
+    webview.start(debug=True)
+
+
 def start_backend(host: str, port: int):
     """启动后端服务"""
     import uvicorn
@@ -282,7 +420,6 @@ def start_backend(host: str, port: int):
 
 def main():
     import argparse
-    import httpx
 
     parser = argparse.ArgumentParser(description="WinkTerm Desktop")
     parser.add_argument("--host", default="127.0.0.1")
@@ -301,31 +438,7 @@ def main():
             sys.exit(1)
         start_backend(args.host, port)
     else:
-        url = f"http://{args.host}:{port}"
-
-        logger.info(f"Starting backend server on port {port}...")
-        backend_thread = threading.Thread(
-            target=start_backend,
-            args=(args.host, port),
-            daemon=True,
-        )
-        backend_thread.start()
-
-        logger.info("Waiting for server...")
-        for _ in range(50):
-            try:
-                resp = httpx.get(f"{url}/health", timeout=0.5)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                pass
-            time.sleep(0.2)
-        else:
-            logger.error("Backend failed to start")
-            sys.exit(1)
-
-        logger.info(f"Server ready at {url}")
-        run_desktop_app(args.host, port, args.width, args.height)
+        run_desktop_app_with_loading(args.host, port, args.width, args.height)
 
 
 if __name__ == "__main__":
