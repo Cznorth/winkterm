@@ -92,10 +92,16 @@ class PtyManager:
             # Unix: ptyprocess
             import os
             shell = shell or os.environ.get("SHELL", "/bin/bash")
+            # 设置必要的环境变量
+            env = os.environ.copy()
+            env.setdefault("TERM", "xterm-256color")
+            env.setdefault("LANG", "en_US.UTF-8")
+            env.setdefault("LC_ALL", "en_US.UTF-8")
             logger.info(f"[SPAWN] Unix: 启动 {shell}, dimensions=({rows}, {cols})")
             self._proc = ptyprocess.PtyProcess.spawn(
                 [shell],
                 dimensions=(rows, cols),
+                env=env,
             )
             self._pid = getattr(self._proc, "pid", "N/A")
             logger.info(f"[SPAWN] PTY 进程已启动, pid={self._pid}")
@@ -131,11 +137,18 @@ class PtyManager:
             )
         else:
             # Unix: ptyprocess 需要列表
+            import os
             ssh_cmd = SSHPtySpawner.build_ssh_command(conn)
+            # 设置必要的环境变量
+            env = os.environ.copy()
+            env.setdefault("TERM", "xterm-256color")
+            env.setdefault("LANG", "en_US.UTF-8")
+            env.setdefault("LC_ALL", "en_US.UTF-8")
             logger.info(f"[SPAWN SSH] Unix: 启动 SSH {conn.username}@{conn.host}:{conn.port}")
             self._proc = ptyprocess.PtyProcess.spawn(
                 ssh_cmd,
                 dimensions=(rows, cols),
+                env=env,
             )
 
         self._pid = getattr(self._proc, "pid", "N/A")
