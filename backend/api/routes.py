@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import webbrowser
 import httpx
 from datetime import datetime
 from typing import Any, Literal
@@ -95,3 +96,18 @@ async def fetch_models(req: ModelsRequest) -> dict:
 async def get_history() -> dict[str, Any]:
     """获取分析历史记录。"""
     return {"history": list(reversed(_analysis_history)), "total": len(_analysis_history)}
+
+
+# === 打开链接 ===
+class OpenUrlRequest(BaseModel):
+    url: str
+
+
+@router.post("/open-url")
+async def open_url(req: OpenUrlRequest) -> dict:
+    """在系统默认浏览器中打开链接。"""
+    try:
+        webbrowser.open(req.url)
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

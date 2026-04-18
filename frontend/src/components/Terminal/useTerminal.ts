@@ -3,6 +3,7 @@ import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import { getWebSocket } from "@/lib/websocket";
+import axios from "@/lib/axios";
 
 const DEBUG = process.env.NODE_ENV === "development";
 const SCREEN_SYNC_DELAY = 200; // 防抖延迟（毫秒）
@@ -74,7 +75,12 @@ export function useTerminal(
     const serializeAddon = new SerializeAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(serializeAddon);
-    term.loadAddon(new WebLinksAddon());
+    // 自定义链接处理器：通过后端 API 在系统浏览器中打开
+    term.loadAddon(new WebLinksAddon((_event: MouseEvent, uri: string) => {
+      axios.post("/api/open-url", { url: uri }).catch((e) => {
+        console.error("打开链接失败:", e);
+      });
+    }));
     term.open(containerRef.current);
     fitAddon.fit();
 
