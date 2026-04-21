@@ -100,6 +100,12 @@ a = Analysis(
         "backend.ssh.pty_spawner",
         "backend.api.ssh_routes",
         "paramiko",
+        "paramiko.ssh_exception",
+        "paramiko.transport",
+        "paramiko.sftp_client",
+        "paramiko.sftp",
+        "paramiko.channel",
+        "paramiko.client",
         # winpty
         "winpty",
         "winpty.ptyprocess",
