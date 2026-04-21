@@ -46,6 +46,31 @@ function getDefaultState(): SplitState {
   };
 }
 
+function parseNumericId(id: string, prefix: string): number {
+  return parseInt(id.replace(`${prefix}-`, ""), 10) || 0;
+}
+
+function getMaxCounters(state: SplitState): { tab: number; pane: number } {
+  return {
+    tab: Math.max(
+      0,
+      ...state.panes.flatMap((pane) => pane.tabs.map((tab) => parseNumericId(tab.id, "tab")))
+    ),
+    pane: Math.max(
+      0,
+      ...state.panes.map((pane) => parseNumericId(pane.id, "pane"))
+    ),
+  };
+}
+
+function syncCountersFromState(state: SplitState) {
+  const counters = getMaxCounters(state);
+  tabIdCounter = Math.max(tabIdCounter, counters.tab);
+  paneIdCounter = Math.max(paneIdCounter, counters.pane);
+}
+
+syncCountersFromState(getDefaultState());
+
 // 从 localStorage 加载状态（仅客户端）
 function loadStateFromStorage(): SplitState | null {
   if (typeof window === "undefined") return null;
@@ -103,15 +128,9 @@ export function usePanes(): UsePanesReturn {
     const savedState = loadStateFromStorage();
     if (savedState) {
       setState(savedState);
-      // 更新计数器，避免 ID 冲突
-      const maxTabId = Math.max(
-        ...savedState.panes.flatMap((p) => p.tabs.map((t) => parseInt(t.id.replace("tab-", "")) || 0))
-      );
-      const maxPaneId = Math.max(
-        ...savedState.panes.map((p) => parseInt(p.id.replace("pane-", "")) || 0)
-      );
-      tabIdCounter = maxTabId;
-      paneIdCounter = maxPaneId;
+      syncCountersFromState(savedState);
+    } else {
+      syncCountersFromState(getDefaultState());
     }
     setIsHydrated(true);
   }, []);
