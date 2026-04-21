@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import axios from "@/lib/axios";
+import FileTransferDialog from "@/components/FileTransferDialog";
 import "./SSHPanel.css";
 
 interface SSHConnection {
@@ -21,10 +22,28 @@ interface SSHPanelProps {
   onConnect?: (conn: SSHConnection) => void;
 }
 
+const TransferIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M7 7h10" />
+    <path d="M13 3l4 4-4 4" />
+    <path d="M17 17H7" />
+    <path d="M11 21l-4-4 4-4" />
+  </svg>
+);
+
 export default function SSHPanel({ onConnect }: SSHPanelProps) {
   const [connections, setConnections] = useState<SSHConnection[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [transferTarget, setTransferTarget] = useState<SSHConnection | null>(null);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [form, setForm] = useState({
     title: "",
     host: "",
@@ -37,9 +56,20 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
     group: "",
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadConnections();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(event.target as Node)) {
+        setActionMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const loadConnections = async () => {
@@ -53,6 +83,14 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleOpenTransfer = (conn: SSHConnection) => {
+    setTransferTarget(conn);
+  };
+
+  const handleCloseTransfer = () => {
+    setTransferTarget(null);
   };
 
   const handleImportElecterm = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,6 +163,9 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
     if (!confirm("确定删除此连接？")) return;
 
     try {
+      if (transferTarget?.id === id) {
+        handleCloseTransfer();
+      }
       await axios.delete(`/api/ssh/connections/${id}`);
       loadConnections();
     } catch (e) {
@@ -148,13 +189,46 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
     setShowForm(true);
   };
 
+  const handleQuickTransfer = () => {
+    const firstConnection = connections[0];
+    if (firstConnection) {
+      setTransferTarget(firstConnection);
+    } else {
+      setActionMenuOpen(false);
+      setShowForm(true);
+    }
+  };
+
   return (
     <div className="ssh-panel">
       {/* 标题栏 */}
       <div className="ssh-header">
         <span className="ssh-header-title">SSH 连接</span>
         <div className="ssh-header-actions">
-          <button className="ssh-btn" onClick={handleNewConnection}>
+          <span className="ssh-header-hint">连接项支持文件传输</span>
+          <div className="ssh-header-menu" ref={actionMenuRef}>
+            <button
+              className="ssh-btn ssh-btn-secondary"
+              onClick={() => setActionMenuOpen((current) => !current)}
+              title="更多操作"
+            >
+              更多
+            </button>
+            {actionMenuOpen && (
+              <div className="ssh-header-dropdown">
+                <button className="ssh-header-menu-item" onClick={handleNewConnection}>
+                  新建连接
+                </button>
+                <button className="ssh-header-menu-item" onClick={handleQuickTransfer} disabled={connections.length === 0}>
+                  文件传输
+                </button>
+                <button className="ssh-header-menu-item" onClick={handleImportClick}>
+                  导入连接
+                </button>
+              </div>
+            )}
+          </div>
+          <button className="ssh-btn ssh-btn-primary" onClick={handleNewConnection}>
             新建
           </button>
           <button className="ssh-btn" onClick={handleImportClick}>
@@ -175,7 +249,10 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
         {connections.length === 0 ? (
           <div className="ssh-empty">
             <p>暂无 SSH 连接</p>
-            <p>点击"新建"添加连接，或"导入"electerm 配置</p>
+            <p>点击“新建”添加连接，或从“更多”里快速打开文件传输</p>
+            <button className="ssh-empty-action" onClick={handleQuickTransfer}>
+              快速打开文件传输
+            </button>
           </div>
         ) : (
           connections.map((conn) => (
@@ -201,6 +278,14 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
                   </button>
                 )}
                 <button
+                  className="ssh-item-btn transfer"
+                  onClick={() => handleOpenTransfer(conn)}
+                  title="文件传输"
+                  aria-label="文件传输"
+                >
+                  <TransferIcon />
+                </button>
+                <button
                   className="ssh-item-btn"
                   onClick={() => handleEdit(conn)}
                 >
@@ -217,6 +302,15 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
           ))
         )}
       </div>
+
+      {transferTarget && (
+        <FileTransferDialog
+          open={true}
+          connectionId={transferTarget.id}
+          title={transferTarget.title || transferTarget.host}
+          onClose={handleCloseTransfer}
+        />
+      )}
 
       {/* 编辑表单 */}
       {showForm && (

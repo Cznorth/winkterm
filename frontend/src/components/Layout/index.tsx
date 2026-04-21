@@ -127,7 +127,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
             <div
               className={`activity-item ${activeActivity === "ssh" ? "active" : ""}`}
               onClick={() => setActiveActivity("ssh")}
-              title="SSH 连接"
+              title="SSH 连接 / 文件传输"
             >
               {Icons.ssh}
             </div>

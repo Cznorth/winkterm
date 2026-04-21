@@ -393,6 +393,79 @@ class WindowAPI:
             return {"x": work[0], "y": work[1], "width": work[2], "height": work[3]}
         return {"x": 0, "y": 0, "width": 1920, "height": 1080}
 
+    def pick_file(self):
+        """打开本地文件选择对话框。"""
+        global _window
+
+        if not _window:
+            return None
+
+        import webview
+
+        result = _window.create_file_dialog(
+            webview.OPEN_DIALOG,
+            allow_multiple=False,
+        )
+        if not result:
+            return None
+        return result[0]
+
+    def pick_files(self):
+        """打开多文件选择对话框。"""
+        global _window
+
+        if not _window:
+            return None
+
+        import webview
+
+        result = _window.create_file_dialog(
+            webview.OPEN_DIALOG,
+            allow_multiple=True,
+        )
+        if not result:
+            return None
+        return list(result)
+
+    def pick_save_file(self, suggested_name: str = "download"):
+        """打开保存文件对话框。"""
+        global _window
+
+        if not _window:
+            return None
+
+        import webview
+
+        downloads_dir = Path.home() / "Downloads"
+        dialog_dir = str(downloads_dir) if downloads_dir.exists() else str(Path.home())
+        result = _window.create_file_dialog(
+            webview.SAVE_DIALOG,
+            directory=dialog_dir,
+            save_filename=suggested_name,
+        )
+        if not result:
+            return None
+        return result[0]
+
+    def pick_folder(self):
+        """打开文件夹选择对话框。"""
+        global _window
+
+        if not _window:
+            return None
+
+        import webview
+
+        downloads_dir = Path.home() / "Downloads"
+        dialog_dir = str(downloads_dir) if downloads_dir.exists() else str(Path.home())
+        result = _window.create_file_dialog(
+            webview.FOLDER_DIALOG,
+            directory=dialog_dir,
+        )
+        if not result:
+            return None
+        return result[0]
+
 
 # 创建 API 实例
 window_api = WindowAPI()

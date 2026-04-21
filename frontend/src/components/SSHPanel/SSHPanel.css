@@ -28,7 +28,9 @@
 }
 
 .ssh-header-actions {
+  position: relative;
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
@@ -43,19 +45,70 @@
   transition: all var(--transition-fast);
 }
 
-.ssh-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
+.ssh-btn-secondary {
+  background: transparent;
 }
 
-.ssh-btn.primary {
+.ssh-btn-primary {
   background: var(--accent-primary);
   border-color: var(--accent-primary);
   color: white;
 }
 
-.ssh-btn.primary:hover {
+.ssh-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+.ssh-btn-primary:hover {
   background: var(--accent-hover);
+}
+
+.ssh-header-hint {
+  font-size: 11px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.ssh-header-menu {
+  position: relative;
+}
+
+.ssh-header-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+}
+
+.ssh-header-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.ssh-header-menu-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.ssh-header-menu-item:disabled {
+  color: var(--fg-muted);
+  cursor: not-allowed;
 }
 
 /* 连接列表 */
@@ -78,6 +131,23 @@
 
 .ssh-empty p {
   margin: 4px 0;
+}
+
+.ssh-empty-action {
+  margin-top: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--fg-secondary);
+  font-size: 12px;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.ssh-empty-action:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: var(--fg-primary);
 }
 
 .ssh-item {
@@ -124,6 +194,9 @@
 }
 
 .ssh-item-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px 8px;
   font-size: 11px;
   background: transparent;
@@ -147,6 +220,21 @@
 
 .ssh-item-btn.connect:hover {
   background: var(--accent-hover);
+}
+
+.ssh-item-btn.transfer {
+  width: 28px;
+  padding: 0;
+}
+
+.ssh-item-btn.transfer svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ssh-item-btn.transfer:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
 }
 
 .ssh-item-btn.delete:hover {

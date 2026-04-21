@@ -23,6 +23,10 @@ declare global {
         get_size: () => Promise<{ width: number; height: number }>;
         get_position: () => Promise<{ x: number; y: number }>;
         get_work_area: () => Promise<{ x: number; y: number; width: number; height: number }>;
+        pick_file?: () => Promise<string | null>;
+        pick_files?: () => Promise<string[] | null>;
+        pick_save_file?: (suggestedName?: string) => Promise<string | null>;
+        pick_folder?: () => Promise<string | null>;
       };
     };
   }

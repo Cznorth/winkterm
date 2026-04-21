@@ -95,8 +95,11 @@ a = Analysis(
         "backend.ssh",
         "backend.ssh.models",
         "backend.ssh.connection_manager",
+        "backend.ssh.file_transfer",
+        "backend.ssh.transfer_jobs",
         "backend.ssh.pty_spawner",
         "backend.api.ssh_routes",
+        "paramiko",
         # winpty
         "winpty",
         "winpty.ptyprocess",
