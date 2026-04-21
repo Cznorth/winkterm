@@ -7,17 +7,17 @@ echo ========================================
 
 cd /d "%~dp0\.."
 
-:: 检查虚拟环境
+:: Check virtual environment
 if not exist ".venv\Scripts\activate.bat" (
     echo ERROR: Virtual environment not found
     echo Please run: python -m venv .venv
     exit /b 1
 )
 
-:: 激活虚拟环境
+:: Activate virtual environment
 call .venv\Scripts\activate.bat
 
-:: 1. 构建前端
+:: 1. Build frontend
 echo.
 echo [1/3] Building frontend...
 cd frontend
@@ -32,27 +32,38 @@ if errorlevel 1 (
 )
 cd ..
 
-:: 检查前端构建结果
+:: Check frontend build output
 if not exist "frontend\out\index.html" (
     echo ERROR: Frontend build failed - no index.html found
     exit /b 1
 )
 
-:: 2. 安装打包依赖
+:: 2. Install packaging dependencies
 echo.
 echo [2/3] Installing packaging dependencies...
-pip install pyinstaller pywebview httpx --quiet
+where uv >nul 2>nul
+if %errorlevel%==0 (
+    echo Using uv pip...
+    call uv pip install --python .venv\Scripts\python.exe pyinstaller pywebview httpx
+) else (
+    echo uv not found, falling back to python -m pip...
+    call .venv\Scripts\python.exe -m pip install pyinstaller pywebview httpx --quiet
+)
+if errorlevel 1 (
+    echo ERROR: Packaging dependency install failed
+    exit /b 1
+)
 
-:: 3. PyInstaller 打包
+:: 3. Build with PyInstaller
 echo.
 echo [3/3] Building executable...
-pyinstaller build\winkterm.spec --clean --noconfirm
+call .venv\Scripts\python.exe -m PyInstaller build\winkterm.spec --clean --noconfirm
 if errorlevel 1 (
     echo ERROR: PyInstaller build failed
     exit /b 1
 )
 
-:: 检查结果
+:: Check result
 if exist "dist\WinkTerm.exe" (
     echo.
     echo ========================================

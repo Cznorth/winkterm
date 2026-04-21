@@ -17,6 +17,9 @@ declare global {
         is_maximized: () => Promise<boolean>;
         resize: (width: number, height: number) => Promise<void>;
         move: (x: number, y: number) => Promise<void>;
+        begin_native_drag?: () => Promise<boolean>;
+        begin_drag_from_maximized?: (cursorX: number, cursorY: number) => Promise<boolean>;
+        begin_native_resize?: (edge: string) => Promise<boolean>;
         get_size: () => Promise<{ width: number; height: number }>;
         get_position: () => Promise<{ x: number; y: number }>;
         get_work_area: () => Promise<{ x: number; y: number; width: number; height: number }>;
@@ -26,7 +29,7 @@ declare global {
 }
 
 // 边缘调整大小钩子
-function useWindowResize() {
+function useWindowResize(isMaximized: boolean) {
   const resizingRef = useRef<{
     edge: string;
     startX: number;
@@ -40,11 +43,23 @@ function useWindowResize() {
   const startResize = useCallback(async (edge: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!window.pywebview?.api) return;
+    const api = window.pywebview?.api;
+    if (!api || isMaximized) return;
+
+    const supportsNativeResize =
+      navigator.userAgent.includes("Windows") &&
+      typeof api.begin_native_resize === "function";
 
     try {
-      const size = await window.pywebview.api.get_size();
-      const pos = await window.pywebview.api.get_position();
+      if (supportsNativeResize) {
+        const handled = await api.begin_native_resize?.(edge);
+        if (handled) {
+          return;
+        }
+      }
+
+      const size = await api.get_size();
+      const pos = await api.get_position();
 
       resizingRef.current = {
         edge,
@@ -86,9 +101,9 @@ function useWindowResize() {
           newY = startYPos + (startHeight - newHeight);
         }
 
-        await window.pywebview?.api?.resize?.(Math.round(newWidth), Math.round(newHeight));
+        await api.resize(Math.round(newWidth), Math.round(newHeight));
         if (edge.includes("w") || edge.includes("n")) {
-          await window.pywebview?.api?.move?.(Math.round(newX), Math.round(newY));
+          await api.move(Math.round(newX), Math.round(newY));
         }
       };
 
@@ -107,7 +122,7 @@ function useWindowResize() {
     } catch (err) {
       console.error("Resize failed:", err);
     }
-  }, []);
+  }, [isMaximized]);
 
   return { startResize };
 }
@@ -128,7 +143,15 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
 
   const startDrag = useCallback(async (e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    if (!window.pywebview?.api) return;
+    const api = window.pywebview?.api;
+    if (!api) return;
+
+    const supportsNativeDrag =
+      navigator.userAgent.includes("Windows") &&
+      typeof api.begin_native_drag === "function";
+    const supportsMaximizedNativeDrag =
+      navigator.userAgent.includes("Windows") &&
+      typeof api.begin_drag_from_maximized === "function";
 
     try {
       if (isMaximized) {
@@ -146,24 +169,49 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
           const deltaY = Math.abs(moveEvent.screenY - pendingRestoreRef.current.startY);
 
           if (deltaX > 5 || deltaY > 5) {
+            if (supportsMaximizedNativeDrag) {
+              const handled = await api.begin_drag_from_maximized?.(moveEvent.screenX, moveEvent.screenY);
+              if (handled) {
+                onRestored();
+                pendingRestoreRef.current = null;
+                document.removeEventListener("mousemove", handleMove);
+                document.removeEventListener("mouseup", handleUp);
+                return;
+              }
+            }
+
             // 用户确实在拖动，现在还原窗口
-            const size = await window.pywebview?.api?.get_size?.();
-            const workArea = await window.pywebview?.api?.get_work_area?.();
-            if (!size || !workArea) return;
+            const workArea = await api.get_work_area();
+            if (!workArea) return;
 
-            const screenW = workArea.width;
-            const ratio = pendingRestoreRef.current.startX / screenW;
-            const newWindowX = Math.max(0, Math.round(pendingRestoreRef.current.startX - size.width * ratio));
-            const newWindowY = 0;
+            const ratio = Math.min(
+              1,
+              Math.max(0, (pendingRestoreRef.current.startX - workArea.x) / workArea.width)
+            );
 
-            await window.pywebview?.api?.restore?.();
-            await window.pywebview?.api?.move?.(newWindowX, newWindowY);
+            await api.restore();
             onRestored();
+
+            const restoredSize = await api.get_size();
+            const minX = workArea.x;
+            const maxX = workArea.x + workArea.width - restoredSize.width;
+            const nextX = Math.round(moveEvent.screenX - restoredSize.width * ratio);
+            const newWindowX = Math.min(Math.max(nextX, minX), Math.max(minX, maxX));
+            const newWindowY = workArea.y;
+
+            await api.move(newWindowX, newWindowY);
 
             // 清理 pending 状态，开始正常拖动
             pendingRestoreRef.current = null;
             document.removeEventListener("mousemove", handleMove);
             document.removeEventListener("mouseup", handleUp);
+
+            if (supportsNativeDrag) {
+              const handled = await api.begin_native_drag?.();
+              if (handled) {
+                return;
+              }
+            }
 
             // 启动正常拖动
             startDragImpl(moveEvent.screenX, moveEvent.screenY, newWindowX, newWindowY);
@@ -180,7 +228,14 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
         document.addEventListener("mousemove", handleMove);
         document.addEventListener("mouseup", handleUp);
       } else {
-        const pos = await window.pywebview?.api?.get_position?.();
+        if (supportsNativeDrag) {
+          const handled = await api.begin_native_drag?.();
+          if (handled) {
+            return;
+          }
+        }
+
+        const pos = await api.get_position();
         if (!pos) return;
         startDragImpl(e.screenX, e.screenY, pos.x, pos.y);
       }
@@ -221,7 +276,7 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
 export default function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
-  const { startResize } = useWindowResize();
+  const { startResize } = useWindowResize(isMaximized);
   const { startDrag } = useWindowDrag(isMaximized, () => setIsMaximized(false));
 
   useEffect(() => {

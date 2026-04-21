@@ -23,16 +23,13 @@ _is_maximized = False
 _is_fullscreen = False
 _saved_rect = None
 _backend_started = False  # 防止重复启动后端
+_drag_stop_event = None
 
 # Windows API 常量和导入
 if IS_WINDOWS:
     import ctypes
-    SM_CXSCREEN = 0
-    SM_CYSCREEN = 1
     SPI_GETWORKAREA = 0x0030
-    SWP_NOZORDER = 0x0004
-    SWP_SHOWWINDOW = 0x0040
-    _hwnd = None
+    VK_LBUTTON = 0x01
 
 
 def get_work_area():
@@ -40,7 +37,13 @@ def get_work_area():
     if IS_WINDOWS:
         rect = ctypes.wintypes.RECT()
         ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
-        return rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top
+        scale = get_window_scale() if "_window" in globals() else 1.0
+        return (
+            round(rect.left / scale),
+            round(rect.top / scale),
+            round((rect.right - rect.left) / scale),
+            round((rect.bottom - rect.top) / scale),
+        )
     elif IS_MACOS:
         # macOS: 返回屏幕尺寸
         import subprocess
@@ -60,41 +63,37 @@ def get_work_area():
 
 
 if IS_WINDOWS:
-    def find_window_handle():
-        """查找窗口句柄 (Windows only)"""
-        global _hwnd
-
-        if _hwnd:
-            return _hwnd
-
-        try:
-            user32 = ctypes.windll.user32
-            hwnd = user32.FindWindowW(None, "WinkTerm")
-            if hwnd:
-                _hwnd = hwnd
-                return _hwnd
-
-            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-
-            def enum_callback(hwnd, _):
-                global _hwnd
-                length = user32.GetWindowTextLengthW(hwnd) + 1
-                buffer = ctypes.create_unicode_buffer(length)
-                user32.GetWindowTextW(hwnd, buffer, length)
-                if "WinkTerm" in buffer.value:
-                    _hwnd = hwnd
-                    return False
-                return True
-
-            user32.EnumWindows(EnumWindowsProc(enum_callback), 0)
-
-            if _hwnd:
-                return _hwnd
-
-        except Exception as e:
-            logger.error(f"Error finding window: {e}")
-
+    def get_cursor_pos() -> tuple[int, int] | None:
+        """获取全局鼠标位置（物理像素）。"""
+        point = ctypes.wintypes.POINT()
+        if ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
+            return point.x, point.y
         return None
+
+
+    def is_left_mouse_pressed() -> bool:
+        """检查鼠标左键是否仍然按下。"""
+        return bool(ctypes.windll.user32.GetAsyncKeyState(VK_LBUTTON) & 0x8000)
+
+
+    def get_window_scale() -> float:
+        """获取当前窗口 DPI 缩放。"""
+        if _window and getattr(_window, "native", None):
+            try:
+                scale = float(_window.native._scale)
+                if scale > 0:
+                    return scale
+            except Exception:
+                pass
+        return 1.0
+
+
+    def stop_window_drag():
+        """停止当前 Python 侧拖动/缩放循环。"""
+        global _drag_stop_event
+        if _drag_stop_event:
+            _drag_stop_event.set()
+            _drag_stop_event = None
 
 
 class WindowAPI:
@@ -103,6 +102,8 @@ class WindowAPI:
     def minimize(self):
         """最小化窗口"""
         global _window
+        if IS_WINDOWS:
+            stop_window_drag()
         if _window:
             _window.minimize()
 
@@ -113,21 +114,20 @@ class WindowAPI:
         if not _window:
             return
 
+        if IS_WINDOWS:
+            stop_window_drag()
+
         # 保存当前窗口位置
         _saved_rect = (_window.x, _window.y, _window.width, _window.height)
         logger.info(f"maximize: saved_rect = {_saved_rect}")
 
         if IS_WINDOWS:
-            hwnd = find_window_handle()
-            if hwnd:
-                work_x, work_y, work_w, work_h = get_work_area()
-                user32 = ctypes.windll.user32
-                user32.SetWindowPos(hwnd, 0, work_x, work_y, work_w, work_h, SWP_NOZORDER | SWP_SHOWWINDOW)
+            work = get_work_area()
+            if work:
+                _window.resize(work[2], work[3])
+                _window.move(work[0], work[1])
             else:
-                work = get_work_area()
-                if work:
-                    _window.resize(work[2], work[3])
-                    _window.move(work[0], work[1])
+                _window.maximize()
         elif IS_MACOS:
             # macOS: 使用系统原生全屏
             global _is_fullscreen
@@ -146,32 +146,33 @@ class WindowAPI:
         if not _window:
             return
 
+        if IS_WINDOWS:
+            stop_window_drag()
+
         if IS_MACOS and _is_fullscreen:
             _window.toggle_fullscreen()
             _is_fullscreen = False
             _is_maximized = False
             return
 
-        if not _saved_rect:
+        if IS_WINDOWS:
+            if not _saved_rect:
+                return
+            _window.resize(_saved_rect[2], _saved_rect[3])
+            _window.move(_saved_rect[0], _saved_rect[1])
+            _is_maximized = False
+            logger.info(f"restore: restored to {_saved_rect}")
             return
 
-        if IS_WINDOWS:
-            hwnd = find_window_handle()
-            if hwnd:
-                user32 = ctypes.windll.user32
-                user32.SetWindowPos(hwnd, 0, _saved_rect[0], _saved_rect[1],
-                                   _saved_rect[2], _saved_rect[3], SWP_NOZORDER | SWP_SHOWWINDOW)
-            else:
-                _window.resize(_saved_rect[2], _saved_rect[3])
-                _window.move(_saved_rect[0], _saved_rect[1])
+        if not _saved_rect:
+            return
 
         _is_maximized = False
         logger.info(f"restore: restored to {_saved_rect}")
 
     def toggle_maximize(self):
         """切换最大化/还原"""
-        global _is_maximized, _is_fullscreen
-        if _is_maximized or _is_fullscreen:
+        if self.is_maximized():
             self.restore()
         else:
             self.maximize()
@@ -180,6 +181,8 @@ class WindowAPI:
         """关闭窗口"""
         global _window
         logger.info("close() called, exiting...")
+        if IS_WINDOWS:
+            stop_window_drag()
         # 强制退出进程
         import os
         os._exit(0)
@@ -188,6 +191,174 @@ class WindowAPI:
         """检查窗口是否最大化"""
         global _is_maximized, _is_fullscreen
         return _is_maximized or _is_fullscreen
+
+    def begin_native_drag(self):
+        """在 Windows 上启动 Python 侧拖拽循环。"""
+        global _drag_stop_event
+
+        if not IS_WINDOWS:
+            return False
+
+        if not _window:
+            return False
+
+        stop_window_drag()
+
+        start_cursor = get_cursor_pos()
+        if not start_cursor:
+            return False
+
+        start_window_x = _window.x
+        start_window_y = _window.y
+        scale = get_window_scale()
+        stop_event = threading.Event()
+        _drag_stop_event = stop_event
+
+        def drag_loop():
+            global _drag_stop_event
+
+            last_position = None
+            start_cursor_x, start_cursor_y = start_cursor
+
+            while not stop_event.is_set():
+                if not is_left_mouse_pressed():
+                    break
+
+                cursor = get_cursor_pos()
+                if not cursor:
+                    break
+
+                delta_x = round((cursor[0] - start_cursor_x) / scale)
+                delta_y = round((cursor[1] - start_cursor_y) / scale)
+                new_position = (start_window_x + delta_x, start_window_y + delta_y)
+
+                if new_position != last_position:
+                    try:
+                        _window.move(new_position[0], new_position[1])
+                    except Exception as e:
+                        logger.error(f"Python drag move failed: {e}")
+                        break
+                    last_position = new_position
+
+                time.sleep(0.005)
+
+            if _drag_stop_event is stop_event:
+                _drag_stop_event = None
+
+        threading.Thread(target=drag_loop, daemon=True).start()
+        return True
+
+    def begin_drag_from_maximized(self, cursor_x: int, cursor_y: int):
+        """从最大化状态直接还原并开始拖拽，避免位置闪动。"""
+        global _is_maximized
+
+        if not IS_WINDOWS:
+            return False
+
+        if not _window or not _saved_rect:
+            return False
+
+        stop_window_drag()
+
+        work = get_work_area()
+        if not work:
+            return False
+
+        restored_width = _saved_rect[2]
+        restored_height = _saved_rect[3]
+        ratio = min(1, max(0, (cursor_x - work[0]) / max(work[2], 1)))
+        min_x = work[0]
+        max_x = max(min_x, work[0] + work[2] - restored_width)
+        new_x = min(max(round(cursor_x - restored_width * ratio), min_x), max_x)
+        new_y = work[1]
+
+        _window.resize(restored_width, restored_height)
+        _window.move(new_x, new_y)
+        _is_maximized = False
+
+        return self.begin_native_drag()
+
+    def begin_native_resize(self, edge: str):
+        """在 Windows 上启动 Python 侧缩放循环。"""
+        global _drag_stop_event
+
+        if not IS_WINDOWS:
+            return False
+
+        if not _window:
+            return False
+
+        stop_window_drag()
+
+        if self.is_maximized():
+            return True
+
+        start_cursor = get_cursor_pos()
+        if not start_cursor:
+            return False
+
+        normalized_edge = edge.lower()
+        start_window_x = _window.x
+        start_window_y = _window.y
+        start_width = _window.width
+        start_height = _window.height
+        scale = get_window_scale()
+        min_width = 800
+        min_height = 600
+        stop_event = threading.Event()
+        _drag_stop_event = stop_event
+
+        def resize_loop():
+            global _drag_stop_event
+
+            last_rect = None
+            start_cursor_x, start_cursor_y = start_cursor
+
+            while not stop_event.is_set():
+                if not is_left_mouse_pressed():
+                    break
+
+                cursor = get_cursor_pos()
+                if not cursor:
+                    break
+
+                delta_x = round((cursor[0] - start_cursor_x) / scale)
+                delta_y = round((cursor[1] - start_cursor_y) / scale)
+
+                new_x = start_window_x
+                new_y = start_window_y
+                new_width = start_width
+                new_height = start_height
+
+                if "e" in normalized_edge:
+                    new_width = max(min_width, start_width + delta_x)
+                if "w" in normalized_edge:
+                    new_width = max(min_width, start_width - delta_x)
+                    new_x = start_window_x + (start_width - new_width)
+                if "s" in normalized_edge:
+                    new_height = max(min_height, start_height + delta_y)
+                if "n" in normalized_edge:
+                    new_height = max(min_height, start_height - delta_y)
+                    new_y = start_window_y + (start_height - new_height)
+
+                next_rect = (new_x, new_y, new_width, new_height)
+                if next_rect != last_rect:
+                    try:
+                        _window.resize(new_width, new_height)
+                        if new_x != start_window_x or new_y != start_window_y:
+                            _window.move(new_x, new_y)
+                    except Exception as e:
+                        logger.error(f"Python resize failed: {e}")
+                        break
+                    last_rect = next_rect
+
+                time.sleep(0.005)
+
+            if _drag_stop_event is stop_event:
+                _drag_stop_event = None
+
+        threading.Thread(target=resize_loop, daemon=True).start()
+        return True
 
     def resize(self, width: int, height: int):
         """调整窗口大小"""
@@ -343,7 +514,7 @@ def run_desktop_app(host: str, port: int, width: int, height: int):
     )
 
     logger.info(f"Desktop app started: {url}")
-    webview.start(debug=True)
+    webview.start(debug=not IS_FROZEN)
 
 
 def run_desktop_app_with_loading(host: str, port: int, width: int, height: int):
@@ -404,7 +575,7 @@ def run_desktop_app_with_loading(host: str, port: int, width: int, height: int):
     )
 
     _window.events.loaded += on_loaded
-    webview.start(debug=True)
+    webview.start(debug=not IS_FROZEN)
 
 
 def start_backend(host: str, port: int):
