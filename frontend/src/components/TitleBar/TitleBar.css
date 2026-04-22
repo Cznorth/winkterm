@@ -9,6 +9,86 @@
   flex-shrink: 0;
 }
 
+/* Mac 风格标题栏 */
+.title-bar.mac-style {
+  position: relative;
+  height: 38px;
+}
+
+.title-bar-traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  z-index: 10;
+}
+
+.traffic-light {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.traffic-light svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  color: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.traffic-light:hover svg {
+  opacity: 1;
+}
+
+.traffic-light.close {
+  background: #ff5f57;
+}
+
+.traffic-light.minimize {
+  background: #febc2e;
+}
+
+.traffic-light.maximize {
+  background: #28c840;
+}
+
+/* 失去焦点时变灰 */
+.title-bar-traffic-lights.dimmed .traffic-light {
+  background: #ddd;
+}
+
+.title-bar-traffic-lights.dimmed .traffic-light:hover {
+  background: #ccc;
+}
+
+/* Mac 风格下整个标题栏可拖拽 */
+.title-bar.mac-style .title-bar-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* Windows 风格标题栏 */
+.title-bar.windows-style .title-bar-drag {
+  flex: 1;
+}
+
 .title-bar-drag {
   display: flex;
   align-items: center;

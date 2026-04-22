@@ -40,13 +40,72 @@ def run_desktop_app(host: str, port: int, width: int, height: int):
             super().__init__(parent)
             self.main_window = parent
             self.press_pos = QPoint()
-            self.setFixedHeight(32)
+            self.is_mac = sys.platform == "darwin"
+            self.setFixedHeight(32 if not self.is_mac else 38)
             self.setup_ui()
 
         def setup_ui(self):
             layout = QHBoxLayout(self)
             layout.setContentsMargins(8, 0, 0, 0)
             layout.setSpacing(8)
+
+            # Mac 风格：红黄绿按钮在左侧
+            if self.is_mac:
+                # Mac 风格按钮容器
+                btn_container = QWidget()
+                btn_layout = QHBoxLayout(btn_container)
+                btn_layout.setContentsMargins(0, 0, 0, 0)
+                btn_layout.setSpacing(8)
+
+                # 关闭按钮（红色）
+                self.btn_close = QPushButton()
+                self.btn_close.setFixedSize(12, 12)
+                self.btn_close.setStyleSheet("""
+                    QPushButton {
+                        background: #ff5f57;
+                        border: none;
+                        border-radius: 6px;
+                    }
+                    QPushButton:hover {
+                        background: #ff3b30;
+                    }
+                """)
+                self.btn_close.clicked.connect(self.main_window.close)
+                btn_layout.addWidget(self.btn_close)
+
+                # 最小化按钮（黄色）
+                self.btn_min = QPushButton()
+                self.btn_min.setFixedSize(12, 12)
+                self.btn_min.setStyleSheet("""
+                    QPushButton {
+                        background: #febc2e;
+                        border: none;
+                        border-radius: 6px;
+                    }
+                    QPushButton:hover {
+                        background: #ffcc00;
+                    }
+                """)
+                self.btn_min.clicked.connect(self.main_window.showMinimized)
+                btn_layout.addWidget(self.btn_min)
+
+                # 最大化按钮（绿色）
+                self.btn_max = QPushButton()
+                self.btn_max.setFixedSize(12, 12)
+                self.btn_max.setStyleSheet("""
+                    QPushButton {
+                        background: #28c840;
+                        border: none;
+                        border-radius: 6px;
+                    }
+                    QPushButton:hover {
+                        background: #34c759;
+                    }
+                """)
+                self.btn_max.clicked.connect(self.toggle_maximize)
+                btn_layout.addWidget(self.btn_max)
+
+                layout.addWidget(btn_container)
 
             # Logo
             logo = QLabel("W")
@@ -70,49 +129,50 @@ def run_desktop_app(host: str, port: int, width: int, height: int):
 
             layout.addStretch()
 
-            # 窗口控制按钮
-            btn_style = """
-                QPushButton {
-                    background: transparent;
-                    border: none;
-                    color: #969696;
-                    font-size: 12px;
-                    min-width: 46px;
-                    min-height: 32px;
-                }
-                QPushButton:hover {
-                    background: #2a2d2e;
-                    color: #cccccc;
-                }
-            """
+            # Windows 风格：按钮在右侧
+            if not self.is_mac:
+                btn_style = """
+                    QPushButton {
+                        background: transparent;
+                        border: none;
+                        color: #969696;
+                        font-size: 12px;
+                        min-width: 46px;
+                        min-height: 32px;
+                    }
+                    QPushButton:hover {
+                        background: #2a2d2e;
+                        color: #cccccc;
+                    }
+                """
 
-            self.btn_min = QPushButton("─")
-            self.btn_min.setStyleSheet(btn_style)
-            self.btn_min.clicked.connect(self.main_window.showMinimized)
-            layout.addWidget(self.btn_min)
+                self.btn_min = QPushButton("─")
+                self.btn_min.setStyleSheet(btn_style)
+                self.btn_min.clicked.connect(self.main_window.showMinimized)
+                layout.addWidget(self.btn_min)
 
-            self.btn_max = QPushButton("□")
-            self.btn_max.setStyleSheet(btn_style)
-            self.btn_max.clicked.connect(self.toggle_maximize)
-            layout.addWidget(self.btn_max)
+                self.btn_max = QPushButton("□")
+                self.btn_max.setStyleSheet(btn_style)
+                self.btn_max.clicked.connect(self.toggle_maximize)
+                layout.addWidget(self.btn_max)
 
-            self.btn_close = QPushButton("✕")
-            self.btn_close.setStyleSheet("""
-                QPushButton {
-                    background: transparent;
-                    border: none;
-                    color: #969696;
-                    font-size: 12px;
-                    min-width: 46px;
-                    min-height: 32px;
-                }
-                QPushButton:hover {
-                    background: #e81123;
-                    color: white;
-                }
-            """)
-            self.btn_close.clicked.connect(self.main_window.close)
-            layout.addWidget(self.btn_close)
+                self.btn_close = QPushButton("✕")
+                self.btn_close.setStyleSheet("""
+                    QPushButton {
+                        background: transparent;
+                        border: none;
+                        color: #969696;
+                        font-size: 12px;
+                        min-width: 46px;
+                        min-height: 32px;
+                    }
+                    QPushButton:hover {
+                        background: #e81123;
+                        color: white;
+                    }
+                """)
+                self.btn_close.clicked.connect(self.main_window.close)
+                layout.addWidget(self.btn_close)
 
         def toggle_maximize(self):
             if self.main_window.isMaximized():

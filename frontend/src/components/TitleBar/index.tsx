@@ -280,6 +280,8 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
 export default function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [isMac, setIsMac] = useState(false);
+  const [isWindowFocused, setIsWindowFocused] = useState(true);
   const { startResize } = useWindowResize(isMaximized);
   const { startDrag } = useWindowDrag(isMaximized, () => setIsMaximized(false));
 
@@ -287,6 +289,8 @@ export default function TitleBar() {
     const checkDesktop = async () => {
       const hasApi = !!window.pywebview?.api;
       setIsDesktop(hasApi);
+      // 检测是否为 Mac
+      setIsMac(navigator.userAgent.includes("Mac") || navigator.platform.includes("Mac"));
 
       if (hasApi) {
         try {
@@ -300,9 +304,18 @@ export default function TitleBar() {
 
     const timer = setTimeout(checkDesktop, 200);
     const interval = setInterval(checkDesktop, 500);
+
+    // 监听窗口焦点变化
+    const handleFocus = () => setIsWindowFocused(true);
+    const handleBlur = () => setIsWindowFocused(false);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("blur", handleBlur);
+
     return () => {
       clearTimeout(timer);
       clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("blur", handleBlur);
     };
   }, []);
 
@@ -364,39 +377,74 @@ export default function TitleBar() {
       <div className="resize-corner se" onMouseDown={(e) => startResize("se", e)} />
 
       {/* 自定义标题栏 */}
-      <div className="title-bar">
-        <div
-          className="title-bar-drag"
-          onMouseDown={startDrag}
-          onDoubleClick={handleMaximize}
-        >
-          <WinkTermLogo size={18} className="title-bar-logo" />
-          <span className="title-bar-title">WinkTerm</span>
-        </div>
-        <div className="title-bar-controls">
-          <button className="title-bar-btn minimize" onClick={handleMinimize} title="最小化">
-            <svg viewBox="0 0 12 12">
-              <rect x="2" y="5.5" width="8" height="1" fill="currentColor" />
-            </svg>
-          </button>
-          <button className="title-bar-btn maximize" onClick={handleMaximize} title={isMaximized ? "还原" : "最大化"}>
-            {isMaximized ? (
-              <svg viewBox="0 0 12 12">
-                <rect x="3" y="1" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" />
-                <rect x="2" y="4" width="7" height="7" fill="var(--bg-primary)" stroke="currentColor" strokeWidth="1" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 12 12">
-                <rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1" />
-              </svg>
-            )}
-          </button>
-          <button className="title-bar-btn close" onClick={handleClose} title="关闭">
-            <svg viewBox="0 0 12 12">
-              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.2" fill="none" />
-            </svg>
-          </button>
-        </div>
+      <div className={`title-bar ${isMac ? "mac-style" : "windows-style"}`}>
+        {isMac ? (
+          // Mac 风格：红黄绿按钮在左侧
+          <>
+            <div className={`title-bar-traffic-lights ${!isWindowFocused ? "dimmed" : ""}`}>
+              <button className="traffic-light close" onClick={handleClose} title="关闭">
+                <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" fill="none" /></svg>
+              </button>
+              <button className="traffic-light minimize" onClick={handleMinimize} title="最小化">
+                <svg viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="1.5" fill="currentColor" /></svg>
+              </button>
+              <button className="traffic-light maximize" onClick={handleMaximize} title={isMaximized ? "还原" : "最大化"}>
+                {isMaximized ? (
+                  <svg viewBox="0 0 12 12">
+                    <rect x="3" y="1" width="6" height="6" fill="none" stroke="currentColor" strokeWidth="1" />
+                    <rect x="2" y="4" width="6" height="6" fill="var(--bg-tertiary)" stroke="currentColor" strokeWidth="1" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 12 12"><path d="M2.5 2.5h7v7h-7z" fill="none" stroke="currentColor" strokeWidth="1" /></svg>
+                )}
+              </button>
+            </div>
+            <div
+              className="title-bar-drag"
+              onMouseDown={startDrag}
+              onDoubleClick={handleMaximize}
+            >
+              <WinkTermLogo size={18} className="title-bar-logo" />
+              <span className="title-bar-title">WinkTerm</span>
+            </div>
+          </>
+        ) : (
+          // Windows 风格：按钮在右侧
+          <>
+            <div
+              className="title-bar-drag"
+              onMouseDown={startDrag}
+              onDoubleClick={handleMaximize}
+            >
+              <WinkTermLogo size={18} className="title-bar-logo" />
+              <span className="title-bar-title">WinkTerm</span>
+            </div>
+            <div className="title-bar-controls">
+              <button className="title-bar-btn minimize" onClick={handleMinimize} title="最小化">
+                <svg viewBox="0 0 12 12">
+                  <rect x="2" y="5.5" width="8" height="1" fill="currentColor" />
+                </svg>
+              </button>
+              <button className="title-bar-btn maximize" onClick={handleMaximize} title={isMaximized ? "还原" : "最大化"}>
+                {isMaximized ? (
+                  <svg viewBox="0 0 12 12">
+                    <rect x="3" y="1" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" />
+                    <rect x="2" y="4" width="7" height="7" fill="var(--bg-primary)" stroke="currentColor" strokeWidth="1" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 12 12">
+                    <rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1" />
+                  </svg>
+                )}
+              </button>
+              <button className="title-bar-btn close" onClick={handleClose} title="关闭">
+                <svg viewBox="0 0 12 12">
+                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                </svg>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </>
   );
