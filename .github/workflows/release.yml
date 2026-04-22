@@ -7,7 +7,16 @@ on:
 
 jobs:
   build-macos:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-13
+            arch: x64
+            suffix: -Intel
+          - os: macos-14
+            arch: arm64
+            suffix: -AppleSilicon
     steps:
       - uses: actions/checkout@v4
 
@@ -38,17 +47,16 @@ jobs:
       - name: Build macOS app
         run: python -m PyInstaller build/winkterm.spec --clean --noconfirm
 
-      - name: Create DMG (optional)
+      - name: Create zip
         run: |
-          # 简单打包为 zip
           cd dist
-          zip -r WinkTerm-macOS.zip WinkTerm.app
+          zip -r WinkTerm-macOS${{ matrix.suffix }}.zip WinkTerm.app
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WinkTerm-macOS
-          path: dist/WinkTerm-macOS.zip
+          name: WinkTerm-macOS${{ matrix.suffix }}
+          path: dist/WinkTerm-macOS${{ matrix.suffix }}.zip
 
   build-windows:
     runs-on: windows-latest
@@ -94,10 +102,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download macOS artifact
+      - name: Download macOS Intel artifact
         uses: actions/download-artifact@v4
         with:
-          name: WinkTerm-macOS
+          name: WinkTerm-macOS-Intel
+          path: artifacts/
+
+      - name: Download macOS AppleSilicon artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: WinkTerm-macOS-AppleSilicon
           path: artifacts/
 
       - name: Download Windows artifact
