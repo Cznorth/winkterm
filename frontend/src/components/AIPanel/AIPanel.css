@@ -328,6 +328,33 @@
   }
 }
 
+/* 停止按钮 */
+.ai-stop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: var(--error);
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), opacity var(--transition-fast);
+  white-space: nowrap;
+}
+
+.ai-stop-btn:hover {
+  opacity: 0.9;
+}
+
+.ai-stop-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* ========== 错误提示 ========== */
 .ai-error {
   display: flex;

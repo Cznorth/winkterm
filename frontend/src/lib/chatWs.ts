@@ -189,6 +189,10 @@ export function useChatWs() {
         setState((s) => ({ ...s, error: data.message || "未知错误", isStreaming: false }));
         break;
 
+      case "stopped":
+        setState((s) => ({ ...s, isStreaming: false }));
+        break;
+
       case "mode_changed":
         if (data.mode === "chat" || data.mode === "craft") {
           setState((s) => ({ ...s, mode: data.mode as ChatMode }));
@@ -255,6 +259,13 @@ export function useChatWs() {
     setState((s) => ({ ...s, model }));
   }, []);
 
+  // 停止生成
+  const stopGeneration = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "stop" }));
+    }
+  }, []);
+
   // 自动连接
   useEffect(() => {
     connect();
@@ -266,6 +277,7 @@ export function useChatWs() {
   return {
     ...state,
     sendMessage,
+    stopGeneration,
     clearMessages,
     switchMode,
     switchModel,

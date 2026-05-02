@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -29,6 +30,8 @@ class ChatWSHandler:
         self.agents: dict[str, CompiledGraph] = {}
         self.current_mode = "craft"  # 默认 craft 模式
         self.history: list[HumanMessage | AIMessage] = []  # 会话历史
+        self._stop_requested = False  # 停止生成标志
+        self._current_task: asyncio.Task | None = None  # 当前处理任务
 
     async def handle(self) -> None:
         await self.ws.accept()
@@ -65,7 +68,16 @@ class ChatWSHandler:
                 msg_type = msg.get("type")
 
                 if msg_type == "chat":
-                    await self._handle_chat(msg.get("content", ""))
+                    # 将处理放入独立任务，支持中断
+                    self._current_task = asyncio.create_task(
+                        self._handle_chat(msg.get("content", ""))
+                    )
+                elif msg_type == "stop":
+                    # 停止生成
+                    self._stop_requested = True
+                    if self._current_task:
+                        self._current_task.cancel()
+                    logger.info("[STOP] 用户请求停止")
                 elif msg_type == "clear":
                     # 清空历史
                     self.history = []
@@ -100,6 +112,9 @@ class ChatWSHandler:
         """处理对话消息，流式输出。"""
         if not content.strip():
             return
+
+        # 重置停止标志
+        self._stop_requested = False
 
         agent = self.agents.get(self.current_mode)
         if not agent:
@@ -150,6 +165,12 @@ class ChatWSHandler:
         config = {"recursion_limit": settings.agent_recursion_limit}
         try:
             async for event in agent.astream_events(state, config=config, version="v2"):
+                # 检查停止标志
+                if self._stop_requested:
+                    logger.info("[CHAT] 用户请求停止")
+                    await self._send({"type": "stopped"})
+                    break
+
                 event_type = event.get("event", "")
 
                 # LLM 流式输出
@@ -188,15 +209,23 @@ class ChatWSHandler:
                         "result": tool_result
                     })
 
-            # 添加 AI 回复到历史
-            if collected_content:
+            # 正常结束：添加 AI 回复到历史
+            if collected_content and not self._stop_requested:
                 self.history.append(AIMessage(content=collected_content))
 
             # 发送结束标记
-            await self._send({
-                "type": "end",
-                "content": collected_content
-            })
+            if self._stop_requested:
+                await self._send({"type": "stopped"})
+            else:
+                await self._send({
+                    "type": "end",
+                    "content": collected_content
+                })
+
+        except asyncio.CancelledError:
+            # 被取消
+            logger.info("[CHAT] 已取消")
+            await self._send({"type": "stopped"})
 
         except Exception as e:
             # 出错时移除已添加的用户消息
@@ -204,6 +233,9 @@ class ChatWSHandler:
                 self.history.pop()
             logger.exception(f"[CHAT] 处理失败: {e}")
             await self._send_error(str(e))
+
+        finally:
+            self._current_task = None
 
     async def _send(self, data: dict) -> None:
         """发送 JSON 消息。"""

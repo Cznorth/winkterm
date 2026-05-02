@@ -122,7 +122,7 @@ const MODE_INFO: Record<ChatMode, { label: string; desc: string }> = {
 };
 
 export default function AIPanel() {
-  const { messages, isStreaming, isConnected, error, mode, model, sendMessage, clearMessages, switchMode, switchModel, reconnect } = useChatWs();
+  const { messages, isStreaming, isConnected, error, mode, model, sendMessage, stopGeneration, clearMessages, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
@@ -247,13 +247,26 @@ export default function AIPanel() {
             disabled={!isConnected || isStreaming}
             rows={2}
           />
-          <button
-            type="submit"
-            className="ai-send-btn"
-            disabled={!isConnected || isStreaming || !input.trim()}
-          >
-            发送
-          </button>
+          {isStreaming ? (
+            <button
+              type="button"
+              className="ai-stop-btn"
+              onClick={stopGeneration}
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              停止
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="ai-send-btn"
+              disabled={!isConnected || !input.trim()}
+            >
+              发送
+            </button>
+          )}
         </form>
       </div>
 
