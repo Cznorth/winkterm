@@ -3,7 +3,7 @@ version: "3.9"
 services:
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -16,7 +16,6 @@ services:
       - PYTHONPATH=/app
     volumes:
       - ./backend:/app/backend
-      - ./frontend/out:/app/frontend/out:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
