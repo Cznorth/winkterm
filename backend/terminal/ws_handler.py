@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import sys
 import time
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -60,8 +59,6 @@ class TerminalWSHandler:
         self._msg_count = 0
         self._bytes_sent = 0
         self._bytes_received = 0
-        self._capturing_history = False  # 是否正在捕获历史命令
-        self._history_buffer: list[str] = []  # 历史命令缓冲区
         client = websocket.client or "unknown"
         logger.info(f"[INIT] 客户端连接: {client}, session_id: {session_id}, type: {terminal_type}")
 
@@ -71,9 +68,8 @@ class TerminalWSHandler:
 
         # 检测回车键
         if data in ("\r", "\n", "\r\n"):
-            logger.debug("[HISTORY] 检测到回车，开始获取上一条命令")
-            await asyncio.sleep(0.3)
-            await self._fetch_last_command()
+            logger.debug("[COMMAND] 检测到回车，解析屏幕内容中的命令")
+            await self._parse_last_command_from_screen()
 
     async def handle(self) -> None:
         await self.ws.accept()
@@ -159,65 +155,48 @@ class TerminalWSHandler:
                 self.session_manager.close_session(self.session_id)
             logger.debug(f"[CLEANUP] 会话 {self.session_id} 资源已释放")
 
-    async def _fetch_last_command(self) -> None:
-        """发送上键和下键来获取上一条命令"""
-        # 开始捕获
-        self._capturing_history = True
-        self._history_buffer = []
+    async def _parse_last_command_from_screen(self) -> None:
+        """从屏幕内容解析最后一行命令"""
+        screen = self.pty.get_screen_content()
 
-        # 发送上键
-        logger.debug("[HISTORY] 发送上键序列")
-        self.pty.write(b"\x1b[A")
-
-        # 等待终端响应
-        # await asyncio.sleep(0.3)
-
-        # 发送下键
-        logger.debug("[HISTORY] 发送下键序列")
-        self.pty.write(b"\x1b[B")
-
-        # 等待下键响应
-        await asyncio.sleep(0.3)
-
-        # 停止捕获并解析
-        self._capturing_history = False
-        await self._parse_last_command()
-
-    async def _parse_last_command(self) -> None:
-        """解析捕获的历史命令"""
-        if not self._history_buffer:
-            logger.debug("[HISTORY] 未捕获到任何输出")
+        if not screen:
+            logger.debug("[COMMAND] 屏幕内容为空，跳过解析")
             return
 
-        # 合并缓冲区内容
-        full_output = "".join(self._history_buffer)
-        logger.debug(f"[HISTORY] 捕获的原始输出: {repr(full_output[:200])}")
+        # 解析最后一行非空内容
+        lines = screen.split('\n')
+        last_line = None
+        for line in reversed(lines):
+            stripped = line.strip()
+            if stripped:
+                last_line = stripped
+                break
 
-        # 更全面的 ANSI 转义序列正则
-        # 包括：CSI序列 (ESC[...字母)、OSC序列 (ESC]...BEL/ST)、其他转义
+        if not last_line:
+            logger.debug("[COMMAND] 未找到有效行")
+            return
+
+        # 清理 ANSI 转义序列和控制字符
         ansi_escape = re.compile(
-            r"\x1b\[[\?0-9;]*[A-Za-z]"  # CSI 序列（包括私有模式 ?）
-            r"|\x1b\].*?(?:\x07|\x1b\\)"  # OSC 序列
-            r"|\x1b[()][AB012]"  # 字符集选择
-            r"|\x1b[78]"  # 保存/恢复光标
-            r"|\x1b[=>]"  # 键盘模式
+            r"\x1b\[[\?0-9;]*[A-Za-z]"
+            r"|\x1b\].*?(?:\x07|\x1b\\)"
+            r"|\x1b[()][AB012]"
+            r"|\x1b[78]"
+            r"|\x1b[=>]"
         )
+        clean_line = ansi_escape.sub("", last_line)
+        clean_line = "".join(c for c in clean_line if c.isprintable() or c in " \t")
+        clean_line = clean_line.strip()
 
-        # 去除所有 ANSI 转义序列
-        clean_output = ansi_escape.sub("", full_output)
+        logger.info(f"[COMMAND] 解析到命令: {clean_line}")
 
-        # 去除控制字符（保留可打印字符、空格、制表符）
-        clean_output = "".join(c for c in clean_output if c.isprintable() or c in " \t")
+        # 处理 shell prompt：提取 # 后面的内容
+        if '#' in clean_line:
+            hash_pos = clean_line.find('#')
+            command = clean_line[hash_pos + 1:].strip()
+            if command:
+                await self.agent_invoke(command)
 
-        # 清理多余空白
-        clean_output = " ".join(clean_output.split())
-
-        if clean_output:
-            logger.info(f"[HISTORY] 上一条命令: {clean_output}")
-            if clean_output.startswith("#"):
-                await self.agent_invoke(clean_output[1:])
-        else:
-            logger.debug("[HISTORY] 未能解析出有效命令")
     async def agent_invoke(self, user_input: str) -> None:
         """调用 AI Agent 并流式输出到终端。"""
         logger.info(f"[AGENT] 开始处理: {user_input}")
@@ -304,10 +283,6 @@ class TerminalWSHandler:
         text = data.decode(errors="replace")
         self._bytes_sent += len(data)
         # logger.debug(f"[OUTPUT] len={len(data)} data={_truncate(text)}")
-
-        # 如果正在捕获历史命令，保存到缓冲区
-        if self._capturing_history:
-            self._history_buffer.append(text)
         asyncio.create_task(self._send(text))
 
     async def _send(self, text: str) -> None:

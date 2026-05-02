@@ -97,6 +97,14 @@ export function useTerminal(
 
     // 键盘输入 → WebSocket
     term.onData((data) => {
+      // 检测回车键：在发送用户输入之前，先同步屏幕内容
+      // 这样后端可以在命令执行前捕获到用户输入的命令
+      if (data === '\r' || data === '\n' || data === '\r\n') {
+        if (serializeAddonRef.current) {
+          const screenContent = serializeAddonRef.current.serialize();
+          wsRef.current.send(`\x1b[?9999;screen;${encodeURIComponent(screenContent)}h`);
+        }
+      }
       wsRef.current.send(data);
     });
 
