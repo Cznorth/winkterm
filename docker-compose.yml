@@ -16,23 +16,10 @@ services:
       - PYTHONPATH=/app
     volumes:
       - ./backend:/app/backend
+      - ./frontend/out:/app/frontend/out:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 3
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8000/ws/terminal}
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
