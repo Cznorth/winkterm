@@ -33,7 +33,6 @@ frontend/.next-dev/
 frontend/out/
 frontend/.turbo/
 frontend/pnpm-lock.yaml
-frontend/package-lock.json
 
 # PyInstaller
 *.manifest
