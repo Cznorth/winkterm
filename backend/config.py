@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # CORS（开发模式 + 桌面模式）
     cors_origins: list[str] = ["*"]
 
+    # Agent 配置
+    agent_recursion_limit: int = 100
+
     @field_validator("debug", mode="before")
     @classmethod
     def parse_debug(cls, v: Any) -> bool:

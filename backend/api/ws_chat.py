@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from backend.agent.factory import get_agent
 from backend.agent.core.state import AgentState
 from backend.agent.tools.terminal import get_terminal_context_raw
-from backend.config import UserConfig
+from backend.config import UserConfig, settings
 
 if TYPE_CHECKING:
     from langgraph.graph import CompiledGraph
@@ -147,8 +147,9 @@ class ChatWSHandler:
 
         # 流式处理
         collected_content = ""
+        config = {"recursion_limit": settings.agent_recursion_limit}
         try:
-            async for event in agent.astream_events(state, version="v2"):
+            async for event in agent.astream_events(state, config=config, version="v2"):
                 event_type = event.get("event", "")
 
                 # LLM 流式输出

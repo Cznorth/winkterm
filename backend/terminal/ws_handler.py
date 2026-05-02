@@ -13,6 +13,7 @@ from backend.terminal.session_manager import get_session_manager, TerminalSessio
 from backend.agent.graph import get_graph
 from backend.agent.tools import set_has_ai_output
 from backend.agent.state import AgentState
+from backend.config import settings
 from langchain_core.messages import HumanMessage
 
 # 配置日志
@@ -240,7 +241,9 @@ class TerminalWSHandler:
             final_state = None
             has_output = False  # 是否有文本输出
 
-            async for event in graph.astream_events(initial_state, version="v2"):
+            config = {"recursion_limit": settings.agent_recursion_limit}
+            logger.info(f"[AGENT] recursion_limit={settings.agent_recursion_limit}")
+            async for event in graph.astream_events(initial_state, config=config, version="v2"):
                 event_type = event.get("event", "")
                 event_name = event.get("name", "")
                 logger.debug(f"[AGENT] 事件: {event_type} | {event_name}")
