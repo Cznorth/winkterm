@@ -67,7 +67,7 @@ CONTROL_KEYS = {
 
 
 @tool
-async def terminal_input(input: str) -> str:
+async def terminal_input(input: str, wait_time: float = 0) -> str:
     """在终端执行输入并返回结果。
 
     Args:
@@ -75,6 +75,7 @@ async def terminal_input(input: str) -> str:
             - 命令: "ls -la", "npm install"
             - 控制键: "Ctrl+C", "Ctrl+D", "Up", "Down", "Enter"
             - 文本: 直接输入的字符串
+        wait_time: 额外等待时间（秒），默认0秒。可以根据命令执行的预期时间调整，以获得更完整的输出。（如果只是等待不执行命令，请使用wait工具）
 
     Returns:
         执行后的终端上下文（最近50行）
@@ -99,7 +100,7 @@ async def terminal_input(input: str) -> str:
         pty.write(b"\r\n")
 
     # 异步等待输出（不阻塞事件循环）
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(0.8 + wait_time)
 
     # 返回终端上下文
     context = pty.get_context(50)
@@ -151,12 +152,40 @@ def get_terminal_context(lines: int = 50) -> str:
     return context
 
 
+@tool
+async def wait(seconds: float) -> str:
+    """等待指定时间，用于让命令执行完成或观察输出变化。
+
+    适用场景：
+    - 长时间运行的命令需要更多时间完成
+    - 观察日志输出或监控状态变化
+    - 等待服务启动或响应
+
+    Args:
+        seconds: 等待的秒数，建议范围 0.5-30 秒
+
+    Returns:
+        等待结束的提示信息
+    """
+    import logging
+
+    logger = logging.getLogger("tools")
+    logger.info(f"[wait] 等待 {seconds} 秒")
+
+    # 限制最大等待时间
+    seconds = min(max(seconds, 0), 60)
+    await asyncio.sleep(seconds)
+
+    return f"[等待完成] 已等待 {seconds} 秒"
+
+
 # 模块导出的工具列表
-TERMINAL_TOOLS = [terminal_input, write_command, get_terminal_context]
+TERMINAL_TOOLS = [terminal_input, write_command, get_terminal_context, wait]
 
 # 按名称导出，供精细化配置
 TOOLS_BY_NAME = {
     "terminal_input": terminal_input,
     "write_command": write_command,
     "get_terminal_context": get_terminal_context,
+    "wait": wait,
 }
