@@ -13,8 +13,9 @@ services:
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://localhost:9090}
       - LOKI_URL=${LOKI_URL:-http://localhost:3100}
       - DEBUG=${DEBUG:-false}
+      - PYTHONPATH=/app
     volumes:
-      - ./backend:/app
+      - ./backend:/app/backend
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
