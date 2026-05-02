@@ -108,7 +108,7 @@ async def terminal_input(input: str, wait_time: float = 0) -> str:
 
 
 @tool
-def write_command(command: str) -> str:
+async def write_command(command: str) -> str:
     """把命令写入终端输入行（不执行），然后终止等待用户操作。
 
     这是最终操作：调用此工具后 agent 会停止，等待用户决定是否执行命令。
@@ -126,8 +126,8 @@ def write_command(command: str) -> str:
 
     # 如果之前有 AI 输出，先发送 Ctrl+C 清除当前行
     if _has_ai_output:
-        logger.info("[write_command] 发送 Ctrl+C 清除 AI 输出行")
-        pty.write(b"\x03")  # Ctrl+C
+        logger.info("清除 AI 输出行")
+        pty.write(b"\r")  # 换行
 
     pty.write_command(command)
     logger.info(f"[write_command] 命令已写入")

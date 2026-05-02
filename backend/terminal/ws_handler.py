@@ -190,10 +190,19 @@ class TerminalWSHandler:
 
         logger.info(f"[COMMAND] 解析到命令: {clean_line}")
 
-        # 处理 shell prompt：提取 # 后面的内容
-        if '#' in clean_line:
-            hash_pos = clean_line.find('#')
-            command = clean_line[hash_pos + 1:].strip()
+        # 检测 # 命令
+        # 场景1: "# 你好" - # 是第一个字符
+        # 场景2: "root@host:~# # 你好" - bash root prompt (#) 后跟 # 命令
+        # 场景3: "PS D:\path> # 你好" - PowerShell prompt (>) 后跟 # 命令
+        # 场景4: "user@host:~$ # 你好" - bash user prompt ($) 后跟 # 命令
+        # 不触发: "root@host:~#" - 只有 prompt
+        # 不触发: "root@host:~# ls" - 普通命令
+
+        # 正则匹配：# 开头，或 prompt 符号 (# $ > %) 后跟 #
+        if clean_line.startswith('#') or re.search(r'[#\$>%]\s*#', clean_line):
+            # 找到最后一个 # 后面的内容
+            last_hash = clean_line.rfind('#')
+            command = clean_line[last_hash + 1:].strip()
             if command:
                 await self.agent_invoke(command)
 
@@ -204,13 +213,15 @@ class TerminalWSHandler:
         try:
             graph = get_graph()
 
+            terminal_output = self.pty.get_context(lines=50)
             initial_state: AgentState = {
                 "messages": [HumanMessage(content=user_input)],
-                "terminal_output": self.pty.get_context(lines=50),
+                "terminal_output": terminal_output,
                 "analysis_result": "",
                 "llm_calls": 0,
                 "waiting_user": False,
             }
+            logger.info(f"[AGENT] 终端上下文长度: {len(terminal_output)}, 前200字符: {repr(terminal_output[:200])}")
 
             # 重置 AI 输出标志
             set_has_ai_output(False)
@@ -244,7 +255,7 @@ class TerminalWSHandler:
                             if not has_output:
                                 has_output = True
                                 set_has_ai_output(True)  # 标记有 AI 输出
-                                self.pty.write("winkterm: ".encode("utf-8"))
+                                self.pty.write("# winkterm: ".encode("utf-8"))
 
                             logger.debug(f"[AGENT] AI 输出: {repr(content)}")
                             ansi_escape = re.compile(
