@@ -297,6 +297,6 @@ class PtyManager:
         否则回退到 output buffer（原始 ANSI 流）。
         """
         if self._screen_content:
-            return self._screen_content
+            return self._screen_content[-5000:]  # 截取最后部分屏幕内容，避免过大
         recent = list(self._output_buffer)[-lines:]
         return "\n".join(recent)

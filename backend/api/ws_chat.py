@@ -201,8 +201,8 @@ class ChatWSHandler:
                     tool_name = event.get("name", "unknown")
                     tool_result = event.get("data", {}).get("output", "")
                     # 截断过长的结果
-                    if isinstance(tool_result, str) and len(tool_result) > 500:
-                        tool_result = tool_result[:500] + "...(已截断)"
+                    if isinstance(tool_result, str) and len(tool_result) > 5000:
+                        tool_result = tool_result[:5000] + "...(已截断)"
                     await self._send({
                         "type": "tool_end",
                         "tool": tool_name,
