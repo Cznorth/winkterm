@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getWsBaseUrl } from "./config";
 
-const WS_URL =
-  typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_WS_URL?.replace("/terminal", "/chat") ??
-      "ws://localhost:8000/ws/chat")
-    : "";
+// 获取 chat WebSocket URL（基于 terminal WS URL 替换路径）
+const getChatWSUrl = () => getWsBaseUrl().replace("/terminal", "/chat");
+const WS_URL = typeof window !== "undefined" ? getChatWSUrl() : "";
 
 export interface ToolCall {
   id: string;
