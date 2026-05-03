@@ -1,10 +1,22 @@
 type MessageHandler = (data: string) => void;
 type StatusHandler = (connected: boolean) => void;
 
-const WS_BASE_URL =
-  typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/terminal")
-    : "";
+// 动态获取 WebSocket URL：
+// 1. 优先使用环境变量（用于开发环境）
+// 2. 否则基于当前页面域名构建（前后端同源部署）
+const getWSBaseURL = () => {
+  if (process.env.NEXT_PUBLIC_WS_URL) {
+    return process.env.NEXT_PUBLIC_WS_URL;
+  }
+  // 生产环境：基于当前域名动态构建
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/ws/terminal`;
+  }
+  return "";
+};
+
+const WS_BASE_URL = typeof window !== "undefined" ? getWSBaseURL() : "";
 
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 20;
