@@ -23,6 +23,7 @@ RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debia
     && apt-get update && apt-get install -y --no-install-recommends \
     bash \
     curl \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
