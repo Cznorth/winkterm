@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Discussion & Support
+    url: https://github.com/Cznorth/winkterm/discussions
+    about: Ask questions and get help here
+  - name: Security Issue
+    url: https://github.com/Cznorth/winkterm/security/advisories/new
+    about: Report security vulnerabilities privately
