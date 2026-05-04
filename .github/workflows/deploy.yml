@@ -19,4 +19,5 @@ jobs:
             cd ${{ secrets.DEPLOY_PATH }}
             git fetch origin
             git reset --hard origin/master
+            docker compose down --remove-orphans
             docker compose up -d --build
