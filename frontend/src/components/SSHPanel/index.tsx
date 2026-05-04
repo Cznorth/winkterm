@@ -77,7 +77,7 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
       const res = await axios.get("/api/ssh/connections");
       setConnections(res.data.connections || []);
     } catch (e) {
-      console.error("加载 SSH 连接失败:", e);
+      console.error("Failed to load SSH connections:", e);
     }
   };
 
@@ -100,18 +100,14 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-
-      // electerm 格式: { bookmarks: [...] }
       const bookmarks = data.bookmarks || [data];
-
       await axios.post("/api/ssh/import/electerm", { bookmarks });
       loadConnections();
     } catch (err) {
-      console.error("导入失败:", err);
-      alert("导入失败，请检查文件格式");
+      console.error("Import failed:", err);
+      alert("Import failed. Check the file format.");
     }
 
-    // 清空 input
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -155,12 +151,12 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
       });
       loadConnections();
     } catch (e) {
-      console.error("保存失败:", e);
+      console.error("Save failed:", e);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("确定删除此连接？")) return;
+    if (!confirm("Are you sure you want to delete this connection?")) return;
 
     try {
       if (transferTarget?.id === id) {
@@ -169,7 +165,7 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
       await axios.delete(`/api/ssh/connections/${id}`);
       loadConnections();
     } catch (e) {
-      console.error("删除失败:", e);
+      console.error("Delete failed:", e);
     }
   };
 
@@ -201,38 +197,37 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
 
   return (
     <div className="ssh-panel">
-      {/* 标题栏 */}
       <div className="ssh-header">
-        <span className="ssh-header-title">SSH 连接</span>
+        <span className="ssh-header-title">SSH Connections</span>
         <div className="ssh-header-actions">
-          <span className="ssh-header-hint">连接项支持文件传输</span>
+          <span className="ssh-header-hint">Connections support file transfer</span>
           <div className="ssh-header-menu" ref={actionMenuRef}>
             <button
               className="ssh-btn ssh-btn-secondary"
               onClick={() => setActionMenuOpen((current) => !current)}
-              title="更多操作"
+              title="More actions"
             >
-              更多
+              More
             </button>
             {actionMenuOpen && (
               <div className="ssh-header-dropdown">
                 <button className="ssh-header-menu-item" onClick={handleNewConnection}>
-                  新建连接
+                  New connection
                 </button>
                 <button className="ssh-header-menu-item" onClick={handleQuickTransfer} disabled={connections.length === 0}>
-                  文件传输
+                  File transfer
                 </button>
                 <button className="ssh-header-menu-item" onClick={handleImportClick}>
-                  导入连接
+                  Import connections
                 </button>
               </div>
             )}
           </div>
           <button className="ssh-btn ssh-btn-primary" onClick={handleNewConnection}>
-            新建
+            New
           </button>
           <button className="ssh-btn" onClick={handleImportClick}>
-            导入
+            Import
           </button>
           <input
             ref={fileInputRef}
@@ -244,14 +239,13 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
         </div>
       </div>
 
-      {/* 连接列表 */}
       <div className="ssh-list">
         {connections.length === 0 ? (
           <div className="ssh-empty">
-            <p>暂无 SSH 连接</p>
-            <p>点击“新建”添加连接，或从“更多”里快速打开文件传输</p>
+            <p>No SSH connections</p>
+            <p>Click "New" to add one, or use "More" &gt; "File transfer"</p>
             <button className="ssh-empty-action" onClick={handleQuickTransfer}>
-              快速打开文件传输
+              Open file transfer
             </button>
           </div>
         ) : (
@@ -272,16 +266,16 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
                   <button
                     className="ssh-item-btn connect"
                     onClick={() => onConnect(conn)}
-                    title="连接"
+                    title="Connect"
                   >
-                    连接
+                    Connect
                   </button>
                 )}
                 <button
                   className="ssh-item-btn transfer"
                   onClick={() => handleOpenTransfer(conn)}
-                  title="文件传输"
-                  aria-label="文件传输"
+                  title="File transfer"
+                  aria-label="File transfer"
                 >
                   <TransferIcon />
                 </button>
@@ -289,13 +283,13 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
                   className="ssh-item-btn"
                   onClick={() => handleEdit(conn)}
                 >
-                  编辑
+                  Edit
                 </button>
                 <button
                   className="ssh-item-btn delete"
                   onClick={() => handleDelete(conn.id)}
                 >
-                  删除
+                  Delete
                 </button>
               </div>
             </div>
@@ -312,37 +306,36 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
         />
       )}
 
-      {/* 编辑表单 */}
       {showForm && (
         <div className="ssh-form-overlay">
           <div className="ssh-form">
             <div className="ssh-form-header">
-              <h3>{editingId ? "编辑连接" : "新建连接"}</h3>
+              <h3>{editingId ? "Edit Connection" : "New Connection"}</h3>
             </div>
 
             <div className="ssh-form-body">
               <div className="ssh-form-row">
-                <label>名称</label>
+                <label>Name</label>
                 <input
                   type="text"
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder="服务器名称（可选）"
+                  placeholder="Server name (optional)"
                 />
               </div>
 
               <div className="ssh-form-row">
-                <label>主机 *</label>
+                <label>Host *</label>
                 <input
                   type="text"
                   value={form.host}
                   onChange={(e) => setForm({ ...form, host: e.target.value })}
-                  placeholder="IP 或域名"
+                  placeholder="IP or domain"
                 />
               </div>
 
               <div className="ssh-form-row">
-                <label>端口</label>
+                <label>Port</label>
                 <input
                   type="number"
                   value={form.port}
@@ -351,50 +344,50 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
               </div>
 
               <div className="ssh-form-row">
-                <label>用户名 *</label>
+                <label>Username *</label>
                 <input
                   type="text"
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  placeholder="用户名"
+                  placeholder="Username"
                 />
               </div>
 
               <div className="ssh-form-row">
-                <label>认证方式</label>
+                <label>Auth type</label>
                 <select
                   value={form.auth_type}
                   onChange={(e) => setForm({ ...form, auth_type: e.target.value as "password" | "key" })}
                 >
-                  <option value="password">密码</option>
-                  <option value="key">密钥</option>
+                  <option value="password">Password</option>
+                  <option value="key">Key</option>
                 </select>
               </div>
 
               {form.auth_type === "password" ? (
                 <div className="ssh-form-row">
-                  <label>密码</label>
+                  <label>Password</label>
                   <input
                     type="password"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    placeholder={editingId ? "留空保持不变" : "密码"}
+                    placeholder={editingId ? "Leave blank to keep unchanged" : "Password"}
                   />
                 </div>
               ) : (
                 <div className="ssh-form-row">
-                  <label>私钥路径</label>
+                  <label>Private key path</label>
                   <input
                     type="text"
                     value={form.private_key_path}
                     onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
-                    placeholder="例如: ~/.ssh/id_rsa"
+                    placeholder="e.g. ~/.ssh/id_rsa"
                   />
                 </div>
               )}
 
               <div className="ssh-form-row">
-                <label>颜色</label>
+                <label>Color</label>
                 <input
                   type="color"
                   value={form.color}
@@ -405,10 +398,10 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
 
             <div className="ssh-form-footer">
               <button className="ssh-btn primary" onClick={handleSave}>
-                保存
+                Save
               </button>
               <button className="ssh-btn" onClick={() => setShowForm(false)}>
-                取消
+                Cancel
               </button>
             </div>
           </div>

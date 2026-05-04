@@ -1,23 +1,23 @@
-# Agent 配置注册表
+# Agent Configuration Registry
 agents:
   terminal:
-    description: 终端内Agent，直接操作终端
+    description: In-terminal agent, operates the terminal directly
     tools:
-      - write_command  # 写入命令等待用户确认
+      - write_command
       - get_terminal_context
     prompt: terminal.yaml
     model: default
 
   chat:
-    description: 通用对话助手
+    description: General-purpose chat assistant
     tools: []
     prompt: chat.yaml
     model: default
 
   craft:
-    description: 代码创作助手，可直接操作终端
+    description: Code and automation assistant with terminal access
     tools:
-      - terminal_input  # 直接执行命令
+      - terminal_input
       - get_terminal_context
     prompt: craft.yaml
     model: default

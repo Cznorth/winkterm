@@ -21,7 +21,7 @@ function formatTokens(n: number): string {
 function ContextMeter({ inputTokens, outputTokens, maxContext }: { inputTokens: number; outputTokens: number; maxContext: number }) {
   const total = inputTokens + outputTokens;
   const pct = Math.min(total / maxContext, 1);
-  const circumference = 2 * Math.PI * 8; // r=8
+  const circumference = 2 * Math.PI * 8;
   const offset = circumference * (1 - pct);
   const color = pct > 0.85 ? "var(--error)" : pct > 0.70 ? "var(--warning)" : "var(--success)";
 
@@ -32,16 +32,16 @@ function ContextMeter({ inputTokens, outputTokens, maxContext }: { inputTokens: 
         <circle cx="11" cy="11" r="8" className="ctx-meter-fill" style={{ stroke: color, strokeDasharray: circumference, strokeDashoffset: offset }} />
       </svg>
       <div className="ctx-meter-tooltip">
-        <div className="ctx-meter-tooltip-title">上下文窗口</div>
+        <div className="ctx-meter-tooltip-title">Context Window</div>
         <div className="ctx-meter-tooltip-row">
-          <span>输入</span><span className="ctx-meter-tooltip-val">{formatTokens(inputTokens)}</span>
+          <span>Input</span><span className="ctx-meter-tooltip-val">{formatTokens(inputTokens)}</span>
         </div>
         <div className="ctx-meter-tooltip-row">
-          <span>输出</span><span className="ctx-meter-tooltip-val">{formatTokens(outputTokens)}</span>
+          <span>Output</span><span className="ctx-meter-tooltip-val">{formatTokens(outputTokens)}</span>
         </div>
         <div className="ctx-meter-tooltip-divider" />
         <div className="ctx-meter-tooltip-row">
-          <span>总计</span><span className="ctx-meter-tooltip-val">{formatTokens(total)} / {formatTokens(maxContext)}</span>
+          <span>Total</span><span className="ctx-meter-tooltip-val">{formatTokens(total)} / {formatTokens(maxContext)}</span>
         </div>
       </div>
     </div>
@@ -62,7 +62,6 @@ const MODE_ICONS: Record<ChatMode, JSX.Element> = {
   ),
 };
 
-// 工具图标
 const ToolIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
@@ -75,7 +74,6 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
     ? JSON.stringify(toolCall.args, null, 2)
     : "";
 
-  // 提取第一个参数值作为简要展示
   const firstArgValue = Object.values(toolCall.args)[0];
   const argPreview = typeof firstArgValue === "string"
     ? firstArgValue.length > 60 ? firstArgValue.slice(0, 60) + "..." : firstArgValue
@@ -99,7 +97,7 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
           <span className="tool-call-arrow">▼</span>
         )}
         {toolCall.status === "running" && (
-          <span style={{ color: "var(--fg-muted)", fontSize: "11px", whiteSpace: "nowrap" }}>执行中...</span>
+          <span style={{ color: "var(--fg-muted)", fontSize: "11px", whiteSpace: "nowrap" }}>Running...</span>
         )}
       </div>
 
@@ -107,13 +105,13 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
         <div className="tool-call-content">
           {argsStr && (
             <div className="tool-call-section">
-              <div className="tool-call-label">参数</div>
+              <div className="tool-call-label">Args</div>
               <pre className="tool-call-code">{argsStr}</pre>
             </div>
           )}
           {toolCall.result && (
             <div className="tool-call-section">
-              <div className="tool-call-label">结果</div>
+              <div className="tool-call-label">Result</div>
               <pre className="tool-call-code">{toolCall.result}</pre>
             </div>
           )}
@@ -140,7 +138,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 16v-4M12 8h.01" />
               </svg>
-              <span>思考过程</span>
+              <span>Thinking</span>
               <span className="ai-thinking-toggle">{showThinking ? "▲" : "▼"}</span>
             </div>
             {showThinking && (
@@ -170,8 +168,8 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 }
 
 const MODE_INFO: Record<ChatMode, { label: string; desc: string }> = {
-  chat: { label: "Chat", desc: "对话助手，回答问题、提供建议" },
-  craft: { label: "Craft", desc: "创作助手，编写代码、生成配置" },
+  chat: { label: "Chat", desc: "General assistant for questions and advice" },
+  craft: { label: "Craft", desc: "Code writer with terminal access" },
 };
 
 export default function AIPanel() {
@@ -184,19 +182,16 @@ export default function AIPanel() {
   const modeDropdownRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
 
-  // 加载模型列表
   useEffect(() => {
     axios.get("/api/settings").then((res) => {
       setModels(res.data.models || []);
     });
   }, []);
 
-  // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) {
@@ -233,7 +228,6 @@ export default function AIPanel() {
 
   return (
     <div className="ai-panel">
-      {/* 标题栏 */}
       <div className="ai-header">
         <div className="ai-header-left">
           <span className="ai-header-icon">{MODE_ICONS[mode]}</span>
@@ -242,20 +236,19 @@ export default function AIPanel() {
         <div className="ai-header-actions">
           <div className="ai-status">
             <span className={`ai-status-dot ${isConnected ? "" : "disconnected"}`} />
-            {isConnected ? "已连接" : "未连接"}
+            {isConnected ? "Connected" : "Disconnected"}
           </div>
           <button className="ai-clear-btn" onClick={clearMessages}>
-            清空
+            Clear
           </button>
         </div>
       </div>
 
-      {/* 消息区域 */}
       <div className="ai-messages">
         {messages.length === 0 && (
           <div className="ai-empty">
             <div className="ai-empty-icon">{MODE_ICONS[mode]}</div>
-            <div className="ai-empty-title">{modeInfo.label} 模式</div>
+            <div className="ai-empty-title">{modeInfo.label} Mode</div>
             <div className="ai-empty-desc">{modeInfo.desc}</div>
           </div>
         )}
@@ -267,23 +260,21 @@ export default function AIPanel() {
             <div className="ai-thinking-dots">
               <span /><span /><span />
             </div>
-            思考中...
+            Thinking...
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 错误提示 */}
       {error && (
         <div className="ai-error">
           <span>{error}</span>
           <button className="ai-error-retry" onClick={reconnect}>
-            重连
+            Reconnect
           </button>
         </div>
       )}
 
-      {/* 输入区域 */}
       <div className="ai-input-area">
         <form className="ai-input-form" onSubmit={handleSubmit}>
           <textarea
@@ -296,7 +287,7 @@ export default function AIPanel() {
                 handleSubmit(e);
               }
             }}
-            placeholder={isConnected ? "输入问题... (Enter 发送，Shift+Enter 换行)" : "等待连接..."}
+            placeholder={isConnected ? "Ask anything... (Enter to send, Shift+Enter for new line)" : "Waiting for connection..."}
             disabled={!isConnected || isStreaming}
             rows={2}
           />
@@ -309,7 +300,7 @@ export default function AIPanel() {
               <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
-              停止
+              Stop
             </button>
           ) : (
             <button
@@ -317,15 +308,13 @@ export default function AIPanel() {
               className="ai-send-btn"
               disabled={!isConnected || !input.trim()}
             >
-              发送
+              Send
             </button>
           )}
         </form>
       </div>
 
-      {/* 底部工具栏 */}
       <div className="ai-toolbar">
-        {/* 模式选择器 */}
         <div className="ai-mode-selector" ref={modeDropdownRef}>
           {modeDropdownOpen && isConnected && (
             <div className="ai-mode-dropdown">
@@ -357,7 +346,6 @@ export default function AIPanel() {
 
         <div className="ai-toolbar-divider" />
 
-        {/* 模型选择器 */}
         <div className="ai-mode-selector" ref={modelDropdownRef}>
           {modelDropdownOpen && isConnected && models.length > 0 && (
             <div className="ai-mode-dropdown">
@@ -377,16 +365,15 @@ export default function AIPanel() {
             className="ai-mode-btn"
             onClick={() => isConnected && models.length > 0 && setModelDropdownOpen(!modelDropdownOpen)}
             disabled={!isConnected || models.length === 0}
-            title={model || "选择模型"}
+            title={model || "Select model"}
           >
             <span className="ai-mode-btn-text">
-              {currentModelName || "选择模型"}
+              {currentModelName || "Select model"}
             </span>
             <span className="ai-mode-arrow">▼</span>
           </button>
         </div>
 
-        {/* 上下文用量 */}
         <div style={{ marginLeft: "auto" }}>
           <ContextMeter inputTokens={inputTokens} outputTokens={outputTokens} maxContext={maxContext} />
         </div>

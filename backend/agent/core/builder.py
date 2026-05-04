@@ -30,13 +30,13 @@ class AgentBuilder:
         # 优先使用用户配置
         user_config = UserConfig.load()
         api_format = user_config.get("api_format", "openai")
-        base_url = user_config.get("base_url") or settings.llm_base_url
-        api_key = user_config.get("api_key") or settings.llm_api_key
+        base_url = user_config.get("base_url") or settings.effective_base_url
+        api_key = user_config.get("api_key") or settings.effective_api_key
         selected_model = user_config.get("selected_model")
 
         # 模型优先级: 用户选择 > 配置默认
         model_name = selected_model or (
-            settings.llm_model if self.model == "default" else self.model
+            settings.effective_model if self.model == "default" else self.model
         )
 
         if api_format == "anthropic":

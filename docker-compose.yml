@@ -1,15 +1,21 @@
 version: "3.9"
 
 services:
-  backend:
+  winkterm:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
+      - "3000:3000"
       - "8000:8000"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - MODEL_NAME=${MODEL_NAME:-claude-opus-4-6}
+      # --- LLM Provider ---
+      # Use one of these:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - MODEL_NAME=${MODEL_NAME:-claude-sonnet-4-20250514}
+      # --- Optional services ---
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://localhost:9090}
       - LOKI_URL=${LOKI_URL:-http://localhost:3100}
       - DEBUG=${DEBUG:-false}

@@ -17,7 +17,6 @@ interface Settings {
   selected_model: string;
 }
 
-// 图标组件
 const SettingsIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3" />
@@ -126,10 +125,9 @@ export default function SettingsPanel() {
       }
       const fetched: ModelInfo[] = res.data.models || [];
       if (fetched.length === 0) {
-        setFetchError("未获取到模型，请检查 Base URL 和 API Key");
+        setFetchError("No models returned. Check your Base URL and API Key.");
         return;
       }
-      // 合并去重
       const existingIds = new Set((settings.models || []).map(m => m.id));
       const newModels = fetched.filter(m => !existingIds.has(m.id));
       setSettings(prev => ({
@@ -138,7 +136,7 @@ export default function SettingsPanel() {
       }));
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      setFetchError(err.response?.data?.detail || "获取模型列表失败");
+      setFetchError(err.response?.data?.detail || "Failed to fetch model list");
     } finally {
       setFetching(false);
     }
@@ -176,23 +174,20 @@ export default function SettingsPanel() {
 
   return (
     <div className="settings-panel">
-      {/* 标题栏 */}
       <div className="settings-header">
         <span className="settings-header-icon"><SettingsIcon /></span>
-        <span className="settings-header-title">设置</span>
+        <span className="settings-header-title">Settings</span>
       </div>
 
-      {/* 内容区域 */}
       <div className="settings-content">
-        {/* API 配置组 */}
         <div className="settings-group">
           <div className="settings-group-title">
             <ApiIcon />
-            API 配置
+            API Configuration
           </div>
 
           <div className="settings-field">
-            <label className="settings-label">API 格式</label>
+            <label className="settings-label">API Format</label>
             <select
               className="settings-select"
               value={settings.api_format}
@@ -214,8 +209,8 @@ export default function SettingsPanel() {
             />
             <div className="settings-help">
               {settings.api_format === "openai"
-                ? "OpenAI 兼容 API 的基础地址"
-                : "Anthropic API 基础地址，通常无需修改"}
+                ? "OpenAI-compatible API base URL (Ollama, Groq, OpenRouter, etc.)"
+                : "Anthropic API base URL (usually no change needed)"}
             </div>
           </div>
 
@@ -238,12 +233,12 @@ export default function SettingsPanel() {
             {fetching ? (
               <>
                 <span className="settings-spinner" />
-                获取中...
+                Fetching...
               </>
             ) : (
               <>
                 <RefreshIcon />
-                自动获取模型列表
+                Auto-fetch models
               </>
             )}
           </button>
@@ -256,23 +251,21 @@ export default function SettingsPanel() {
           )}
         </div>
 
-        {/* 模型配置组 */}
         <div className="settings-group">
           <div className="settings-group-title">
             <ModelIcon />
-            模型配置
+            Model Configuration
           </div>
 
-          {/* 当前模型选择 */}
           {hasModels && (
             <div className="settings-field">
-              <label className="settings-label">当前模型</label>
+              <label className="settings-label">Active Model</label>
               <select
                 className="settings-select"
                 value={settings.selected_model}
                 onChange={(e) => setSettings({ ...settings, selected_model: e.target.value })}
               >
-                <option value="">选择模型</option>
+                <option value="">Select a model</option>
                 {settings.models?.map((m) => (
                   <option key={m.id} value={m.id}>{m.name || m.id}</option>
                 ))}
@@ -280,10 +273,9 @@ export default function SettingsPanel() {
             </div>
           )}
 
-          {/* 模型列表 */}
           <div className="settings-field">
             <label className="settings-label">
-              已配置模型
+              Configured Models
               {hasModels && <span className="settings-label-hint">({settings.models.length})</span>}
             </label>
 
@@ -300,7 +292,7 @@ export default function SettingsPanel() {
                     <button
                       className="settings-model-remove"
                       onClick={() => handleRemoveModel(m.id)}
-                      title="删除模型"
+                      title="Remove model"
                     >
                       <TrashIcon />
                     </button>
@@ -310,22 +302,21 @@ export default function SettingsPanel() {
             ) : (
               <div className="settings-empty">
                 <div className="settings-empty-icon"><ModelIcon /></div>
-                <div>暂无模型配置</div>
-                <div style={{ fontSize: "11px", marginTop: "4px" }}>点击上方按钮自动获取或手动添加</div>
+                <div>No models configured</div>
+                <div style={{ fontSize: "11px", marginTop: "4px" }}>Click "Auto-fetch models" above or add one manually</div>
               </div>
             )}
           </div>
 
-          {/* 手动添加模型 */}
           <div className="settings-field">
-            <label className="settings-label">手动添加模型</label>
+            <label className="settings-label">Add Model Manually</label>
             <div className="settings-add-model">
               <input
                 type="text"
                 className="settings-input"
                 value={newModelId}
                 onChange={(e) => setNewModelId(e.target.value)}
-                placeholder="模型 ID"
+                placeholder="Model ID"
                 onKeyDown={(e) => e.key === "Enter" && handleAddModel()}
               />
               <input
@@ -333,14 +324,14 @@ export default function SettingsPanel() {
                 className="settings-input"
                 value={newModelName}
                 onChange={(e) => setNewModelName(e.target.value)}
-                placeholder="名称(可选)"
+                placeholder="Display name (optional)"
                 onKeyDown={(e) => e.key === "Enter" && handleAddModel()}
               />
               <button
                 className="settings-btn settings-btn-secondary"
                 onClick={handleAddModel}
                 disabled={!newModelId.trim()}
-                title="添加模型"
+                title="Add model"
               >
                 <PlusIcon />
               </button>
@@ -348,12 +339,11 @@ export default function SettingsPanel() {
           </div>
         </div>
 
-        {/* 保存按钮 */}
         <div className="settings-group">
           {saved && (
             <div className="settings-success" style={{ marginBottom: "12px" }}>
               <CheckIcon />
-              设置已保存
+              Settings saved
             </div>
           )}
           <button
@@ -364,10 +354,10 @@ export default function SettingsPanel() {
             {loading ? (
               <>
                 <span className="settings-spinner" />
-                保存中...
+                Saving...
               </>
             ) : (
-              "保存设置"
+              "Save Settings"
             )}
           </button>
         </div>

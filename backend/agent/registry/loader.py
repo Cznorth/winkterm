@@ -1,4 +1,4 @@
-"""Agent配置加载器。"""
+"""Agent configuration loader with language support."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ import yaml
 
 logger = logging.getLogger("agent.loader")
 
-# 配置文件路径
+# Configuration paths
 REGISTRY_PATH = Path(__file__).parent / "agents.yaml"
 PROMPTS_PATH = Path(__file__).parent.parent / "prompts"
 
 
 class AgentConfig:
-    """单个Agent的配置。"""
+    """Configuration for a single agent."""
 
     def __init__(self, name: str, config: dict[str, Any]):
         self.name = name
@@ -25,21 +25,32 @@ class AgentConfig:
         self.prompt_file = config.get("prompt", "")
         self.model = config.get("model", "default")
 
-    def load_prompt(self) -> str:
-        """加载提示词内容。"""
+    def load_prompt(self, lang: str = "en") -> str:
+        """Load the prompt content, respecting language preference.
+
+        Args:
+            lang: Language code ('en' or 'zh'). Falls back to default if translated file missing.
+        """
         if not self.prompt_file:
             return ""
 
+        # Try language-specific prompt first
+        if lang == "zh":
+            zh_path = PROMPTS_PATH / self.prompt_file.replace(".yaml", ".zh.yaml")
+            if zh_path.exists():
+                return zh_path.read_text(encoding="utf-8")
+
+        # Fall back to default
         prompt_path = PROMPTS_PATH / self.prompt_file
         if not prompt_path.exists():
-            logger.warning(f"提示词文件不存在: {prompt_path}")
+            logger.warning(f"Prompt file not found: {prompt_path}")
             return ""
 
         return prompt_path.read_text(encoding="utf-8")
 
 
 class AgentRegistry:
-    """Agent配置注册表。"""
+    """Agent configuration registry (singleton)."""
 
     _instance: AgentRegistry | None = None
     _configs: dict[str, AgentConfig] = {}
@@ -51,9 +62,9 @@ class AgentRegistry:
         return cls._instance
 
     def _load(self) -> None:
-        """加载配置文件。"""
+        """Load configuration from YAML."""
         if not REGISTRY_PATH.exists():
-            logger.warning(f"配置文件不存在: {REGISTRY_PATH}")
+            logger.warning(f"Config file not found: {REGISTRY_PATH}")
             return
 
         with open(REGISTRY_PATH, encoding="utf-8") as f:
@@ -62,28 +73,28 @@ class AgentRegistry:
         agents = data.get("agents", {})
         for name, config in agents.items():
             self._configs[name] = AgentConfig(name, config)
-            logger.info(f"加载Agent配置: {name}")
+            logger.info(f"Loaded agent config: {name}")
 
     def get(self, name: str) -> AgentConfig | None:
-        """获取指定Agent的配置。"""
+        """Get configuration for a named agent."""
         return self._configs.get(name)
 
     def list_agents(self) -> list[str]:
-        """列出所有已注册的Agent名称。"""
+        """List all registered agent names."""
         return list(self._configs.keys())
 
     def reload(self) -> None:
-        """重新加载配置。"""
+        """Reload all configurations."""
         self._configs.clear()
         self._load()
 
 
-# 便捷函数
+# Convenience functions
 def get_agent_config(name: str) -> AgentConfig | None:
-    """获取Agent配置。"""
+    """Get agent configuration."""
     return AgentRegistry().get(name)
 
 
 def list_agents() -> list[str]:
-    """列出所有Agent。"""
+    """List all agents."""
     return AgentRegistry().list_agents()

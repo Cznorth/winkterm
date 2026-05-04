@@ -15,13 +15,13 @@ from backend.api.routes import router as http_router
 from backend.api.ws_routes import router as ws_router
 from backend.api.ssh_routes import router as ssh_router
 
-# 判断是否在打包环境
+# Check if running in PyInstaller bundle
 IS_FROZEN = getattr(sys, 'frozen', False)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # 日志配置：压制第三方库的 DEBUG 日志，保留 httpx INFO 看 API 请求
+    # Logging: suppress noisy third-party debug logs
     logging.getLogger("anthropic").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.INFO)
@@ -30,12 +30,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     print("=" * 50)
     print("  WinkTerm Backend starting...")
-    print(f"  Model       : {settings.llm_model}")
-    print(f"  LLM URL     : {settings.llm_base_url}")
-    print(f"  Prometheus  : {settings.prometheus_url}")
+    print(f"  LLM URL     : {settings.effective_base_url}")
+    print(f"  LLM Model   : {settings.effective_model}")
+    print(f"  API key set : {'yes' if settings.effective_api_key else 'NO - please set API key'}")
     print(f"  Loki        : {settings.loki_url}")
-    print(f"  CORS origins: {settings.cors_origins}")
-    print(f"  API key set : {'yes' if settings.llm_api_key else 'NO - please set LLM_API_KEY'}")
     print("=" * 50)
     yield
     print("WinkTerm Backend stopped.")
@@ -57,7 +55,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 挂载路由
+# Mount routes
 app.include_router(http_router, prefix="/api", tags=["analysis"])
 app.include_router(ws_router, prefix="/ws", tags=["terminal"])
 app.include_router(ssh_router, tags=["ssh"])
@@ -70,10 +68,10 @@ async def health() -> dict[str, str]:
 
 @app.post("/exit")
 async def exit_app():
-    """退出应用程序（桌面模式）"""
+    """Graceful exit for desktop mode."""
     import os
     import threading
-    # 延迟退出，让响应先发送
+
     def do_exit():
         import time
         time.sleep(0.1)
@@ -82,15 +80,13 @@ async def exit_app():
     return {"status": "exiting"}
 
 
-# 静态文件服务（桌面模式）
+# Static file serving (desktop mode)
 def get_static_dir() -> Path | None:
-    """获取前端静态文件目录"""
+    """Get frontend static files directory."""
     if IS_FROZEN:
-        # PyInstaller 打包后的路径
         base = Path(sys._MEIPASS)
         static_dir = base / "frontend_static"
     else:
-        # 开发模式：检查 frontend/out 是否存在
         static_dir = Path(__file__).parent.parent / "frontend" / "out"
 
     if static_dir.exists() and (static_dir / "index.html").exists():
@@ -100,23 +96,19 @@ def get_static_dir() -> Path | None:
 
 _static_dir = get_static_dir()
 if _static_dir:
-    # 挂载 _next 静态资源
     next_dir = _static_dir / "_next"
     if next_dir.exists():
         app.mount("/_next", StaticFiles(directory=str(next_dir)), name="next-static")
 
-    # SPA fallback：所有未匹配的路由返回 index.html
     from fastapi import Request
     from fastapi.responses import FileResponse
 
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
-        """SPA 路由 fallback"""
-        # 检查是否请求的是具体文件
+        """SPA fallback: serve index.html for all unmatched routes."""
         file_path = _static_dir / full_path
         if file_path.exists() and file_path.is_file():
             return FileResponse(file_path)
-        # 否则返回 index.html（SPA 路由）
         return FileResponse(_static_dir / "index.html")
 
 

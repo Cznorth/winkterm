@@ -51,9 +51,9 @@ class ChatWSHandler:
 
         # 预加载常用 agent
         try:
-            self.agents["chat"] = get_agent("chat")
-            self.agents["craft"] = get_agent("craft")
-            logger.info(f"[AGENT] 已加载: {list(self.agents.keys())}")
+            self.agents["chat"] = get_agent("chat", lang="en")
+            self.agents["craft"] = get_agent("craft", lang="en")
+            logger.info(f"[AGENT] Loaded: {list(self.agents.keys())}")
         except Exception as e:
             logger.error(f"[AGENT] 加载失败: {e}")
             await self._send_error("Agent 加载失败")
