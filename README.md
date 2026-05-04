@@ -16,6 +16,7 @@
 [![Star History](https://api.star-history.com/svg?repos=Cznorth/winkterm&type=Date)](https://star-history.com/#Cznorth/winkterm&Date)
 [![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FCznorth%2Fwinkterm&label=Visitors&countColor=%23263759)](https://github.com/Cznorth/winkterm)
 [![Twitter](https://img.shields.io/twitter/url?url=https%3A%2F%2Fgithub.com%2FCznorth%2Fwinkterm)](https://twitter.com/intent/tweet?text=WinkTerm%20-%20AI%20that%20shares%20your%20terminal%20session&url=https://github.com/Cznorth/winkterm)
+[![Promo Video](https://img.shields.io/badge/Promo-Video-ff0000?logo=youtube)](assets/promo.mp4)
 [![Dev.to](https://img.shields.io/badge/Read%20on-Dev.to-0A0A0A?logo=dev.to)](https://dev.to/cznorth/winkterm-ai-that-shares-your-terminal-session-not-just-command-suggestions-8p9)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Cznorth/winkterm)
 
@@ -37,6 +38,8 @@
 ## 🎬 Demo
 
 ![WinkTerm Demo](assets/demo.gif)
+
+[▶️ Watch Promo Video](assets/promo.mp4)
 
 ```
 $ # why is nginx returning 502?
