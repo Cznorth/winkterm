@@ -566,9 +566,28 @@
   border-radius: var(--radius-md);
   padding: 4px;
   min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   z-index: 100;
   animation: dropdownIn 0.15s ease-out;
+}
+
+.ai-mode-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ai-mode-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ai-mode-dropdown::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+.ai-mode-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-muted);
 }
 
 @keyframes dropdownIn {
