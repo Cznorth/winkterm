@@ -1,11 +1,11 @@
-# 环境变量（含密钥，绝不提交）
+# Environment files (may contain secrets, never commit)
 .env
 .env.local
 .env.development
 .env.production
 .env.*.local
 
-# 用户配置
+# User config
 config.json
 
 # Python
@@ -54,3 +54,7 @@ desktop.ini
 
 # Docker
 *.log
+
+# Build artifacts
+*.tar
+gen_demo.py

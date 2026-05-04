@@ -32,9 +32,7 @@
 
 ## 🎬 Demo
 
-<!-- Replace this with an asciicast or screen recording GIF -->
-<!-- Record one with: https://asciinema.org or your favorite screen recorder -->
-<!-- ![Demo](assets/demo.gif) -->
+![WinkTerm Demo](assets/demo.gif)
 
 ```
 $ # why is nginx returning 502?

@@ -1,158 +1,158 @@
-# WinkTerm 架构说明
+# WinkTerm Architecture
 
-## 概述
+## Overview
 
-WinkTerm 是一个 AI + 终端人机合一的运维工具。AI 和用户共享同一个 pty 会话，支持终端内交互和侧边栏对话两种模式。
+WinkTerm is an AI + terminal human-machine integrated operations tool. The AI and user share the same PTY session, supporting both in-terminal interaction and sidebar conversation modes.
 
-## 核心设计：人机合一终端
+## Core Design: Human-Machine Unified Terminal
 
 ```
-用户键盘输入
+User Keyboard Input
     │
     ▼
-前端 Terminal (xterm.js)
+Frontend Terminal (xterm.js)
     │  WebSocket
     ▼
 ws_handler.py
     │
-    ├── 普通输入 ──► pty_manager.write() ──► shell 进程
+    ├── Normal input ──► pty_manager.write() ──► shell process
     │
-    └── # 开头的行 ──► 拦截 ──► Agent (LangGraph)
-                                      │
-                                      ├── get_terminal_context()
-                                      ├── terminal_input()
-                                      └── write_command() ──► pty ──► 终端输入行（不执行）
+    └── Lines starting with # ──► intercept ──► Agent (LangGraph)
+                                                    │
+                                                    ├── get_terminal_context()
+                                                    ├── terminal_input()
+                                                    └── write_command() ──► pty ──► terminal input line (not executed)
 ```
 
-## 目录结构
+## Directory Structure
 
 ```
 winkterm/
 ├── backend/
 │   ├── agent/              # LangGraph Agent
-│   │   ├── core/           # 核心组件
-│   │   │   ├── state.py    # AgentState 类型定义
-│   │   │   └── builder.py  # Agent 构建器
-│   │   ├── registry/       # Agent 配置注册
-│   │   │   ├── loader.py   # 配置加载器
-│   │   │   └── agents.yaml # Agent 配置文件
-│   │   ├── prompts/        # 系统提示词
+│   │   ├── core/           # Core components
+│   │   │   ├── state.py    # AgentState type definitions
+│   │   │   └── builder.py  # Agent builder
+│   │   ├── registry/       # Agent config registry
+│   │   │   ├── loader.py   # Config loader
+│   │   │   └── agents.yaml # Agent configuration file
+│   │   ├── prompts/        # System prompts
 │   │   │   ├── terminal.yaml
 │   │   │   ├── chat.yaml
 │   │   │   └── craft.yaml
-│   │   ├── tools/          # 工具定义
-│   │   │   ├── terminal.py # 终端交互工具
-│   │   │   └── monitoring.py # 监控工具
-│   │   └── factory.py      # Agent 工厂（编译和缓存）
-│   ├── terminal/           # pty 管理
-│   │   ├── pty_manager.py  # pty 进程封装
-│   │   ├── session_manager.py # 多终端会话管理
-│   │   └── ws_handler.py   # WebSocket 处理，含 # 检测逻辑
-│   ├── ssh/                # SSH 连接管理
-│   │   ├── connection_manager.py # SSH 连接管理器
-│   │   ├── pty_spawner.py  # SSH PTY 启动器
-│   │   ├── file_transfer.py # 文件传输
-│   │   └── transfer_jobs.py # 传输任务队列
-│   ├── api/                # FastAPI 路由
-│   │   ├── routes.py       # HTTP 路由
-│   │   ├── ws_routes.py    # WebSocket 路由
-│   │   └── ws_chat.py      # 侧边栏对话 WebSocket 处理器
-│   ├── config.py           # pydantic-settings 配置
-│   └── main.py             # FastAPI 入口
+│   │   ├── tools/          # Tool definitions
+│   │   │   ├── terminal.py # Terminal interaction tools
+│   │   │   └── monitoring.py # Monitoring tools
+│   │   └── factory.py      # Agent factory (compile and cache)
+│   ├── terminal/           # PTY management
+│   │   ├── pty_manager.py  # PTY process wrapper
+│   │   ├── session_manager.py # Multi-session management
+│   │   └── ws_handler.py   # WebSocket handler with # detection logic
+│   ├── ssh/                # SSH connection management
+│   │   ├── connection_manager.py # SSH connection manager
+│   │   ├── pty_spawner.py  # SSH PTY spawner
+│   │   ├── file_transfer.py # File transfer
+│   │   └── transfer_jobs.py # Transfer job queue
+│   ├── api/                # FastAPI routes
+│   │   ├── routes.py       # HTTP routes
+│   │   ├── ws_routes.py    # WebSocket routes
+│   │   └── ws_chat.py      # Sidebar chat WebSocket handler
+│   ├── config.py           # pydantic-settings configuration
+│   └── main.py             # FastAPI entry point
 └── frontend/
     ├── src/
     │   ├── app/            # Next.js App Router
     │   ├── components/
-    │   │   ├── Terminal/   # xterm.js 封装
-    │   │   ├── AIPanel/    # 侧边栏 AI 对话面板
-    │   │   ├── SSHPanel/   # SSH 连接管理面板
-    │   │   ├── FileTransferDialog/ # 文件传输对话框
-    │   │   ├── SettingsPanel/ # 设置面板
-    │   │   ├── TabBar/     # 多标签栏
-    │   │   ├── TitleBar/   # 标题栏
-    │   │   └── Layout/     # 分栏布局
+    │   │   ├── Terminal/   # xterm.js wrapper
+    │   │   ├── AIPanel/    # Sidebar AI chat panel
+    │   │   ├── SSHPanel/   # SSH connection management panel
+    │   │   ├── FileTransferDialog/ # File transfer dialog
+    │   │   ├── SettingsPanel/ # Settings panel
+    │   │   ├── TabBar/     # Multi-tab bar
+    │   │   ├── TitleBar/   # Title bar
+    │   │   └── Layout/     # Split-pane layout
     │   ├── lib/
-    │   │   ├── websocket.ts    # WebSocket 客户端（含重连）
-    │   │   ├── axios.ts        # axios 实例
-    │   │   └── api/generated.ts # orval 生成的 hooks
-    │   └── types/          # TypeScript 类型
-    └── orval.config.ts     # API 代码生成配置
+    │   │   ├── websocket.ts    # WebSocket client (with reconnection)
+    │   │   ├── axios.ts        # Axios instance
+    │   │   └── api/generated.ts # orval generated hooks
+    │   └── types/          # TypeScript types
+    └── orval.config.ts     # API code generation config
 ```
 
-## 消息协议（WebSocket）
+## Message Protocol (WebSocket)
 
-### 终端 WebSocket
+### Terminal WebSocket
 
-| 方向       | type     | 含义                     |
-|------------|----------|--------------------------|
-| 前端 → 后端 | input    | 用户键盘输入              |
-| 前端 → 后端 | resize   | 终端尺寸变化              |
-| 后端 → 前端 | output   | pty 原始输出              |
+| Direction     | type     | Meaning                    |
+|---------------|----------|----------------------------|
+| Frontend → Backend | input    | User keyboard input        |
+| Frontend → Backend | resize   | Terminal resize event      |
+| Backend → Frontend | output   | Raw PTY output             |
 
-**注意**：AI 的消息直接写入 pty，以 pty output 的形式返回前端，保证了人机合一的体验。
+**Note**: AI messages are written directly to the PTY output stream, appearing in the terminal as if they came from the shell itself — this ensures the human-machine unified experience.
 
-### 侧边栏对话 WebSocket
+### Sidebar Chat WebSocket
 
-| 方向       | type          | 含义                     |
-|------------|---------------|--------------------------|
-| 前端 → 后端 | chat          | 发送对话消息              |
-| 前端 → 后端 | clear         | 清空会话历史              |
-| 前端 → 后端 | switch_mode   | 切换 Agent 模式           |
-| 前端 → 后端 | switch_model  | 切换模型                  |
-| 后端 → 前端 | start         | 对话开始                  |
-| 后端 → 前端 | token         | 流式输出 token            |
-| 后端 → 前端 | tool_start    | 工具调用开始              |
-| 后端 → 前端 | tool_end      | 工具调用结束              |
-| 后端 → 前端 | end           | 对话结束                  |
-| 后端 → 前端 | error         | 错误消息                  |
+| Direction     | type          | Meaning                        |
+|---------------|---------------|--------------------------------|
+| Frontend → Backend | chat          | Send chat message              |
+| Frontend → Backend | clear         | Clear session history          |
+| Frontend → Backend | switch_mode   | Switch agent mode              |
+| Frontend → Backend | switch_model  | Switch model                   |
+| Backend → Frontend | start         | Conversation started           |
+| Backend → Frontend | token         | Streamed output token          |
+| Backend → Frontend | tool_start    | Tool call started              |
+| Backend → Frontend | tool_end      | Tool call ended                |
+| Backend → Frontend | end           | Conversation ended             |
+| Backend → Frontend | error         | Error message                  |
 
-## Agent 工具
+## Agent Tools
 
-### 终端交互工具
+### Terminal Interaction Tools
 
-| 工具                   | 说明                                    |
-|------------------------|----------------------------------------|
-| terminal_input         | 执行命令或发送控制键，返回终端输出      |
-| write_command          | 写入命令到输入行（不执行），等待用户确认 |
-| get_terminal_context   | 获取最近的终端输出内容（只读）          |
-| wait                   | 等待指定时间，用于观察输出变化          |
+| Tool                   | Description                                     |
+|------------------------|-------------------------------------------------|
+| terminal_input         | Execute a command or send control keys, returns terminal output |
+| write_command          | Write a command to the input line (without executing), wait for user confirmation |
+| get_terminal_context   | Get recent terminal output content (read-only)  |
+| wait                   | Wait for a specified duration to observe output changes |
 
-### 监控工具
+### Monitoring Tools
 
-| 工具                   | 说明                        |
-|------------------------|----------------------------|
-| query_prometheus       | 查询 Prometheus 指标（mock） |
-| search_logs            | 搜索日志（Loki/ELK，mock）   |
+| Tool                   | Description                         |
+|------------------------|-------------------------------------|
+| query_prometheus       | Query Prometheus metrics (mock)     |
+| search_logs            | Search logs (Loki/ELK, mock)        |
 
-## Agent 配置
+## Agent Configuration
 
-Agent 通过 `backend/agent/registry/agents.yaml` 配置：
+Agents are configured via `backend/agent/registry/agents.yaml`:
 
 ```yaml
 agents:
   terminal:
-    description: 终端内Agent，直接操作终端
+    description: In-terminal agent, operates the terminal directly
     tools:
       - write_command
       - get_terminal_context
     prompt: terminal.yaml
 
   chat:
-    description: 通用对话助手
+    description: General-purpose chat assistant
     tools: []
     prompt: chat.yaml
 
   craft:
-    description: 代码创作助手，可直接操作终端
+    description: Code and automation assistant with terminal access
     tools:
       - terminal_input
       - get_terminal_context
     prompt: craft.yaml
 ```
 
-## 技术栈
+## Tech Stack
 
-- **后端**：Python 3.12 + FastAPI + LangGraph + LangChain（OpenAI 协议兼容）+ ptyprocess + paramiko
-- **前端**：Next.js 14 + TypeScript + xterm.js + TanStack Query + axios
-- **API 代码生成**：orval（从 OpenAPI 自动生成 react-query hooks）
-- **部署**：Docker Compose / PyInstaller 桌面应用
+- **Backend**: Python 3.12 + FastAPI + LangGraph + LangChain (OpenAI protocol compatible) + ptyprocess + paramiko
+- **Frontend**: Next.js 14 + TypeScript + xterm.js + TanStack Query + axios
+- **API Code Generation**: orval (auto-generates react-query hooks from OpenAPI spec)
+- **Deployment**: Docker Compose / PyInstaller desktop app
