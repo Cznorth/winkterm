@@ -300,6 +300,51 @@
   font-size: 12px;
 }
 
+/* ========== 消息内思考过程 ========== */
+.ai-thinking-block {
+  margin-bottom: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.ai-thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg-muted);
+  transition: background var(--transition-fast);
+}
+
+.ai-thinking-header:hover {
+  background: var(--bg-hover);
+}
+
+.ai-thinking-header svg {
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+
+.ai-thinking-toggle {
+  margin-left: auto;
+  font-size: 10px;
+}
+
+.ai-thinking-content {
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  border-top: 1px solid var(--border-default);
+  background: var(--bg-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .ai-thinking-dots {
   display: flex;
   gap: 4px;

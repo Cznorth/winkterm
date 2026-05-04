@@ -125,10 +125,29 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
 
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
+  const [showThinking, setShowThinking] = useState(false);
 
   return (
     <div className={`ai-message ${msg.role}`}>
       <div className="ai-message-bubble">
+        {msg.thinking && (
+          <div className="ai-thinking-block">
+            <div
+              className="ai-thinking-header"
+              onClick={() => setShowThinking(!showThinking)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" />
+              </svg>
+              <span>思考过程</span>
+              <span className="ai-thinking-toggle">{showThinking ? "▲" : "▼"}</span>
+            </div>
+            {showThinking && (
+              <div className="ai-thinking-content">{msg.thinking}</div>
+            )}
+          </div>
+        )}
         {msg.toolCalls && msg.toolCalls.length > 0 && (
           <div style={{ marginBottom: msg.content ? "12px" : 0 }}>
             {msg.toolCalls.map((tc) => (

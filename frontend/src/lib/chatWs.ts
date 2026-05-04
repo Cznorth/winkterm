@@ -21,6 +21,7 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   toolCalls?: ToolCall[];
+  thinking?: string;  // AI 思考过程
 }
 
 export type ChatMode = "chat" | "craft";
@@ -52,6 +53,7 @@ export function useChatWs() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const currentMessageRef = useRef<string>("");
+  const currentThinkingRef = useRef<string>("");
   const toolCallsRef = useRef<ToolCall[]>([]);
 
   // 连接 WebSocket
@@ -104,8 +106,37 @@ export function useChatWs() {
     switch (data.type) {
       case "start":
         currentMessageRef.current = "";
+        currentThinkingRef.current = "";
         toolCallsRef.current = [];
         setState((s) => ({ ...s, isStreaming: true }));
+        break;
+
+      case "thinking":
+        if (data.content) {
+          currentThinkingRef.current += data.content;
+          setState((s) => {
+            const messages = [...s.messages];
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg?.role === "assistant") {
+              messages[messages.length - 1] = {
+                ...lastMsg,
+                content: currentMessageRef.current,
+                thinking: currentThinkingRef.current,
+                toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
+              };
+            } else {
+              messages.push({
+                id: Date.now().toString(),
+                role: "assistant",
+                content: currentMessageRef.current,
+                thinking: currentThinkingRef.current,
+                timestamp: Date.now(),
+                toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
+              });
+            }
+            return { ...s, messages };
+          });
+        }
         break;
 
       case "token":
@@ -118,6 +149,7 @@ export function useChatWs() {
               messages[messages.length - 1] = {
                 ...lastMsg,
                 content: currentMessageRef.current,
+                thinking: currentThinkingRef.current || undefined,
                 toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
               };
             } else {
@@ -125,6 +157,7 @@ export function useChatWs() {
                 id: Date.now().toString(),
                 role: "assistant",
                 content: currentMessageRef.current,
+                thinking: currentThinkingRef.current || undefined,
                 timestamp: Date.now(),
                 toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
               });

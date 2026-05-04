@@ -186,13 +186,35 @@ class ChatWSHandler:
                 if event_type == "on_chat_model_stream":
                     chunk = event.get("data", {}).get("chunk")
                     if chunk and hasattr(chunk, "content"):
-                        token = chunk.content
-                        # Anthropic 返回 list[dict]，需要转换
-                        if isinstance(token, list):
-                            token = "".join(t.get("text", "") if isinstance(t, dict) else str(t) for t in token)
-                        if token:
-                            collected_content += token
-                            await self._send({"type": "token", "content": token})
+                        content = chunk.content
+                        # content 可能是 string 或 list[dict]
+                        if isinstance(content, str):
+                            if content:
+                                collected_content += content
+                                await self._send({"type": "token", "content": content})
+                        elif isinstance(content, list):
+                            # 解析内容块，提取 thinking 和 text
+                            for part in content:
+                                if isinstance(part, dict):
+                                    part_type = part.get("type", "text")
+                                    if part_type == "thinking":
+                                        thinking_text = part.get("thinking", "")
+                                        if thinking_text:
+                                            await self._send({"type": "thinking", "content": thinking_text})
+                                    elif part_type == "text":
+                                        text = part.get("text", "")
+                                        if text:
+                                            collected_content += text
+                                            await self._send({"type": "token", "content": text})
+                                    else:
+                                        # 其他类型尝试提取 text 或 content
+                                        text = part.get("text", "") or part.get("content", "")
+                                        if text:
+                                            collected_content += text
+                                            await self._send({"type": "token", "content": text})
+                                elif isinstance(part, str) and part:
+                                    collected_content += part
+                                    await self._send({"type": "token", "content": part})
 
                 # 工具调用
                 elif event_type == "on_tool_start":
