@@ -82,6 +82,13 @@ class UserConfig:
         _CONFIG_FILE.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
 
     @staticmethod
+    def merge_save(config: dict) -> None:
+        """合并保存配置，保留未在 config 中的字段（如 ssh_connections）"""
+        original = UserConfig.load()
+        original.update(config)
+        UserConfig.save(original)
+
+    @staticmethod
     def get_masked() -> dict:
         """获取脱敏后的配置"""
         config = UserConfig.load()

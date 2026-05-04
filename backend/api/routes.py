@@ -63,7 +63,7 @@ async def save_settings(settings: SettingsModel) -> dict:
     if data.get("api_key") and "****" in data["api_key"]:
         original = UserConfig.load()
         data["api_key"] = original.get("api_key", "")
-    UserConfig.save(data)
+    UserConfig.merge_save(data)
     return {"success": True}
 
 
