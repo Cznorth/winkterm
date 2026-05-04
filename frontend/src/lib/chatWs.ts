@@ -32,6 +32,9 @@ export interface ChatState {
   error: string | null;
   mode: ChatMode;
   model: string;
+  inputTokens: number;
+  outputTokens: number;
+  maxContext: number;
 }
 
 export function useChatWs() {
@@ -42,6 +45,9 @@ export function useChatWs() {
     error: null,
     mode: "craft",
     model: "",
+    inputTokens: 0,
+    outputTokens: 0,
+    maxContext: 200000,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -91,6 +97,9 @@ export function useChatWs() {
     tool?: string;
     args?: Record<string, unknown>;
     result?: string;
+    input_tokens?: number;
+    output_tokens?: number;
+    max_context?: number;
   }) => {
     switch (data.type) {
       case "start":
@@ -201,6 +210,17 @@ export function useChatWs() {
       case "model_changed":
         if (data.model) {
           setState((s) => ({ ...s, model: data.model as string }));
+        }
+        break;
+
+      case "usage":
+        if (typeof data.input_tokens === "number" && typeof data.output_tokens === "number") {
+          setState((s) => ({
+            ...s,
+            inputTokens: data.input_tokens as number,
+            outputTokens: data.output_tokens as number,
+            maxContext: (data.max_context as number) || s.maxContext,
+          }));
         }
         break;
     }

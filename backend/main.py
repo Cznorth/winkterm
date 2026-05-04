@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,6 +21,13 @@ IS_FROZEN = getattr(sys, 'frozen', False)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # 日志配置：压制第三方库的 DEBUG 日志，保留 httpx INFO 看 API 请求
+    logging.getLogger("anthropic").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.INFO)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
     print("=" * 50)
     print("  WinkTerm Backend starting...")
     print(f"  Model       : {settings.llm_model}")

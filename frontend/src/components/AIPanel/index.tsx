@@ -12,7 +12,41 @@ interface ModelInfo {
   name: string;
 }
 
-// 模式图标 (SVG)
+function formatTokens(n: number): string {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "K";
+  return String(n);
+}
+
+function ContextMeter({ inputTokens, outputTokens, maxContext }: { inputTokens: number; outputTokens: number; maxContext: number }) {
+  const total = inputTokens + outputTokens;
+  const pct = Math.min(total / maxContext, 1);
+  const circumference = 2 * Math.PI * 8; // r=8
+  const offset = circumference * (1 - pct);
+  const color = pct > 0.85 ? "var(--error)" : pct > 0.70 ? "var(--warning)" : "var(--success)";
+
+  return (
+    <div className="ctx-meter">
+      <svg viewBox="0 0 22 22" className="ctx-meter-ring">
+        <circle cx="11" cy="11" r="8" className="ctx-meter-track" />
+        <circle cx="11" cy="11" r="8" className="ctx-meter-fill" style={{ stroke: color, strokeDasharray: circumference, strokeDashoffset: offset }} />
+      </svg>
+      <div className="ctx-meter-tooltip">
+        <div className="ctx-meter-tooltip-title">上下文窗口</div>
+        <div className="ctx-meter-tooltip-row">
+          <span>输入</span><span className="ctx-meter-tooltip-val">{formatTokens(inputTokens)}</span>
+        </div>
+        <div className="ctx-meter-tooltip-row">
+          <span>输出</span><span className="ctx-meter-tooltip-val">{formatTokens(outputTokens)}</span>
+        </div>
+        <div className="ctx-meter-tooltip-divider" />
+        <div className="ctx-meter-tooltip-row">
+          <span>总计</span><span className="ctx-meter-tooltip-val">{formatTokens(total)} / {formatTokens(maxContext)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 const MODE_ICONS: Record<ChatMode, JSX.Element> = {
   chat: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -122,7 +156,7 @@ const MODE_INFO: Record<ChatMode, { label: string; desc: string }> = {
 };
 
 export default function AIPanel() {
-  const { messages, isStreaming, isConnected, error, mode, model, sendMessage, stopGeneration, clearMessages, switchMode, switchModel, reconnect } = useChatWs();
+  const { messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, sendMessage, stopGeneration, clearMessages, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
@@ -331,6 +365,11 @@ export default function AIPanel() {
             </span>
             <span className="ai-mode-arrow">▼</span>
           </button>
+        </div>
+
+        {/* 上下文用量 */}
+        <div style={{ marginLeft: "auto" }}>
+          <ContextMeter inputTokens={inputTokens} outputTokens={outputTokens} maxContext={maxContext} />
         </div>
       </div>
     </div>

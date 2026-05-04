@@ -15,6 +15,7 @@ from backend.agent.factory import get_agent
 from backend.agent.core.state import AgentState
 from backend.agent.tools.terminal import get_terminal_context_raw
 from backend.config import UserConfig, settings
+from backend.utils.token_utils import count_tokens, count_history_tokens, fetch_model_context_length
 
 if TYPE_CHECKING:
     from langgraph.graph import CompiledGraph
@@ -32,6 +33,8 @@ class ChatWSHandler:
         self.history: list[HumanMessage | AIMessage] = []  # 会话历史
         self._stop_requested = False  # 停止生成标志
         self._current_task: asyncio.Task | None = None  # 当前处理任务
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
 
     async def handle(self) -> None:
         await self.ws.accept()
@@ -42,6 +45,9 @@ class ChatWSHandler:
         current_model = config.get("selected_model", "")
         if current_model:
             await self._send({"type": "model_changed", "model": current_model})
+
+        # 发送初始 token 使用量
+        await self._send_usage()
 
         # 预加载常用 agent
         try:
@@ -81,6 +87,9 @@ class ChatWSHandler:
                 elif msg_type == "clear":
                     # 清空历史
                     self.history = []
+                    self.total_input_tokens = 0
+                    self.total_output_tokens = 0
+                    await self._send_usage()
                     logger.info("[CLEAR] 会话历史已清空")
                 elif msg_type == "switch_mode":
                     mode = msg.get("mode", "craft")
@@ -98,6 +107,7 @@ class ChatWSHandler:
                     UserConfig.save(config)
                     logger.info(f"[MODEL] 切换到: {model}")
                     await self._send({"type": "model_changed", "model": model})
+                    await self._send_usage()
                 else:
                     logger.warning(f"[MSG] 未知消息类型: {msg_type}")
 
@@ -145,7 +155,6 @@ class ChatWSHandler:
             logger.debug(f"[CHAT] 终端上下文: {len(terminal_output)} 字符")
 
         # 构建消息：历史 + 当前用户消息
-        # 注意：history 已包含当前用户消息，所以直接使用
         messages = list(self.history)
 
         # 初始状态
@@ -213,6 +222,15 @@ class ChatWSHandler:
             if collected_content and not self._stop_requested:
                 self.history.append(AIMessage(content=collected_content))
 
+            # 用 tiktoken 计算 token 用量
+            self.total_input_tokens = count_history_tokens(self.history)
+            self.total_output_tokens += count_tokens(collected_content)
+            logger.info(
+                f"[CHAT] token 用量: 输入={self.total_input_tokens}, "
+                f"输出={self.total_output_tokens}"
+            )
+            await self._send_usage()
+
             # 发送结束标记
             if self._stop_requested:
                 await self._send({"type": "stopped"})
@@ -247,3 +265,19 @@ class ChatWSHandler:
     async def _send_error(self, message: str) -> None:
         """发送错误消息。"""
         await self._send({"type": "error", "message": message})
+
+    async def _send_usage(self) -> None:
+        """发送 token 使用量信息。"""
+        config = UserConfig.load()
+        current_model = config.get("selected_model", "")
+        max_context = 200000
+        if current_model:
+            ctx = await fetch_model_context_length(current_model)
+            if ctx:
+                max_context = ctx
+        await self._send({
+            "type": "usage",
+            "input_tokens": self.total_input_tokens,
+            "output_tokens": self.total_output_tokens,
+            "max_context": max_context,
+        })

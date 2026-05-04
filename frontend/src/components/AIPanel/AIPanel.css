@@ -589,6 +589,87 @@
   margin: 0 4px;
 }
 
+/* ========== 上下文用量圆圈 ========== */
+.ctx-meter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.ctx-meter-ring {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.ctx-meter-track {
+  fill: none;
+  stroke: var(--bg-input);
+  stroke-width: 2;
+}
+
+.ctx-meter-fill {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 11px 11px;
+  transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;
+}
+
+.ctx-meter-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  min-width: 170px;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  animation: dropdownIn 0.15s ease-out;
+}
+
+.ctx-meter:hover .ctx-meter-tooltip {
+  display: block;
+}
+
+.ctx-meter-tooltip-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-secondary);
+  margin-bottom: 8px;
+}
+
+.ctx-meter-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--fg-primary);
+  padding: 3px 0;
+}
+
+.ctx-meter-tooltip-row span:first-child {
+  color: var(--fg-muted);
+}
+
+.ctx-meter-tooltip-val {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  color: var(--fg-primary);
+}
+
+.ctx-meter-tooltip-divider {
+  height: 1px;
+  background: var(--border-default);
+  margin: 6px 0;
+}
+
 /* ========== Markdown 内容样式 ========== */
 .md-content {
   font-size: 13px;
