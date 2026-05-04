@@ -13,7 +13,9 @@
 [![TypeScript](https://img.shields.io/badge/language-TypeScript%20%2F%20Python-blue)](https://github.com/Cznorth/winkterm)
 [![Docker](https://img.shields.io/badge/deploy-Docker-2496ED?logo=docker)](docker-compose.yml)
 [![GitHub Stars](https://img.shields.io/github/stars/Cznorth/winkterm?style=social)](https://github.com/Cznorth/winkterm)
+[![Star History](https://api.star-history.com/svg?repos=Cznorth/winkterm&type=Date)](https://star-history.com/#Cznorth/winkterm&Date)
 [![Twitter](https://img.shields.io/twitter/url?url=https%3A%2F%2Fgithub.com%2FCznorth%2Fwinkterm)](https://twitter.com/intent/tweet?text=WinkTerm%20-%20AI%20that%20shares%20your%20terminal%20session&url=https://github.com/Cznorth/winkterm)
+[![Dev.to](https://img.shields.io/badge/Read%20on-Dev.to-0A0A0A?logo=dev.to)](https://dev.to/cznorth/winkterm-ai-that-shares-your-terminal-session-not-just-command-suggestions-8p9)
 
 </div>
 
@@ -79,7 +81,7 @@ The AI writes directly into your terminal's input line. You stay in control — 
 
 ```bash
 docker run -p 3000:3000 -p 8000:8000 \
-  -e ANTHROPIC_API_KEY=your-key \
+  -e ANTHROPIC_API_KEY=*** \
   ghcr.io/cznorth/winkterm:latest
 ```
 
@@ -234,6 +236,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
   <p>
     <a href="https://github.com/Cznorth/winkterm/issues">Report Bug</a> •
     <a href="https://github.com/Cznorth/winkterm/discussions">Discussion</a> •
+    <a href="https://star-history.com/#Cznorth/winkterm&Date">Star History</a> •
     <a href="https://twitter.com/intent/tweet?text=WinkTerm%20-%20AI%20that%20shares%20your%20terminal%20session&url=https://github.com/Cznorth/winkterm">Share on Twitter</a>
   </p>
 </div>
