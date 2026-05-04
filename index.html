@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WinkTerm — AI that shares your terminal session</title>
+  <meta name="description" content="Open-source AI terminal where the AI types commands directly into your shell — not just suggests them.">
+  <meta property="og:title" content="WinkTerm">
+  <meta property="og:description" content="AI that shares your terminal session. Open source, self-hosted, BYO LLM.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/Cznorth/winkterm/master/assets/demo.gif">
+  <meta property="og:url" content="https://cznorth.github.io/winkterm">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'JetBrains Mono', monospace;
+      background: #0d1117;
+      color: #c9d1d9;
+      line-height: 1.6;
+    }
+    .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+    header {
+      text-align: center;
+      padding: 4rem 0 2rem;
+      border-bottom: 1px solid #30363d;
+    }
+    header h1 { font-size: 3rem; background: linear-gradient(135deg, #58a6ff, #3fb950); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    header p { font-size: 1.2rem; color: #8b949e; margin-top: 0.5rem; }
+    .subtitle { color: #58a6ff; font-size: 1.1rem; margin-top: 0.25rem; }
+    .demo { margin: 3rem 0; text-align: center; }
+    .demo img { max-width: 100%; border-radius: 8px; border: 1px solid #30363d; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    .btn-group { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 2rem 0; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #238636; color: #fff; }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+    .btn-secondary:hover { background: #30363d; }
+    .features {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;
+      margin: 3rem 0;
+    }
+    .feature {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem;
+    }
+    .feature h3 { color: #58a6ff; margin-bottom: 0.5rem; }
+    .feature p { color: #8b949e; font-size: 0.9rem; }
+    .code-block {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem;
+      margin: 2rem 0; overflow-x: auto;
+    }
+    .code-block code { color: #7ee787; }
+    .comparison { margin: 3rem 0; }
+    .comparison table { width: 100%; border-collapse: collapse; }
+    .comparison th, .comparison td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #30363d; }
+    .comparison th { color: #8b949e; font-weight: 600; }
+    .comparison td { color: #c9d1d9; }
+    .check { color: #3fb950; }
+    .cross { color: #f85149; }
+    footer { text-align: center; padding: 3rem 0; color: #8b949e; border-top: 1px solid #30363d; margin-top: 3rem; }
+    footer a { color: #58a6ff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>WinkTerm</h1>
+      <p>AI that shares your terminal session.</p>
+      <div class="subtitle">Not a chatbot that suggests commands. A collaborator that types alongside you in the same PTY.</div>
+    </header>
+
+    <div class="btn-group">
+      <a class="btn btn-primary" href="https://github.com/Cznorth/winkterm">
+        ⭐ GitHub
+      </a>
+      <a class="btn btn-primary" href="https://github.com/Cznorth/winkterm#%EF%B8%8F-quick-start">
+        🚀 Quick Start
+      </a>
+      <a class="btn btn-secondary" href="https://dev.to/cznorth/winkterm-ai-that-shares-your-terminal-session-not-just-command-suggestions-8p9">
+        📖 Read the Article
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/Cznorth/winkterm/blob/master/docs/architecture.md">
+        🏗 Architecture
+      </a>
+    </div>
+
+    <div class="demo">
+      <img src="https://raw.githubusercontent.com/Cznorth/winkterm/master/assets/demo.gif" alt="WinkTerm Demo">
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <h3>🖥 Shared PTY Session</h3>
+        <p>AI and user operate in the same terminal process. No copy-paste, no "run this command" without context.</p>
+      </div>
+      <div class="feature">
+        <h3># In-Terminal Chat</h3>
+        <p>Type # followed by your question right where your shell prompt is. No alt-tab needed.</p>
+      </div>
+      <div class="feature">
+        <h3>🔌 SSH + File Transfer</h3>
+        <p>Connect to remote servers with AI-assisted operations and built-in file transfer.</p>
+      </div>
+      <div class="feature">
+        <h3>🧠 Multi-Model Support</h3>
+        <p>Bring your own LLM. OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint.</p>
+      </div>
+      <div class="feature">
+        <h3>🐳 Docker & Desktop</h3>
+        <p>Deploy instantly with <code>docker compose up</code> or download the desktop app.</p>
+      </div>
+      <div class="feature">
+        <h3>🔓 Open Source</h3>
+        <p>MIT licensed. Self-hosted. No data leaves your infrastructure unless you choose.</p>
+      </div>
+    </div>
+
+    <h2 id="getting-started">🚀 Getting Started</h2>
+    <div class="code-block">
+      <code>
+$ docker run -p 3000:3000 -p 8000:8000 \<br>
+&nbsp;&nbsp;-e ANTHROPIC_API_KEY=your-key-here \<br>
+&nbsp;&nbsp;ghcr.io/cznorth/winkterm:latest
+      </code>
+    </div>
+    <p>Then open <strong>http://localhost:3000</strong></p>
+
+    <div class="comparison">
+      <h2>🔥 Why WinkTerm?</h2>
+      <table>
+        <tr><th>Feature</th><th>WinkTerm</th><th>Warp</th><th>Tabby</th><th>Claude Code</th></tr>
+        <tr><td>Shared PTY</td><td class="check">✅</td><td class="cross">❌</td><td class="cross">❌</td><td class="cross">❌</td></tr>
+        <tr><td>Open source</td><td class="check">✅</td><td class="cross">❌</td><td class="check">✅</td><td class="cross">❌</td></tr>
+        <tr><td>Self-hosted / BYO LLM</td><td class="check">✅</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
+        <tr><td>Web UI</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td><td class="cross">❌</td></tr>
+        <tr><td>SSH + file transfer</td><td class="check">✅</td><td class="cross">❌</td><td class="check">✅</td><td class="cross">❌</td></tr>
+        <tr><td>Desktop app</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td><td class="cross">❌</td></tr>
+      </table>
+    </div>
+
+    <div class="code-block">
+      <h3>📦 docker-compose</h3>
+      <code>
+$ git clone https://github.com/Cznorth/winkterm.git<br>
+$ cd winkterm<br>
+$ cp .env.example .env<br>
+$ docker compose up -d
+      </code>
+    </div>
+
+    <footer>
+      <p>MIT License © 2026 <a href="https://github.com/Cznorth">Cznorth</a></p>
+      <p>
+        <a href="https://github.com/Cznorth/winkterm">GitHub</a> •
+        <a href="https://github.com/Cznorth/winkterm/issues">Issues</a> •
+        <a href="https://github.com/Cznorth/winkterm/discussions">Discussions</a> •
+        <a href="https://star-history.com/#Cznorth/winkterm&Date">Star History</a>
+      </p>
+      <p style="margin-top:1rem;font-size:0.85rem">
+        <a href="https://dev.to/cznorth/winkterm-ai-that-shares-your-terminal-session-not-just-command-suggestions-8p9">Read the full article on Dev.to →</a>
+      </p>
+    </footer>
+  </div>
+</body>
+</html>
