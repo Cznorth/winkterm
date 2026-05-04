@@ -16,5 +16,10 @@ jobs:
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "GITEE_TOKEN not set. Skipping Gitee sync."
+            echo "To enable, create a Gitee personal access token and add it as GITEE_TOKEN secret."
+            exit 0
+          fi
           git remote add gitee https://Cznorth:${GITEE_TOKEN}@gitee.com/Cznorth/winkterm.git
           git push -f gitee master
