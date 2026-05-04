@@ -153,6 +153,8 @@
   top: 100%;
   left: 0;
   min-width: 180px;
+  max-height: 300px;
+  overflow-y: auto;
   background: var(--bg-primary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -160,6 +162,23 @@
   z-index: 100;
   padding: 4px 0;
   animation: dropdownIn 0.15s ease-out;
+}
+
+.tab-add-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tab-add-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tab-add-dropdown::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+.tab-add-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-muted);
 }
 
 @keyframes dropdownIn {
