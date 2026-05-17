@@ -8,12 +8,25 @@ import tiktoken
 
 logger = logging.getLogger("token_utils")
 
-_tokenizer = tiktoken.get_encoding("cl100k_base")
+_tokenizer = None
+
+
+def _get_tokenizer():
+    global _tokenizer
+    if _tokenizer is None:
+        try:
+            _tokenizer = tiktoken.get_encoding("cl100k_base")
+        except Exception as e:
+            logger.warning(f"tiktoken 加载失败，使用空格分词降级: {e}")
+            _tokenizer = False
+    return _tokenizer
 
 
 def count_tokens(text: str) -> int:
-    """用 tiktoken 计算 token 数。"""
-    return len(_tokenizer.encode(text))
+    tok = _get_tokenizer()
+    if tok:
+        return len(tok.encode(text))
+    return len(text.split())
 
 
 def count_history_tokens(history: list) -> int:
