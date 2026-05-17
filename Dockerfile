@@ -16,18 +16,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Use Aliyun apt mirror
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources \
-    && apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     curl \
     openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies (Tsinghua mirror)
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
 COPY backend/ /app/backend/
