@@ -1,4 +1,10 @@
 <div align="center">
+
+[中文版本](README.zh-CN.md)
+
+</div>
+
+<div align="center">
   <img src="assets/logo.svg" alt="WinkTerm Logo" width="120"/>
   <h1>WinkTerm</h1>
   <p><strong>AI that shares your terminal session.</strong></p>
