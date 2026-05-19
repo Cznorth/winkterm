@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 
 import tiktoken
+from tiktoken.core import Encoding
+from tiktoken_ext.openai_public import cl100k_base as _cl100k_base_constructor
 
 logger = logging.getLogger("token_utils")
 
-_tokenizer = tiktoken.get_encoding("cl100k_base")
+_tokenizer = Encoding(**_cl100k_base_constructor())
 
 
 def count_tokens(text: str) -> int:
