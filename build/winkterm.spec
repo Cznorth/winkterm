@@ -141,6 +141,9 @@ a = Analysis(
         "pydantic_settings",
         # websockets
         "websockets",
+        # tiktoken
+        "tiktoken_ext",
+        "tiktoken_ext.openai_public",
     ],
     hookspath=[],
     hooksconfig={},
@@ -202,7 +205,7 @@ elif IS_MACOS:
         bootloader_ignore_signals=False,
         strip=False,
         upx=True,
-        console=False,
+        console=True,
         disable_windowed_traceback=False,
         argv_emulation=False,
         target_arch=None,
