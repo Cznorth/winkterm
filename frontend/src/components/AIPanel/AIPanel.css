@@ -126,6 +126,32 @@
   color: var(--fg-primary);
 }
 
+.ai-tab-regen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s, background 0.1s, color 0.1s;
+}
+
+.ai-tab:hover .ai-tab-regen,
+.ai-tab.active .ai-tab-regen {
+  opacity: 1;
+}
+
+.ai-tab-regen:hover {
+  background: var(--bg-hover);
+  color: var(--accent-light);
+}
+
 .ai-tab-new {
   display: flex;
   align-items: center;
@@ -206,23 +232,6 @@
 .ai-status-dot.disconnected {
   background: var(--error);
   box-shadow: 0 0 4px var(--error);
-}
-
-.ai-clear-btn {
-  padding: 4px 10px;
-  font-size: 11px;
-  background: transparent;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--fg-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.ai-clear-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
-  color: var(--fg-primary);
 }
 
 /* ========== 消息区域 ========== */

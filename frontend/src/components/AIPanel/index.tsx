@@ -223,12 +223,14 @@ function ConvTabs({
   onSwitch,
   onNew,
   onDelete,
+  onRegenerateTitle,
 }: {
   conversations: Conversation[];
   activeConvId: string;
   onSwitch: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
+  onRegenerateTitle: (id: string) => void;
 }) {
   const { t } = useI18n();
   const listRef = useRef<HTMLDivElement>(null);
@@ -294,6 +296,28 @@ function ConvTabs({
             <span className="ai-tab-title">
               {conv.title || `${t("ai.conversation")} ${i + 1}`}
             </span>
+            {conv.messages.length > 0 && (
+              <button
+                className="ai-tab-regen"
+                title={t("ai.regenerateTitle")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRegenerateTitle(conv.id);
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="11" height="11">
+                  <path d="m3 21 9-9" />
+                  <path d="M15 4V2" />
+                  <path d="M15 16v-2" />
+                  <path d="M8 9h2" />
+                  <path d="M20 9h2" />
+                  <path d="M17.8 11.8 19 13" />
+                  <path d="M15 9h.01" />
+                  <path d="M17.8 6.2 19 5" />
+                  <path d="M12.2 6.2 11 5" />
+                </svg>
+              </button>
+            )}
             {conversations.length > 1 && (
               <button
                 className="ai-tab-close"
@@ -327,7 +351,7 @@ function ConvTabs({
 
 export default function AIPanel() {
   const { t } = useI18n();
-  const { conversations, activeConvId, messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, messageQueue, sendMessage, stopGeneration, interruptAndSend, removeFromQueue, clearMessages, newConversation, switchConversation, deleteConversation, updateConvTitle, switchMode, switchModel, reconnect } = useChatWs();
+  const { conversations, activeConvId, messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, messageQueue, sendMessage, stopGeneration, interruptAndSend, removeFromQueue, newConversation, switchConversation, deleteConversation, updateConvTitle, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
@@ -407,14 +431,27 @@ export default function AIPanel() {
     setSuggestions([]);
 
     if (isFirstMessage) {
-      axios.post("/api/chat/title", { message: text })
+      axios.post("/api/chat/title", { messages: [{ role: "user", content: text }] })
         .then((res) => {
-          console.log("[AIPanel] title response:", res.data, "convId:", convId);
           if (res.data.title) updateConvTitle(convId, res.data.title);
         })
-        .catch((e) => console.error("[AIPanel] title error:", e));
+        .catch(() => {});
     }
   };
+
+  const handleRegenerateTitle = useCallback((convId: string) => {
+    const conv = conversations.find((c) => c.id === convId);
+    if (!conv || conv.messages.length === 0) return;
+    const payload = conv.messages.slice(0, 8).map((m) => ({
+      role: m.role,
+      content: typeof m.content === "string" ? m.content : "",
+    }));
+    axios.post("/api/chat/title", { messages: payload })
+      .then((res) => {
+        if (res.data.title) updateConvTitle(convId, res.data.title);
+      })
+      .catch(() => {});
+  }, [conversations, updateConvTitle]);
 
   const handleModeSelect = (m: ChatMode) => {
     switchMode(m);
@@ -441,9 +478,6 @@ export default function AIPanel() {
             <span className={`ai-status-dot ${isConnected ? "" : "disconnected"}`} />
             {isConnected ? t("ai.connected") : t("ai.disconnected")}
           </div>
-          <button className="ai-clear-btn" onClick={clearMessages}>
-            {t("ai.clear")}
-          </button>
         </div>
       </div>
 
@@ -453,6 +487,7 @@ export default function AIPanel() {
         onSwitch={switchConversation}
         onNew={newConversation}
         onDelete={deleteConversation}
+        onRegenerateTitle={handleRegenerateTitle}
       />
 
       <div className="ai-messages">

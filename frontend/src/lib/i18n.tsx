@@ -110,7 +110,6 @@ const translations = {
   "ai.thinking": { zh: "思考中", en: "Thinking" },
   "ai.connected": { zh: "已连接", en: "Connected" },
   "ai.disconnected": { zh: "未连接", en: "Disconnected" },
-  "ai.clear": { zh: "清空", en: "Clear" },
   "ai.chatMode": { zh: "Chat Mode", en: "Chat Mode" },
   "ai.craftMode": { zh: "Craft Mode", en: "Craft Mode" },
   "ai.chatLabel": { zh: "Chat", en: "Chat" },
@@ -130,6 +129,7 @@ const translations = {
   "ai.connectionFailed": { zh: "连接失败", en: "Connection failed" },
   "ai.conversation": { zh: "对话", en: "Chat" },
   "ai.newConversation": { zh: "新建对话", en: "New conversation" },
+  "ai.regenerateTitle": { zh: "重新生成标题", en: "Regenerate title" },
 
   // === File Transfer ===
   "ft.title": { zh: "远程文件管理器", en: "Remote File Manager" },

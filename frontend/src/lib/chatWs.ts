@@ -64,12 +64,13 @@ function makeConversation(id?: string): Conversation {
   };
 }
 
-// Helper: update active conversation and sync derived fields
-function updateActiveConv(s: ChatState, updater: (conv: Conversation) => Conversation): ChatState {
+// Helper: update a specific conversation by id and sync derived fields
+function updateConv(s: ChatState, convId: string, updater: (conv: Conversation) => Conversation): ChatState {
   const conversations = s.conversations.map((c) =>
-    c.id === s.activeConvId ? updater(c) : c
+    c.id === convId ? updater(c) : c
   );
-  const activeConv = conversations.find((c) => c.id === s.activeConvId)!;
+  const activeConv = conversations.find((c) => c.id === s.activeConvId);
+  if (!activeConv) return { ...s, conversations };
   return {
     ...s,
     conversations,
@@ -77,6 +78,11 @@ function updateActiveConv(s: ChatState, updater: (conv: Conversation) => Convers
     inputTokens: activeConv.inputTokens,
     outputTokens: activeConv.outputTokens,
   };
+}
+
+// Helper: update active conversation and sync derived fields
+function updateActiveConv(s: ChatState, updater: (conv: Conversation) => Conversation): ChatState {
+  return updateConv(s, s.activeConvId, updater);
 }
 
 const initialConv = makeConversation("1");
@@ -105,6 +111,8 @@ export function useChatWs() {
   const currentSegmentRef = useRef<string>("");
   const isStreamingRef = useRef(false);
   const messageQueueRef = useRef<string[]>([]);
+  const activeConvIdRef = useRef<string>(initialConv.id);
+  const streamingConvIdRef = useRef<string>("");
 
   // 连接 WebSocket
   const connect = useCallback(() => {
@@ -169,7 +177,7 @@ export function useChatWs() {
         if (data.content) {
           currentThinkingRef.current += data.content;
           setState((s) =>
-            updateActiveConv(s, (conv) => {
+            updateConv(s, streamingConvIdRef.current, (conv) => {
               const messages = [...conv.messages];
               const lastMsg = messages[messages.length - 1];
               if (lastMsg?.role === "assistant") {
@@ -204,7 +212,7 @@ export function useChatWs() {
             { type: "text", text: currentSegmentRef.current },
           ];
           setState((s) =>
-            updateActiveConv(s, (conv) => {
+            updateConv(s, streamingConvIdRef.current, (conv) => {
               const messages = [...conv.messages];
               const lastMsg = messages[messages.length - 1];
               if (lastMsg?.role === "assistant") {
@@ -255,7 +263,7 @@ export function useChatWs() {
           ];
           const toolStartBlocks: ContentBlock[] = [...currentBlocksRef.current];
           setState((s) =>
-            updateActiveConv(s, (conv) => {
+            updateConv(s, streamingConvIdRef.current, (conv) => {
               const messages = [...conv.messages];
               const lastMsg = messages[messages.length - 1];
               if (lastMsg?.role === "assistant") {
@@ -289,7 +297,7 @@ export function useChatWs() {
           });
           const toolEndBlocks: ContentBlock[] = [...currentBlocksRef.current];
           setState((s) =>
-            updateActiveConv(s, (conv) => {
+            updateConv(s, streamingConvIdRef.current, (conv) => {
               const messages = [...conv.messages];
               const lastMsg = messages[messages.length - 1];
               if (lastMsg?.role === "assistant") {
@@ -308,7 +316,7 @@ export function useChatWs() {
       case "end":
         isStreamingRef.current = false;
         setState((s) => {
-          const updated = updateActiveConv(s, (conv) => {
+          const updated = updateConv(s, streamingConvIdRef.current, (conv) => {
             const messages = [...conv.messages];
             const lastMsg = messages[messages.length - 1];
             if (lastMsg?.role === "assistant" && data.content) {
@@ -345,7 +353,7 @@ export function useChatWs() {
       case "usage":
         if (typeof data.input_tokens === "number" && typeof data.output_tokens === "number") {
           setState((s) => {
-            const updated = updateActiveConv(s, (conv) => ({
+            const updated = updateConv(s, streamingConvIdRef.current, (conv) => ({
               ...conv,
               inputTokens: data.input_tokens as number,
               outputTokens: data.output_tokens as number,
@@ -363,6 +371,9 @@ export function useChatWs() {
   // 实际发送（不检查 streaming 状态）
   const rawSend = useCallback((content: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    // 绑定本次流式输出到发起对话，避免新建/切换对话后输出串台
+    streamingConvIdRef.current = activeConvIdRef.current;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -424,25 +435,6 @@ export function useChatWs() {
     const next = messageQueueRef.current.filter((_, i) => i !== index);
     messageQueueRef.current = next;
     setState((s) => ({ ...s, messageQueue: next }));
-  }, []);
-
-  // 清空当前对话消息
-  const clearMessages = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "clear" }));
-    }
-    messageQueueRef.current = [];
-    isStreamingRef.current = false;
-    setState((s) =>
-      updateActiveConv(s, (conv) => ({
-        ...conv,
-        messages: [],
-        inputTokens: 0,
-        outputTokens: 0,
-        title: "",
-      }))
-    );
-    setState((s) => ({ ...s, messageQueue: [], isStreaming: false }));
   }, []);
 
   // 新建对话
@@ -562,6 +554,11 @@ export function useChatWs() {
     }
   }, []);
 
+  // 同步当前激活对话 id 到 ref
+  useEffect(() => {
+    activeConvIdRef.current = state.activeConvId;
+  }, [state.activeConvId]);
+
   // 自动连接
   useEffect(() => {
     connect();
@@ -576,7 +573,6 @@ export function useChatWs() {
     stopGeneration,
     interruptAndSend,
     removeFromQueue,
-    clearMessages,
     newConversation,
     switchConversation,
     deleteConversation,

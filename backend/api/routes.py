@@ -113,19 +113,19 @@ async def fetch_models(req: ModelsRequest) -> dict:
 
 # === 对话标题生成 ===
 class TitleRequest(BaseModel):
-    message: str
+    messages: list[dict]  # [{"role": "user"|"assistant", "content": str}]
 
 
 @router.post("/chat/title")
 async def generate_title(req: TitleRequest) -> dict:
-    """根据首条用户消息用 AI 生成简短对话标题"""
+    """根据对话内容用 AI 生成简短对话标题"""
     user_config = UserConfig.load()
     api_format = user_config.get("api_format", "openai")
     base_url = user_config.get("base_url") or settings.effective_base_url
     api_key = user_config.get("api_key") or settings.effective_api_key
     model = user_config.get("selected_model") or settings.effective_model
 
-    if not api_key or not model:
+    if not api_key or not model or not req.messages:
         return {"title": ""}
 
     try:
@@ -147,17 +147,23 @@ async def generate_title(req: TitleRequest) -> dict:
                 base_url=base_url if base_url else None,
             )
 
+        recent = req.messages[:8]
+        history_text = "\n".join(
+            f"{m['role'].upper()}: {str(m.get('content', ''))[:300]}"
+            for m in recent
+        )
         system = SystemMessage(content=(
-            "Generate a very short title (3-5 words) for a conversation that starts with the user message below. "
+            "Generate a very short title (3-5 words) summarizing the conversation below. "
+            "Ignore greetings and pleasantries; focus on the actual topic or task. "
             "Return ONLY the title text, no quotes, no trailing punctuation."
         ))
-        response = await llm.ainvoke([system, HumanMessage(content=req.message)])
+        response = await llm.ainvoke([system, HumanMessage(content=history_text)])
         content = response.content
         if isinstance(content, list):
             text_blocks = [b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text"]
             content = " ".join(text_blocks)
         title = str(content).strip().strip('"')
-        logger.info(f"Generated title: {title!r} for message: {req.message[:50]!r}")
+        logger.info(f"Generated title: {title!r} from {len(recent)} messages")
         return {"title": title}
     except Exception as e:
         logger.warning(f"Title generation failed: {e}")
