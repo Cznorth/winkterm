@@ -329,6 +329,7 @@ export default function AIPanel() {
   const { t } = useI18n();
   const { conversations, activeConvId, messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, sendMessage, stopGeneration, clearMessages, newConversation, switchConversation, deleteConversation, updateConvTitle, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -360,6 +361,25 @@ export default function AIPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const prevIsStreamingRef = useRef(false);
+  useEffect(() => {
+    const wasStreaming = prevIsStreamingRef.current;
+    prevIsStreamingRef.current = isStreaming;
+    if (wasStreaming && !isStreaming && messages.length > 0) {
+      // Streaming just finished — fetch follow-up suggestions
+      const payload = messages.slice(-6).map((m) => ({
+        role: m.role,
+        content: typeof m.content === "string" ? m.content : "",
+      }));
+      axios.post("/api/chat/suggestions", { messages: payload })
+        .then((res) => setSuggestions(res.data.suggestions || []))
+        .catch(() => setSuggestions([]));
+    }
+    if (isStreaming) {
+      setSuggestions([]);
+    }
+  }, [isStreaming, messages]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) {
@@ -384,6 +404,7 @@ export default function AIPanel() {
 
     sendMessage(text);
     setInput("");
+    setSuggestions([]);
 
     if (isFirstMessage) {
       axios.post("/api/chat/title", { message: text })
@@ -455,6 +476,23 @@ export default function AIPanel() {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {suggestions.length > 0 && !isStreaming && (
+        <div className="ai-suggestions">
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              className="ai-suggestion-chip"
+              onClick={() => {
+                sendMessage(s);
+                setSuggestions([]);
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="ai-error">

@@ -1048,3 +1048,37 @@
   border-top: 1px solid var(--border-default);
   margin: 16px 0;
 }
+
+/* ========== 续接建议 Chips ========== */
+.ai-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.ai-suggestion-chip {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--fg-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-suggestion-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--fg-primary);
+}
+

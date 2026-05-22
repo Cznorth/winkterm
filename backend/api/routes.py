@@ -164,6 +164,68 @@ async def generate_title(req: TitleRequest) -> dict:
         return {"title": ""}
 
 
+# === 对话续接建议 ===
+class SuggestionsRequest(BaseModel):
+    messages: list[dict]  # [{"role": "user"|"assistant", "content": str}]
+
+
+@router.post("/chat/suggestions")
+async def generate_suggestions(req: SuggestionsRequest) -> dict:
+    """根据对话历史生成 3 条用户可能继续发送的消息建议"""
+    user_config = UserConfig.load()
+    api_format = user_config.get("api_format", "openai")
+    base_url = user_config.get("base_url") or settings.effective_base_url
+    api_key = user_config.get("api_key") or settings.effective_api_key
+    model = user_config.get("selected_model") or settings.effective_model
+
+    if not api_key or not model or not req.messages:
+        return {"suggestions": []}
+
+    # 取最近若干轮对话作为上下文（避免 token 过多）
+    recent = req.messages[-6:]
+    history_text = "\n".join(
+        f"{m['role'].upper()}: {str(m.get('content', ''))[:300]}"
+        for m in recent
+    )
+
+    try:
+        if api_format == "anthropic":
+            llm = ChatAnthropic(
+                model=model,
+                temperature=1,
+                max_tokens=200,
+                api_key=api_key,
+                base_url=base_url.split("/v1")[0] if base_url else None,
+                thinking={"type": "disabled"},
+            )
+        else:
+            llm = ChatOpenAI(
+                model=model,
+                temperature=0.7,
+                max_tokens=200,
+                api_key=api_key,
+                base_url=base_url if base_url else None,
+            )
+
+        system = SystemMessage(content=(
+            "You are a helpful assistant. Based on the conversation below, generate exactly 3 short follow-up questions or messages "
+            "the user might want to send next. Each suggestion should be concise (under 15 words). "
+            "Return ONLY the 3 suggestions, one per line, no numbering, no bullets, no extra text."
+        ))
+        response = await llm.ainvoke([system, HumanMessage(content=history_text)])
+        content = response.content
+        if isinstance(content, list):
+            text_blocks = [b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text"]
+            content = " ".join(text_blocks)
+        lines = [line.strip().lstrip("0123456789.-) ") for line in str(content).strip().splitlines() if line.strip()]
+        suggestions = lines[:3]
+        logger.info(f"Generated {len(suggestions)} suggestions")
+        return {"suggestions": suggestions}
+    except Exception as e:
+        logger.warning(f"Suggestions generation failed: {e}")
+        return {"suggestions": []}
+
+
 # === 历史记录 ===
 @router.get("/history")
 async def get_history() -> dict[str, Any]:
