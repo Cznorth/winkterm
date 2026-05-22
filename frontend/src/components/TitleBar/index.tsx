@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { WinkTermLogo } from "@/components/Logo";
+import { useI18n } from "@/lib/i18n";
 import "./TitleBar.css";
 
 // 声明 pywebview API 类型
@@ -278,6 +279,7 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
 }
 
 export default function TitleBar() {
+  const { t } = useI18n();
   const [isMaximized, setIsMaximized] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [isMac, setIsMac] = useState(false);
@@ -382,13 +384,13 @@ export default function TitleBar() {
           // Mac 风格：红黄绿按钮在左侧
           <>
             <div className={`title-bar-traffic-lights ${!isWindowFocused ? "dimmed" : ""}`}>
-              <button className="traffic-light close" onClick={handleClose} title="关闭">
+              <button className="traffic-light close" onClick={handleClose} title={t("titlebar.close")}>
                 <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" fill="none" /></svg>
               </button>
-              <button className="traffic-light minimize" onClick={handleMinimize} title="最小化">
+              <button className="traffic-light minimize" onClick={handleMinimize} title={t("titlebar.minimize")}>
                 <svg viewBox="0 0 12 12"><rect x="2" y="5.5" width="8" height="1.5" fill="currentColor" /></svg>
               </button>
-              <button className="traffic-light maximize" onClick={handleMaximize} title={isMaximized ? "还原" : "最大化"}>
+              <button className="traffic-light maximize" onClick={handleMaximize} title={isMaximized ? t("titlebar.restore") : t("titlebar.maximize")}>
                 {isMaximized ? (
                   <svg viewBox="0 0 12 12">
                     <rect x="3" y="1" width="6" height="6" fill="none" stroke="currentColor" strokeWidth="1" />
@@ -420,12 +422,12 @@ export default function TitleBar() {
               <span className="title-bar-title">WinkTerm</span>
             </div>
             <div className="title-bar-controls">
-              <button className="title-bar-btn minimize" onClick={handleMinimize} title="最小化">
+              <button className="title-bar-btn minimize" onClick={handleMinimize} title={t("titlebar.minimize")}>
                 <svg viewBox="0 0 12 12">
                   <rect x="2" y="5.5" width="8" height="1" fill="currentColor" />
                 </svg>
               </button>
-              <button className="title-bar-btn maximize" onClick={handleMaximize} title={isMaximized ? "还原" : "最大化"}>
+              <button className="title-bar-btn maximize" onClick={handleMaximize} title={isMaximized ? t("titlebar.restore") : t("titlebar.maximize")}>
                 {isMaximized ? (
                   <svg viewBox="0 0 12 12">
                     <rect x="3" y="1" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" />
@@ -437,7 +439,7 @@ export default function TitleBar() {
                   </svg>
                 )}
               </button>
-              <button className="title-bar-btn close" onClick={handleClose} title="关闭">
+              <button className="title-bar-btn close" onClick={handleClose} title={t("titlebar.close")}>
                 <svg viewBox="0 0 12 12">
                   <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.2" fill="none" />
                 </svg>

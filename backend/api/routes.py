@@ -41,6 +41,7 @@ class SettingsModel(BaseModel):
     api_key: str = ""
     models: list[ModelInfo] = []
     selected_model: str = ""
+    language: str = ""
 
 
 class ModelsRequest(BaseModel):

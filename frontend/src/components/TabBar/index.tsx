@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { TabState } from "@/hooks/useTabs";
 import axios from "@/lib/axios";
+import { useI18n } from "@/lib/i18n";
 import "./TabBar.css";
 
 interface SSHConnection {
@@ -66,6 +67,7 @@ export default function TabBar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const { t } = useI18n();
   const [sshConnections, setSSHConnections] = useState<SSHConnection[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -184,7 +186,7 @@ export default function TabBar({
                   e.stopPropagation();
                   onTabClose(tab.id);
                 }}
-                title="关闭"
+                title={t("tabbar.close")}
               >
                 ×
               </button>
@@ -197,7 +199,7 @@ export default function TabBar({
           <button
             className={`tab-add ${showDropdown ? "active" : ""}`}
             onClick={handleDropdownToggle}
-            title="新建终端"
+            title={t("tabbar.newTerminal")}
           >
             +
           </button>
@@ -220,13 +222,13 @@ export default function TabBar({
         >
           <div className="dropdown-item" onClick={handleNewLocal}>
             <TerminalIcon />
-            <span>本地终端</span>
+            <span>{t("tabbar.localTerminal")}</span>
           </div>
 
           {sshConnections.length > 0 && (
             <>
               <div className="dropdown-divider" />
-              <div className="dropdown-header">SSH 连接</div>
+              <div className="dropdown-header">{t("tabbar.sshConnection")}</div>
               {sshConnections.map((conn) => (
                 <div
                   key={conn.id}

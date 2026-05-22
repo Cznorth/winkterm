@@ -1,0 +1,105 @@
+.language-selector-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.language-selector-dialog {
+  width: min(400px, 100%);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.language-selector-header {
+  padding: 20px 24px 12px;
+  text-align: center;
+}
+
+.language-selector-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: rgba(0, 120, 212, 0.12);
+  color: var(--accent-light);
+}
+
+.language-selector-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.language-selector-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg-primary);
+  margin-bottom: 4px;
+}
+
+.language-selector-subtitle {
+  font-size: 13px;
+  color: var(--fg-secondary);
+}
+
+.language-selector-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 24px 24px;
+}
+
+.language-selector-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--fg-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.language-selector-option:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+.language-selector-option:active {
+  background: var(--bg-active);
+  border-color: var(--accent-primary);
+}
+
+.language-selector-flag {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.language-selector-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.language-selector-label-primary {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.language-selector-label-secondary {
+  font-size: 12px;
+  color: var(--fg-secondary);
+}

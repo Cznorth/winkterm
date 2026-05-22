@@ -74,7 +74,8 @@ export function useChatWs() {
 
     ws.onerror = () => {
       console.error("[ChatWS] Error");
-      setState((s) => ({ ...s, error: "连接失败" }));
+      const lang = localStorage.getItem("winkterm-language");
+      setState((s) => ({ ...s, error: lang === "zh" ? "连接失败" : "Connection failed" }));
     };
 
     ws.onmessage = (event) => {

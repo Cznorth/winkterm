@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import axios from "@/lib/axios";
+import { useI18n } from "@/lib/i18n";
 import FileTransferDialog from "@/components/FileTransferDialog";
 import "./SSHPanel.css";
 
@@ -39,6 +40,7 @@ const TransferIcon = () => (
 );
 
 export default function SSHPanel({ onConnect }: SSHPanelProps) {
+  const { t } = useI18n();
   const [connections, setConnections] = useState<SSHConnection[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -106,7 +108,7 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
       loadConnections();
     } catch (err) {
       console.error("Import failed:", err);
-      alert("Import failed. Check the file format.");
+      alert(t("ssh.importFailed"));
     }
 
     if (fileInputRef.current) {
@@ -201,27 +203,27 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
   return (
     <div className="ssh-panel">
       <div className="ssh-header">
-        <span className="ssh-header-title">SSH Connections</span>
+        <span className="ssh-header-title">{t("ssh.title")}</span>
         <div className="ssh-header-actions">
-          <span className="ssh-header-hint">Connections support file transfer</span>
+          <span className="ssh-header-hint">{t("ssh.subtitle")}</span>
           <div className="ssh-header-menu" ref={actionMenuRef}>
             <button
               className="ssh-btn ssh-btn-secondary"
               onClick={() => setActionMenuOpen((current) => !current)}
-              title="More actions"
+              title={t("ssh.more")}
             >
-              More
+              {t("ssh.more")}
             </button>
             {actionMenuOpen && (
               <div className="ssh-header-dropdown">
                 <button className="ssh-header-menu-item" onClick={handleNewConnection}>
-                  New connection
+                  {t("ssh.newConnection")}
                 </button>
                 <button className="ssh-header-menu-item" onClick={handleQuickTransfer} disabled={connections.length === 0}>
-                  File transfer
+                  {t("ssh.fileTransfer")}
                 </button>
                 <button className="ssh-header-menu-item" onClick={handleImportClick}>
-                  Import connections
+                  {t("ssh.importConnections")}
                 </button>
               </div>
             )}
@@ -240,10 +242,10 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
         <div className="ssh-list">
           {connections.length === 0 ? (
             <div className="ssh-empty">
-              <p>No SSH connections</p>
-              <p>Click &quot;More&quot; &gt; &quot;New connection&quot; to add one</p>
+              <p>{t("ssh.noConnections")}</p>
+              <p>{t("ssh.noConnectionsHint")}</p>
               <button className="ssh-empty-action" onClick={handleQuickTransfer}>
-                Open file transfer
+                {t("ssh.openFileTransfer")}
               </button>
             </div>
           ) : (
@@ -264,16 +266,16 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
                     <button
                       className="ssh-item-btn connect"
                       onClick={() => onConnect(conn)}
-                      title="Connect"
+                      title={t("ssh.connect")}
                     >
-                      Connect
+                      {t("ssh.connect")}
                     </button>
                   )}
                   <button
                     className="ssh-item-btn transfer"
                     onClick={() => handleOpenTransfer(conn)}
-                    title="File transfer"
-                    aria-label="File transfer"
+                    title={t("ssh.fileTransfer")}
+                    aria-label={t("ssh.fileTransfer")}
                   >
                     <TransferIcon />
                   </button>
@@ -281,13 +283,13 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
                     className="ssh-item-btn"
                     onClick={() => handleEdit(conn)}
                   >
-                    Edit
+                    {t("ssh.edit")}
                   </button>
                   <button
                     className="ssh-item-btn delete"
                     onClick={() => handleDelete(conn.id)}
                   >
-                    Delete
+                    {t("ssh.delete")}
                   </button>
                 </div>
               </div>
@@ -298,35 +300,35 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
         {showForm && (
           <div className="ssh-form">
             <div className="ssh-form-header">
-              <h3>{editingId ? "Edit Connection" : "New Connection"}</h3>
-              <button className="ssh-form-close" onClick={() => setShowForm(false)} title="Close">
+              <h3>{editingId ? t("ssh.editConnection") : t("ssh.newConnectionTitle")}</h3>
+              <button className="ssh-form-close" onClick={() => setShowForm(false)} title={t("ssh.close")}>
                 ✕
               </button>
             </div>
 
             <div className="ssh-form-body">
               <div className="ssh-form-row">
-                <label>Name</label>
+                <label>{t("ssh.name")}</label>
                 <input
                   type="text"
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder="Server name (optional)"
+                  placeholder={t("ssh.namePlaceholder")}
                 />
               </div>
 
               <div className="ssh-form-row">
-                <label>Host *</label>
+                <label>{t("ssh.host")}</label>
                 <input
                   type="text"
                   value={form.host}
                   onChange={(e) => setForm({ ...form, host: e.target.value })}
-                  placeholder="IP or domain"
+                  placeholder={t("ssh.hostPlaceholder")}
                 />
               </div>
 
               <div className="ssh-form-row">
-                <label>Port</label>
+                <label>{t("ssh.port")}</label>
                 <input
                   type="number"
                   value={form.port}
@@ -335,50 +337,50 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
               </div>
 
               <div className="ssh-form-row">
-                <label>Username *</label>
+                <label>{t("ssh.username")}</label>
                 <input
                   type="text"
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  placeholder="Username"
+                  placeholder={t("ssh.usernamePlaceholder")}
                 />
               </div>
 
               <div className="ssh-form-row">
-                <label>Auth type</label>
+                <label>{t("ssh.authType")}</label>
                 <select
                   value={form.auth_type}
                   onChange={(e) => setForm({ ...form, auth_type: e.target.value as "password" | "key" })}
                 >
-                  <option value="password">Password</option>
-                  <option value="key">Key</option>
+                  <option value="password">{t("ssh.password")}</option>
+                  <option value="key">{t("ssh.key")}</option>
                 </select>
               </div>
 
               {form.auth_type === "password" ? (
                 <div className="ssh-form-row">
-                  <label>Password</label>
+                  <label>{t("ssh.password")}</label>
                   <input
                     type="password"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    placeholder={editingId ? "Leave blank to keep unchanged" : "Password"}
+                    placeholder={editingId ? t("ssh.passwordPlaceholderEdit") : t("ssh.password")}
                   />
                 </div>
               ) : (
                 <div className="ssh-form-row">
-                  <label>Private key path</label>
+                  <label>{t("ssh.privateKeyPath")}</label>
                   <input
                     type="text"
                     value={form.private_key_path}
                     onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
-                    placeholder="e.g. ~/.ssh/id_rsa"
+                    placeholder={t("ssh.privateKeyPlaceholder")}
                   />
                 </div>
               )}
 
               <div className="ssh-form-row">
-                <label>Color</label>
+                <label>{t("ssh.color")}</label>
                 <input
                   type="color"
                   value={form.color}
@@ -389,10 +391,10 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
 
             <div className="ssh-form-footer">
               <button className="ssh-btn primary" onClick={handleSave}>
-                Save
+                {t("ssh.save")}
               </button>
               <button className="ssh-btn" onClick={() => setShowForm(false)}>
-                Cancel
+                {t("ssh.cancel")}
               </button>
             </div>
           </div>

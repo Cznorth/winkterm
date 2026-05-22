@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "@/lib/axios";
+import { useI18n } from "@/lib/i18n";
 import "./FileTransferDialog.css";
 
 interface FileTransferDialogProps {
@@ -95,7 +96,8 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-  return "文件传输失败";
+  const lang = localStorage.getItem("winkterm-language");
+  return lang === "zh" ? "文件传输失败" : "File transfer failed";
 }
 
 function formatBytes(size: number | null): string {
@@ -265,6 +267,7 @@ export default function FileTransferDialog({
   onClose,
   inline = false,
 }: FileTransferDialogProps) {
+  const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
   const confirmActionRef = useRef<(() => void) | null>(null);
@@ -317,11 +320,11 @@ export default function FileTransferDialog({
   const previewDirty = previewState.status === "ready" && previewState.content !== previewState.originalContent;
   const selectedSummary = selectedItems.length === 0
     ? directory
-      ? `${directory.items.length} 个项目`
+      ? `${directory.items.length} ${t("ft.items")}`
       : ""
     : selectedItems.length === 1
-      ? `${singleSelectedItem?.is_dir ? "文件夹" : "文件"} · ${singleSelectedItem?.path}`
-      : `${selectedItems.length} 项已选 · ${selectedFiles.length} 个文件`;
+      ? `${singleSelectedItem?.is_dir ? t("ft.folder") : t("ft.file")} · ${singleSelectedItem?.path}`
+      : `${selectedItems.length} ${t("ft.itemsSelected")} · ${selectedFiles.length} ${t("ft.file")}`;
 
   const busy = loading || creatingFolder || savingPreview || transferProgress?.status === "running";
 
@@ -444,10 +447,10 @@ export default function FileTransferDialog({
     }
 
     openConfirmDialog({
-      title: "确认替换文件",
-      description: "以下文件在当前目录已存在，继续上传会覆盖远端同名文件。",
+      title: t("ft.confirmReplace"),
+      description: t("ft.replaceHint"),
       items: conflicts,
-      confirmLabel: "替换并上传",
+      confirmLabel: t("ft.replaceAndUpload"),
       tone: "primary",
     }, () => action(new Set(conflicts)));
   }, [getOverwriteConflicts, openConfirmDialog]);
@@ -479,7 +482,7 @@ export default function FileTransferDialog({
       }
 
       if (job.status === "error") {
-        throw new Error(job.error || "文件传输失败");
+        throw new Error(job.error || t("ft.transferFailed"));
       }
 
       await delay(250);
@@ -719,12 +722,12 @@ export default function FileTransferDialog({
             progress: 100,
             loaded: files[files.length - 1].size,
             total: files[files.length - 1].size,
-            message: files.length > 1 ? `已完成 ${files.length} 个文件上传` : "上传完成",
+            message: files.length > 1 ? `${files.length} ${t("ft.filesUploaded")}` : t("ft.uploadCompleted"),
             sequenceLabel: files.length > 1 ? `${files.length}/${files.length}` : undefined,
           });
           setStatus({
             type: "success",
-            message: files.length > 1 ? `已上传 ${files.length} 个文件到 ${currentPath}` : `已上传 ${files[0].name}`,
+            message: files.length > 1 ? `${t("ft.uploadCompleted")}: ${files.length} ${t("ft.filesUploaded")} → ${currentPath}` : `${t("ft.uploadCompleted")}: ${files[0].name}`,
           });
         } catch (error) {
           setTransferProgress((current) => current ? {
@@ -777,7 +780,7 @@ export default function FileTransferDialog({
           await refreshCurrentDirectory({ preserveSelection: true });
           setStatus({
             type: "success",
-            message: localPaths.length > 1 ? `已上传 ${localPaths.length} 个文件到 ${currentPath}` : `已上传 ${getLocalFileName(localPaths[0])}`,
+            message: localPaths.length > 1 ? `${t("ft.uploadCompleted")}: ${localPaths.length} ${t("ft.filesUploaded")} → ${currentPath}` : `${t("ft.uploadCompleted")}: ${getLocalFileName(localPaths[0])}`,
           });
         } catch (error) {
           setTransferProgress((current) => current ? {
@@ -865,7 +868,7 @@ export default function FileTransferDialog({
           await pollTransferJob(startResponse.data.job.id, "download");
           setStatus({
             type: "success",
-            message: `已保存到 ${localPath}`,
+            message: `${t("ft.savedTo")} ${localPath}`,
           });
           return;
         }
@@ -902,7 +905,7 @@ export default function FileTransferDialog({
 
         setStatus({
           type: "success",
-          message: `已下载 ${selectedFiles.length} 个文件到 ${targetFolder}`,
+          message: `${t("ft.downloaded")} ${selectedFiles.length} ${t("ft.filesDownloaded")} → ${targetFolder}`,
         });
         return;
       }
@@ -965,7 +968,7 @@ export default function FileTransferDialog({
 
       setStatus({
         type: "success",
-        message: selectedFiles.length > 1 ? `已开始下载 ${selectedFiles.length} 个文件` : `已开始下载 ${selectedFiles[0].name}`,
+        message: selectedFiles.length > 1 ? `${t("ft.startedDownloading")} ${selectedFiles.length} ${t("ft.filesDownloaded")}` : `${t("ft.startedDownloading")} ${selectedFiles[0].name}`,
       });
     } catch (error) {
       setTransferProgress((current) => current ? {
@@ -984,10 +987,10 @@ export default function FileTransferDialog({
 
     const paths = selectedItems.map((item) => item.path);
     openConfirmDialog({
-      title: "确认删除",
-      description: "删除后无法恢复，目录会递归删除其中的全部内容。",
+      title: t("ft.confirmDelete"),
+      description: t("ft.deleteHint"),
       items: selectedItems.map((item) => item.name),
-      confirmLabel: `删除 ${selectedItems.length} 项`,
+      confirmLabel: `${t("ft.delete")} ${selectedItems.length}`,
       tone: "danger",
     }, () => {
       void (async () => {
@@ -1005,7 +1008,7 @@ export default function FileTransferDialog({
           await refreshCurrentDirectory();
           setStatus({
             type: "success",
-            message: selectedItems.length > 1 ? `已删除 ${selectedItems.length} 项` : `已删除 ${selectedItems[0].name}`,
+            message: selectedItems.length > 1 ? `${t("ft.deleted")} ${selectedItems.length}` : `${t("ft.deleted")} ${selectedItems[0].name}`,
           });
         } catch (error) {
           setStatus({ type: "error", message: getErrorMessage(error) });
@@ -1017,12 +1020,12 @@ export default function FileTransferDialog({
   const handleCreateFolder = async () => {
     const folderName = newFolderName.trim();
     if (!folderName) {
-      setStatus({ type: "error", message: "请输入文件夹名称" });
+      setStatus({ type: "error", message: t("ft.enterFolderNamePrompt") });
       return;
     }
 
     if (folderName.includes("/")) {
-      setStatus({ type: "error", message: "文件夹名称不能包含 /" });
+      setStatus({ type: "error", message: t("ft.folderNameNoSlash") });
       return;
     }
 
@@ -1040,7 +1043,7 @@ export default function FileTransferDialog({
       await refreshCurrentDirectory({ preserveSelection: true });
       setStatus({
         type: "success",
-        message: `已创建文件夹 ${response.data.path}`,
+        message: `${t("ft.folderCreated")} ${response.data.path}`,
       });
     } catch (error) {
       setStatus({ type: "error", message: getErrorMessage(error) });
@@ -1074,7 +1077,7 @@ export default function FileTransferDialog({
       await refreshCurrentDirectory({ preserveSelection: true });
       setStatus({
         type: "success",
-        message: `已保存 ${previewState.path}`,
+        message: `${t("ft.saved")} ${previewState.path}`,
       });
     } catch (error) {
       setStatus({ type: "error", message: getErrorMessage(error) });
@@ -1138,8 +1141,8 @@ export default function FileTransferDialog({
     if (selectedItems.length > 1) {
       return (
         <div className="file-transfer-preview-placeholder">
-          <strong>已选择多个项目</strong>
-          <span>可批量下载或删除。文本预览和编辑仅在单选文件时可用。</span>
+          <strong>{t("ft.multipleSelected")}</strong>
+          <span>{t("ft.multipleSelectedHint")}</span>
         </div>
       );
     }
@@ -1147,8 +1150,8 @@ export default function FileTransferDialog({
     if (!singleSelectedItem) {
       return (
         <div className="file-transfer-preview-placeholder">
-          <strong>选择一个文件查看详情</strong>
-          <span>支持 Ctrl/Shift 多选，文本文件会在这里直接预览和编辑。</span>
+          <strong>{t("ft.selectFileHint")}</strong>
+          <span>{t("ft.selectFileDesc")}</span>
         </div>
       );
     }
@@ -1156,20 +1159,20 @@ export default function FileTransferDialog({
     if (singleSelectedItem.is_dir) {
       return (
         <div className="file-transfer-preview-placeholder">
-          <strong>当前选中的是文件夹</strong>
-          <span>双击进入目录，或拖拽文件到左侧列表上传到这个目录。</span>
+          <strong>{t("ft.folderSelected")}</strong>
+          <span>{t("ft.folderSelectedDesc")}</span>
         </div>
       );
     }
 
     if (previewState.status === "loading") {
-      return <div className="file-transfer-preview-placeholder">正在载入文本内容...</div>;
+      return <div className="file-transfer-preview-placeholder">{t("ft.loadingText")}</div>;
     }
 
     if (previewState.status === "unsupported") {
       return (
         <div className="file-transfer-preview-placeholder">
-          <strong>无法在线编辑</strong>
+          <strong>{t("ft.cannotEditOnline")}</strong>
           <span>{previewState.message}</span>
         </div>
       );
@@ -1178,7 +1181,7 @@ export default function FileTransferDialog({
     if (previewState.status === "error") {
       return (
         <div className="file-transfer-preview-placeholder error">
-          <strong>预览失败</strong>
+          <strong>{t("ft.previewFailed")}</strong>
           <span>{previewState.message}</span>
         </div>
       );
@@ -1213,10 +1216,10 @@ export default function FileTransferDialog({
       <div className={`file-transfer-dialog ${inline ? "inline" : ""}`} onClick={inline ? undefined : (event) => event.stopPropagation()}>
         <div className="file-transfer-header">
           <div>
-            <div className="file-transfer-title">远程文件管理器</div>
+            <div className="file-transfer-title">{t("ft.title")}</div>
             <div className="file-transfer-subtitle">{title}</div>
           </div>
-          <button className="file-transfer-close" onClick={onClose} title="关闭">
+          <button className="file-transfer-close" onClick={onClose} title={t("ft.close")}>
             ×
           </button>
         </div>
@@ -1226,50 +1229,50 @@ export default function FileTransferDialog({
             className="file-transfer-tool"
             onClick={() => directory?.parent_path && handleNavigate(directory.parent_path)}
             disabled={!directory?.parent_path || busy}
-            title="返回上级目录"
+            title={t("ft.parentDir")}
           >
             <UpIcon />
-            <span>上级</span>
+            <span>{t("ft.parent")}</span>
           </button>
 
           <button
             className="file-transfer-tool"
             onClick={handleRefresh}
             disabled={!currentPath || busy}
-            title="刷新目录"
+            title={t("ft.refreshDir")}
           >
             <RefreshIcon />
-            <span>刷新</span>
+            <span>{t("ft.refresh")}</span>
           </button>
 
           <button
             className="file-transfer-tool primary"
             onClick={() => void handleUploadClick()}
             disabled={!currentPath || busy}
-            title="上传到当前目录"
+            title={t("ft.uploadHere")}
           >
             <UploadIcon />
-            <span>上传</span>
+            <span>{t("ft.upload")}</span>
           </button>
 
           <button
             className="file-transfer-tool"
             onClick={() => void handleDownload()}
             disabled={selectedFiles.length === 0 || busy}
-            title="下载选中文件"
+            title={t("ft.downloadSelected")}
           >
             <DownloadIcon />
-            <span>{selectedFiles.length > 1 ? `下载 ${selectedFiles.length} 项` : "下载"}</span>
+            <span>{selectedFiles.length > 1 ? `${t("ft.download")} ${selectedFiles.length}` : t("ft.download")}</span>
           </button>
 
           <button
             className="file-transfer-tool danger"
             onClick={handleDelete}
             disabled={selectedItems.length === 0 || busy}
-            title="删除选中项目"
+            title={t("ft.deleteSelected")}
           >
             <DeleteIcon />
-            <span>{selectedItems.length > 1 ? `删除 ${selectedItems.length} 项` : "删除"}</span>
+            <span>{selectedItems.length > 1 ? `${t("ft.delete")} ${selectedItems.length}` : t("ft.delete")}</span>
           </button>
 
           <button
@@ -1279,10 +1282,10 @@ export default function FileTransferDialog({
               setShowFolderCreator((value) => !value);
             }}
             disabled={!currentPath || busy}
-            title="新建文件夹"
+            title={t("ft.newFolder")}
           >
             <FolderAddIcon />
-            <span>新建文件夹</span>
+            <span>{t("ft.newFolder")}</span>
           </button>
 
           {previewState.status === "ready" && (
@@ -1290,10 +1293,10 @@ export default function FileTransferDialog({
               className="file-transfer-tool"
               onClick={() => void handleSavePreview()}
               disabled={!previewDirty || savingPreview || busy}
-              title="保存当前文本"
+              title={t("ft.save")}
             >
               <SaveIcon />
-              <span>{savingPreview ? "保存中..." : "保存"}</span>
+              <span>{savingPreview ? t("ft.saving") : t("ft.save")}</span>
             </button>
           )}
 
@@ -1307,7 +1310,7 @@ export default function FileTransferDialog({
         </div>
 
         <div className="file-transfer-pathbar">
-          <div className="file-transfer-pathlabel">当前位置</div>
+          <div className="file-transfer-pathlabel">{t("ft.currentLocation")}</div>
           <div className="file-transfer-breadcrumbs">
             {breadcrumbs.map((crumb, index) => (
               <div key={crumb.path} className="file-transfer-crumb-wrap">
@@ -1329,7 +1332,7 @@ export default function FileTransferDialog({
               className="file-transfer-create-input"
               value={newFolderName}
               onChange={(event) => setNewFolderName(event.target.value)}
-              placeholder="输入新文件夹名称"
+              placeholder={t("ft.enterFolderName")}
               autoFocus
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -1346,7 +1349,7 @@ export default function FileTransferDialog({
               onClick={() => void handleCreateFolder()}
               disabled={creatingFolder}
             >
-              {creatingFolder ? "创建中..." : "创建"}
+              {creatingFolder ? t("ft.creating") : t("ft.create")}
             </button>
             <button
               className="file-transfer-create-btn"
@@ -1356,7 +1359,7 @@ export default function FileTransferDialog({
               }}
               disabled={creatingFolder}
             >
-              取消
+              {t("ft.cancel")}
             </button>
           </div>
         )}
@@ -1365,7 +1368,7 @@ export default function FileTransferDialog({
           <div className={`file-transfer-progress ${transferProgress.status}`}>
             <div className="file-transfer-progress-top">
               <div className="file-transfer-progress-title">
-                <span>{transferProgress.type === "upload" ? "上传" : "下载"}</span>
+                <span>{transferProgress.type === "upload" ? t("ft.upload") : t("ft.download")}</span>
                 {transferProgress.sequenceLabel && (
                   <span className="file-transfer-progress-badge">{transferProgress.sequenceLabel}</span>
                 )}
@@ -1400,19 +1403,19 @@ export default function FileTransferDialog({
             onDrop={handleDrop}
           >
             <div className="file-transfer-table-head">
-              <div>名称</div>
-              <div>修改时间</div>
-              <div>大小</div>
-              <div>权限</div>
+              <div>{t("ft.colName")}</div>
+              <div>{t("ft.colModified")}</div>
+              <div>{t("ft.colSize")}</div>
+              <div>{t("ft.colPermissions")}</div>
             </div>
 
             <div className="file-transfer-table-body">
               {loading && (
-                <div className="file-transfer-state">正在读取远端目录...</div>
+                <div className="file-transfer-state">{t("ft.readingDir")}</div>
               )}
 
               {!loading && directory && directory.items.length === 0 && (
-                <div className="file-transfer-state">当前目录为空</div>
+                <div className="file-transfer-state">{t("ft.emptyDir")}</div>
               )}
 
               {!loading && directory && directory.items.map((item) => (
@@ -1442,7 +1445,7 @@ export default function FileTransferDialog({
             {isDragActive && (
               <div className="file-transfer-dropzone">
                 <UploadIcon />
-                <strong>拖拽文件到这里上传</strong>
+                <strong>{t("ft.dragUpload")}</strong>
                 <span>{currentPath || "/"}</span>
               </div>
             )}
@@ -1451,31 +1454,31 @@ export default function FileTransferDialog({
           <aside className="file-transfer-inspector">
             <div className="file-transfer-inspector-header">
               <div>
-                <div className="file-transfer-inspector-title">预览与编辑</div>
+                <div className="file-transfer-inspector-title">{t("ft.previewAndEdit")}</div>
                 <div className="file-transfer-inspector-subtitle">
                   {selectedItems.length > 1
-                    ? `${selectedItems.length} 项已选`
+                    ? `${selectedItems.length} ${t("ft.itemsSelected")}`
                     : activeItem
                       ? activeItem.name
-                      : "未选择文件"}
+                      : t("ft.noFileSelected")}
                 </div>
               </div>
-              {previewDirty && <span className="file-transfer-dirty-badge">未保存</span>}
+              {previewDirty && <span className="file-transfer-dirty-badge">{t("ft.unsaved")}</span>}
             </div>
 
             <div className="file-transfer-meta-grid">
               <div className="file-transfer-meta-item">
-                <span>类型</span>
+                <span>{t("ft.type")}</span>
                 <strong>
                   {selectedItems.length > 1
-                    ? "多选"
+                    ? t("ft.multiple")
                     : activeItem
-                      ? activeItem.is_dir ? "目录" : "文件"
+                      ? activeItem.is_dir ? t("ft.directory") : t("ft.file")
                       : "--"}
                 </strong>
               </div>
               <div className="file-transfer-meta-item">
-                <span>大小</span>
+                <span>{t("ft.size")}</span>
                 <strong>
                   {selectedItems.length > 1
                     ? formatBytes(selectedFiles.reduce((sum, file) => sum + (file.size ?? 0), 0))
@@ -1485,7 +1488,7 @@ export default function FileTransferDialog({
                 </strong>
               </div>
               <div className="file-transfer-meta-item full">
-                <span>路径</span>
+                <span>{t("ft.path")}</span>
                 <strong title={selectedItems.length > 1 ? selectedSummary : activeItem?.path || currentPath}>
                   {selectedItems.length > 1 ? selectedSummary : activeItem?.path || currentPath || "--"}
                 </strong>
@@ -1493,11 +1496,11 @@ export default function FileTransferDialog({
               {previewState.status === "ready" && (
                 <>
                   <div className="file-transfer-meta-item">
-                    <span>编码</span>
+                    <span>{t("ft.encoding")}</span>
                     <strong>{previewState.encoding}</strong>
                   </div>
                   <div className="file-transfer-meta-item">
-                    <span>文本大小</span>
+                    <span>{t("ft.textSize")}</span>
                     <strong>{formatBytes(previewState.size)}</strong>
                   </div>
                 </>
@@ -1531,7 +1534,7 @@ export default function FileTransferDialog({
               </div>
               <div className="file-transfer-confirm-actions">
                 <button className="file-transfer-confirm-btn" onClick={closeConfirmDialog}>
-                  取消
+                  {t("ft.cancel")}
                 </button>
                 <button
                   className={`file-transfer-confirm-btn ${confirmDialog.tone}`}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import axios from "@/lib/axios";
+import { useI18n } from "@/lib/i18n";
 import "./SettingsPanel.css";
 
 interface ModelInfo {
@@ -82,6 +83,7 @@ const CheckIcon = () => (
 );
 
 export default function SettingsPanel() {
+  const { t } = useI18n();
   const [settings, setSettings] = useState<Settings>({
     api_format: "openai",
     base_url: "",
@@ -125,7 +127,7 @@ export default function SettingsPanel() {
       }
       const fetched: ModelInfo[] = res.data.models || [];
       if (fetched.length === 0) {
-        setFetchError("No models returned. Check your Base URL and API Key.");
+        setFetchError(t("settings.noModelsReturned"));
         return;
       }
       const existingIds = new Set((settings.models || []).map(m => m.id));
@@ -136,7 +138,7 @@ export default function SettingsPanel() {
       }));
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
-      setFetchError(err.response?.data?.detail || "Failed to fetch model list");
+      setFetchError(err.response?.data?.detail || t("settings.fetchFailed"));
     } finally {
       setFetching(false);
     }
@@ -176,18 +178,18 @@ export default function SettingsPanel() {
     <div className="settings-panel">
       <div className="settings-header">
         <span className="settings-header-icon"><SettingsIcon /></span>
-        <span className="settings-header-title">Settings</span>
+        <span className="settings-header-title">{t("settings.title")}</span>
       </div>
 
       <div className="settings-content">
         <div className="settings-group">
           <div className="settings-group-title">
             <ApiIcon />
-            API Configuration
+            {t("settings.apiConfig")}
           </div>
 
           <div className="settings-field">
-            <label className="settings-label">API Format</label>
+            <label className="settings-label">{t("settings.apiFormat")}</label>
             <select
               className="settings-select"
               value={settings.api_format}
@@ -199,7 +201,7 @@ export default function SettingsPanel() {
           </div>
 
           <div className="settings-field">
-            <label className="settings-label">Base URL</label>
+            <label className="settings-label">{t("settings.baseUrl")}</label>
             <input
               type="text"
               className="settings-input"
@@ -209,13 +211,13 @@ export default function SettingsPanel() {
             />
             <div className="settings-help">
               {settings.api_format === "openai"
-                ? "OpenAI-compatible API base URL (Ollama, Groq, OpenRouter, etc.)"
-                : "Anthropic API base URL (usually no change needed)"}
+                ? t("settings.openaiHelp")
+                : t("settings.anthropicHelp")}
             </div>
           </div>
 
           <div className="settings-field">
-            <label className="settings-label">API Key</label>
+            <label className="settings-label">{t("settings.apiKey")}</label>
             <input
               type="password"
               className="settings-input"
@@ -233,12 +235,12 @@ export default function SettingsPanel() {
             {fetching ? (
               <>
                 <span className="settings-spinner" />
-                Fetching...
+                {t("settings.fetching")}
               </>
             ) : (
               <>
                 <RefreshIcon />
-                Auto-fetch models
+                {t("settings.autoFetch")}
               </>
             )}
           </button>
@@ -254,18 +256,18 @@ export default function SettingsPanel() {
         <div className="settings-group">
           <div className="settings-group-title">
             <ModelIcon />
-            Model Configuration
+            {t("settings.modelConfig")}
           </div>
 
           {hasModels && (
             <div className="settings-field">
-              <label className="settings-label">Active Model</label>
+              <label className="settings-label">{t("settings.activeModel")}</label>
               <select
                 className="settings-select"
                 value={settings.selected_model}
                 onChange={(e) => setSettings({ ...settings, selected_model: e.target.value })}
               >
-                <option value="">Select a model</option>
+                <option value="">{t("settings.selectModel")}</option>
                 {settings.models?.map((m) => (
                   <option key={m.id} value={m.id}>{m.name || m.id}</option>
                 ))}
@@ -275,7 +277,7 @@ export default function SettingsPanel() {
 
           <div className="settings-field">
             <label className="settings-label">
-              Configured Models
+              {t("settings.configuredModels")}
               {hasModels && <span className="settings-label-hint">({settings.models.length})</span>}
             </label>
 
@@ -292,7 +294,7 @@ export default function SettingsPanel() {
                     <button
                       className="settings-model-remove"
                       onClick={() => handleRemoveModel(m.id)}
-                      title="Remove model"
+                      title={t("settings.removeModel")}
                     >
                       <TrashIcon />
                     </button>
@@ -302,21 +304,21 @@ export default function SettingsPanel() {
             ) : (
               <div className="settings-empty">
                 <div className="settings-empty-icon"><ModelIcon /></div>
-                <div>No models configured</div>
-                <div style={{ fontSize: "11px", marginTop: "4px" }}>Click "Auto-fetch models" above or add one manually</div>
+                <div>{t("settings.noModels")}</div>
+                <div style={{ fontSize: "11px", marginTop: "4px" }}>{t("settings.noModelsHint")}</div>
               </div>
             )}
           </div>
 
           <div className="settings-field">
-            <label className="settings-label">Add Model Manually</label>
+            <label className="settings-label">{t("settings.addManually")}</label>
             <div className="settings-add-model">
               <input
                 type="text"
                 className="settings-input"
                 value={newModelId}
                 onChange={(e) => setNewModelId(e.target.value)}
-                placeholder="Model ID"
+                placeholder={t("settings.modelId")}
                 onKeyDown={(e) => e.key === "Enter" && handleAddModel()}
               />
               <input
@@ -324,14 +326,14 @@ export default function SettingsPanel() {
                 className="settings-input"
                 value={newModelName}
                 onChange={(e) => setNewModelName(e.target.value)}
-                placeholder="Display name (optional)"
+                placeholder={t("settings.displayName")}
                 onKeyDown={(e) => e.key === "Enter" && handleAddModel()}
               />
               <button
                 className="settings-btn settings-btn-secondary"
                 onClick={handleAddModel}
                 disabled={!newModelId.trim()}
-                title="Add model"
+                title={t("settings.addModel")}
               >
                 <PlusIcon />
               </button>
@@ -343,7 +345,7 @@ export default function SettingsPanel() {
           {saved && (
             <div className="settings-success" style={{ marginBottom: "12px" }}>
               <CheckIcon />
-              Settings saved
+              {t("settings.saved")}
             </div>
           )}
           <button
@@ -354,10 +356,10 @@ export default function SettingsPanel() {
             {loading ? (
               <>
                 <span className="settings-spinner" />
-                Saving...
+                {t("settings.saving")}
               </>
             ) : (
-              "Save Settings"
+              t("settings.save")
             )}
           </button>
         </div>

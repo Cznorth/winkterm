@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useChatWs, ChatMessage, ChatMode, ToolCall } from "@/lib/chatWs";
 import axios from "@/lib/axios";
+import { useI18n } from "@/lib/i18n";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./AIPanel.css";
@@ -69,6 +70,7 @@ const ToolIcon = () => (
 );
 
 function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const argsStr = Object.keys(toolCall.args).length > 0
     ? JSON.stringify(toolCall.args, null, 2)
@@ -97,7 +99,7 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
           <span className="tool-call-arrow">▼</span>
         )}
         {toolCall.status === "running" && (
-          <span style={{ color: "var(--fg-muted)", fontSize: "11px", whiteSpace: "nowrap" }}>Running...</span>
+          <span style={{ color: "var(--fg-muted)", fontSize: "11px", whiteSpace: "nowrap" }}>{t("ai.running")}</span>
         )}
       </div>
 
@@ -122,6 +124,7 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
 }
 
 function MessageBubble({ msg }: { msg: ChatMessage }) {
+  const { t } = useI18n();
   const isUser = msg.role === "user";
   const [showThinking, setShowThinking] = useState(false);
 
@@ -138,7 +141,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 16v-4M12 8h.01" />
               </svg>
-              <span>Thinking</span>
+              <span>{t("ai.thinking")}</span>
               <span className="ai-thinking-toggle">{showThinking ? "▲" : "▼"}</span>
             </div>
             {showThinking && (
@@ -167,12 +170,13 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   );
 }
 
-const MODE_INFO: Record<ChatMode, { label: string; desc: string }> = {
-  chat: { label: "Chat", desc: "General assistant for questions and advice" },
-  craft: { label: "Craft", desc: "Code writer with terminal access" },
+const MODE_KEYS: Record<ChatMode, { label: "ai.chatLabel" | "ai.craftLabel"; desc: "ai.chatDesc" | "ai.craftDesc" }> = {
+  chat: { label: "ai.chatLabel", desc: "ai.chatDesc" },
+  craft: { label: "ai.craftLabel", desc: "ai.craftDesc" },
 };
 
 export default function AIPanel() {
+  const { t } = useI18n();
   const { messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, sendMessage, stopGeneration, clearMessages, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
@@ -223,7 +227,7 @@ export default function AIPanel() {
     setModelDropdownOpen(false);
   };
 
-  const modeInfo = MODE_INFO[mode];
+  const modeKeys = MODE_KEYS[mode];
   const currentModelName = model ? (models.find(m => m.id === model)?.name || model) : null;
 
   return (
@@ -231,15 +235,15 @@ export default function AIPanel() {
       <div className="ai-header">
         <div className="ai-header-left">
           <span className="ai-header-icon">{MODE_ICONS[mode]}</span>
-          <span className="ai-header-title">{modeInfo.label}</span>
+          <span className="ai-header-title">{t(modeKeys.label)}</span>
         </div>
         <div className="ai-header-actions">
           <div className="ai-status">
             <span className={`ai-status-dot ${isConnected ? "" : "disconnected"}`} />
-            {isConnected ? "Connected" : "Disconnected"}
+            {isConnected ? t("ai.connected") : t("ai.disconnected")}
           </div>
           <button className="ai-clear-btn" onClick={clearMessages}>
-            Clear
+            {t("ai.clear")}
           </button>
         </div>
       </div>
@@ -248,8 +252,8 @@ export default function AIPanel() {
         {messages.length === 0 && (
           <div className="ai-empty">
             <div className="ai-empty-icon">{MODE_ICONS[mode]}</div>
-            <div className="ai-empty-title">{modeInfo.label} Mode</div>
-            <div className="ai-empty-desc">{modeInfo.desc}</div>
+            <div className="ai-empty-title">{mode === "chat" ? t("ai.chatMode") : t("ai.craftMode")}</div>
+            <div className="ai-empty-desc">{t(modeKeys.desc)}</div>
           </div>
         )}
         {messages.map((msg) => (
@@ -260,7 +264,7 @@ export default function AIPanel() {
             <div className="ai-thinking-dots">
               <span /><span /><span />
             </div>
-            Thinking...
+            {t("ai.thinking")}...
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -287,7 +291,7 @@ export default function AIPanel() {
                 handleSubmit(e);
               }
             }}
-            placeholder={isConnected ? "Ask anything... (Enter to send, Shift+Enter for new line)" : "Waiting for connection..."}
+            placeholder={isConnected ? t("ai.placeholder") : t("ai.waitingConnection")}
             disabled={!isConnected || isStreaming}
             rows={2}
           />
@@ -300,7 +304,7 @@ export default function AIPanel() {
               <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
-              Stop
+              {t("ai.stop")}
             </button>
           ) : (
             <button
@@ -308,7 +312,7 @@ export default function AIPanel() {
               className="ai-send-btn"
               disabled={!isConnected || !input.trim()}
             >
-              Send
+              {t("ai.send")}
             </button>
           )}
         </form>
@@ -318,7 +322,7 @@ export default function AIPanel() {
         <div className="ai-mode-selector" ref={modeDropdownRef}>
           {modeDropdownOpen && isConnected && (
             <div className="ai-mode-dropdown">
-              {(Object.keys(MODE_INFO) as ChatMode[]).map((m) => (
+              {(Object.keys(MODE_KEYS) as ChatMode[]).map((m) => (
                 <div
                   key={m}
                   className={`ai-mode-option ${m === mode ? "active" : ""}`}
@@ -326,7 +330,7 @@ export default function AIPanel() {
                 >
                   <div className="ai-mode-option-left">
                     {MODE_ICONS[m]}
-                    <span className="ai-mode-option-name">{MODE_INFO[m].label}</span>
+                    <span className="ai-mode-option-name">{t(MODE_KEYS[m].label)}</span>
                   </div>
                   {m === mode && <span className="ai-mode-check">✓</span>}
                 </div>
@@ -339,7 +343,7 @@ export default function AIPanel() {
             disabled={!isConnected}
           >
             {MODE_ICONS[mode]}
-            <span className="ai-mode-btn-text">{modeInfo.label}</span>
+            <span className="ai-mode-btn-text">{t(modeKeys.label)}</span>
             <span className="ai-mode-arrow">▼</span>
           </button>
         </div>

@@ -2,6 +2,7 @@
 
 import { ReactNode, useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { usePanes, LAYOUT_CONFIG, type LayoutType } from "@/hooks/usePanes";
+import { useI18n } from "@/lib/i18n";
 import Terminal from "@/components/Terminal";
 import SettingsPanel from "@/components/SettingsPanel";
 import SSHPanel from "@/components/SSHPanel";
@@ -70,14 +71,15 @@ const Icons = {
 
 type ActivityItem = "terminal" | "ai" | "ssh" | "settings";
 
-const LAYOUT_BUTTONS: { layout: LayoutType; icon: ReactNode; title: string }[] = [
-  { layout: "single", icon: Icons.layoutSingle, title: "单分区" },
-  { layout: "horizontal", icon: Icons.layoutHorizontal, title: "左右双列" },
-  { layout: "vertical", icon: Icons.layoutVertical, title: "上下双行" },
-  { layout: "grid", icon: Icons.layoutGrid, title: "田字格 2x2" },
+const LAYOUT_BUTTONS: { layout: LayoutType; icon: ReactNode; titleKey: "layout.single" | "layout.horizontal" | "layout.vertical" | "layout.grid" }[] = [
+  { layout: "single", icon: Icons.layoutSingle, titleKey: "layout.single" },
+  { layout: "horizontal", icon: Icons.layoutHorizontal, titleKey: "layout.horizontal" },
+  { layout: "vertical", icon: Icons.layoutVertical, titleKey: "layout.vertical" },
+  { layout: "grid", icon: Icons.layoutGrid, titleKey: "layout.grid" },
 ];
 
 export default function SplitLayout({ aiPanel }: LayoutProps) {
+  const { t } = useI18n();
   const {
     layout,
     panes,
@@ -153,21 +155,21 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
             <div
               className={`activity-item ${activeActivity === "terminal" ? "active" : ""}`}
               onClick={() => setActiveActivity("terminal")}
-              title="终端"
+              title={t("layout.terminal")}
             >
               {Icons.terminal}
             </div>
             <div
               className={`activity-item ${activeActivity === "ai" ? "active" : ""}`}
               onClick={() => setActiveActivity("ai")}
-              title="AI 助手"
+              title={t("layout.aiAssistant")}
             >
               {Icons.ai}
             </div>
             <div
               className={`activity-item ${activeActivity === "ssh" ? "active" : ""}`}
               onClick={() => setActiveActivity("ssh")}
-              title="SSH 连接 / 文件传输"
+              title={t("layout.sshConnections")}
             >
               {Icons.ssh}
             </div>
@@ -180,7 +182,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
                   key={btn.layout}
                   className={`layout-btn ${layout === btn.layout ? "active" : ""}`}
                   onClick={() => setLayout(btn.layout)}
-                  title={btn.title}
+                  title={t(btn.titleKey)}
                 >
                   {btn.icon}
                 </div>
@@ -188,7 +190,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
             </div>
             <div
               className={`activity-item ${activeActivity === "settings" ? "active" : ""}`}
-              title="设置"
+              title={t("layout.settings")}
               onClick={() => setActiveActivity("settings")}
             >
               {Icons.settings}
