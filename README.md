@@ -64,8 +64,12 @@ The AI writes directly into your terminal's input line. You stay in control — 
 
 - **Shared PTY Session** — AI and user operate in the same terminal process. No copy-paste, no "run this command" without context.
 - **In-Terminal Chat** — Type `#` followed by your question, right where your shell prompt is. No need to alt-tab.
-- **Sidebar AI Panel** — Full conversational interface with mode switching (chat, terminal ops, code generation).
+- **Sidebar AI Panel** — Full conversational interface with multi-conversation tabs, AI-generated titles, and chat/craft mode switching.
+- **Streaming Queue & Suggestions** — Queue follow-up messages while the AI is responding (interrupt or drop queued items anytime), and get one-click follow-up suggestion chips after each answer.
+- **External Agent API** — An authenticated HTTP interface lets external agents drive your terminal, SSH, and file transfers via an installable skill.
+- **Remote Access Auth** — Web access is protected by an access key; the local desktop client needs no authentication.
 - **SSH Remote Connections** — Connect to remote servers with built-in file transfer.
+- **Internationalization** — Built-in English / Chinese UI, with language selection on first launch.
 - **Multi-Model Support** — Bring your own LLM. OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint.
 - **Docker & Desktop** — Deploy instantly with `docker compose up` or package as a standalone desktop app (Windows/macOS).
 
