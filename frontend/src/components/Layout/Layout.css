@@ -90,13 +90,25 @@
   min-height: 0;
 }
 
+/* AI 侧边栏拖拽手柄 */
+.ai-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.ai-resize-handle:hover,
+.ai-resize-handle:active {
+  background: var(--accent-primary);
+}
+
 /* AI 面板区域 */
 .ai-section {
   display: flex;
   flex-direction: column;
-  width: 320px;
-  min-width: 280px;
-  max-width: 480px;
+  flex-shrink: 0;
   background: var(--bg-secondary);
 }
 

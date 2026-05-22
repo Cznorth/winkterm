@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useMemo } from "react";
+import { ReactNode, useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { usePanes, LAYOUT_CONFIG, type LayoutType } from "@/hooks/usePanes";
 import Terminal from "@/components/Terminal";
 import SettingsPanel from "@/components/SettingsPanel";
@@ -89,7 +89,47 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     moveTab,
   } = usePanes();
 
-  const [activeActivity, setActiveActivity] = useState<ActivityItem>("terminal");
+  const [activeActivity, setActiveActivity] = useState<ActivityItem>("ai");
+  const [aiWidth, setAiWidth] = useState(320);
+  const resizingRef = useRef(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("winkterm-ai-width");
+    if (saved) {
+      setAiWidth(Math.min(600, Math.max(240, Number(saved))));
+    }
+  }, []);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = aiWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const delta = startX - ev.clientX;
+      const next = Math.min(600, Math.max(240, startWidth + delta));
+      setAiWidth(next);
+    };
+
+    const onMouseUp = () => {
+      resizingRef.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setAiWidth((w) => {
+        localStorage.setItem("winkterm-ai-width", String(w));
+        return w;
+      });
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, [aiWidth]);
 
   // 处理 SSH 连接 - 添加到第一个分区
   const handleSSHConnect = (conn: { id: string; title: string; host: string; color?: string }) => {
@@ -175,9 +215,12 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
 
         {/* AI 侧边栏 - 仅 AI 模式显示 */}
         {activeActivity === "ai" && (
-          <div className="ai-section">
-            {aiPanel}
-          </div>
+          <>
+            <div className="ai-resize-handle" onMouseDown={handleResizeStart} />
+            <div className="ai-section" style={{ width: aiWidth }}>
+              {aiPanel}
+            </div>
+          </>
         )}
       </div>
     </div>
