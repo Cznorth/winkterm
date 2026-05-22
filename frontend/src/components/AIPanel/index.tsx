@@ -327,7 +327,7 @@ function ConvTabs({
 
 export default function AIPanel() {
   const { t } = useI18n();
-  const { conversations, activeConvId, messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, sendMessage, stopGeneration, clearMessages, newConversation, switchConversation, deleteConversation, updateConvTitle, switchMode, switchModel, reconnect } = useChatWs();
+  const { conversations, activeConvId, messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, messageQueue, sendMessage, stopGeneration, interruptAndSend, removeFromQueue, clearMessages, newConversation, switchConversation, deleteConversation, updateConvTitle, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
@@ -396,7 +396,7 @@ export default function AIPanel() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text) return;
 
     const activeConv = conversations.find((c) => c.id === activeConvId);
     const isFirstMessage = activeConv?.messages.length === 0;
@@ -477,6 +477,36 @@ export default function AIPanel() {
         <div ref={messagesEndRef} />
       </div>
 
+      {messageQueue.length > 0 && (
+        <div className="ai-queue">
+          {messageQueue.map((msg, i) => (
+            <div key={i} className="ai-queue-item">
+              <span className="ai-queue-index">{i + 1}</span>
+              <span className="ai-queue-text">{msg}</span>
+              <button
+                className="ai-queue-interrupt"
+                title={t("ai.queue.interrupt")}
+                onClick={() => interruptAndSend(msg)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+              <button
+                className="ai-queue-remove"
+                title={t("ai.queue.remove")}
+                onClick={() => removeFromQueue(i)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="10" height="10">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {suggestions.length > 0 && !isStreaming && (
         <div className="ai-suggestions">
           {suggestions.map((s, i) => (
@@ -516,7 +546,7 @@ export default function AIPanel() {
               }
             }}
             placeholder={isConnected ? t("ai.placeholder") : t("ai.waitingConnection")}
-            disabled={!isConnected || isStreaming}
+            disabled={!isConnected}
             rows={1}
           />
         </form>
@@ -598,7 +628,7 @@ export default function AIPanel() {
             <button
               type="button"
               className="ai-send-btn"
-              disabled={!isConnected || !input.trim()}
+              disabled={!isConnected || !input.trim() || isStreaming}
               onClick={handleSubmit}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">

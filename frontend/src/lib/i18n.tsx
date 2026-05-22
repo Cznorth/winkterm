@@ -124,6 +124,8 @@ const translations = {
   "ai.waitingConnection": { zh: "等待连接...", en: "Waiting for connection..." },
   "ai.stop": { zh: "停止", en: "Stop" },
   "ai.send": { zh: "发送", en: "Send" },
+  "ai.queue.interrupt": { zh: "打断当前回答并立即发送", en: "Interrupt and send now" },
+  "ai.queue.remove": { zh: "从队列中移除", en: "Remove from queue" },
   "ai.running": { zh: "执行中...", en: "Running..." },
   "ai.connectionFailed": { zh: "连接失败", en: "Connection failed" },
   "ai.conversation": { zh: "对话", en: "Chat" },

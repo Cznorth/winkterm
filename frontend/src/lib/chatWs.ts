@@ -51,6 +51,7 @@ export interface ChatState {
   inputTokens: number;          // derived: active conversation tokens
   outputTokens: number;         // derived: active conversation tokens
   maxContext: number;
+  messageQueue: string[];       // pending messages queued during streaming
 }
 
 function makeConversation(id?: string): Conversation {
@@ -93,6 +94,7 @@ export function useChatWs() {
     inputTokens: 0,
     outputTokens: 0,
     maxContext: 200000,
+    messageQueue: [],
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -101,6 +103,8 @@ export function useChatWs() {
   const toolCallsRef = useRef<ToolCall[]>([]);
   const currentBlocksRef = useRef<ContentBlock[]>([]);
   const currentSegmentRef = useRef<string>("");
+  const isStreamingRef = useRef(false);
+  const messageQueueRef = useRef<string[]>([]);
 
   // 连接 WebSocket
   const connect = useCallback(() => {
@@ -157,6 +161,7 @@ export function useChatWs() {
         toolCallsRef.current = [];
         currentBlocksRef.current = [];
         currentSegmentRef.current = "";
+        isStreamingRef.current = true;
         setState((s) => ({ ...s, isStreaming: true }));
         break;
 
@@ -301,6 +306,7 @@ export function useChatWs() {
         break;
 
       case "end":
+        isStreamingRef.current = false;
         setState((s) => {
           const updated = updateActiveConv(s, (conv) => {
             const messages = [...conv.messages];
@@ -315,10 +321,12 @@ export function useChatWs() {
         break;
 
       case "error":
+        isStreamingRef.current = false;
         setState((s) => ({ ...s, error: data.message || "未知错误", isStreaming: false }));
         break;
 
       case "stopped":
+        isStreamingRef.current = false;
         setState((s) => ({ ...s, isStreaming: false }));
         break;
 
@@ -352,12 +360,9 @@ export function useChatWs() {
     }
   }, []);
 
-  // 发送消息
-  const sendMessage = useCallback((content: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      setState((s) => ({ ...s, error: "未连接" }));
-      return;
-    }
+  // 实际发送（不检查 streaming 状态）
+  const rawSend = useCallback((content: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -377,11 +382,57 @@ export function useChatWs() {
     wsRef.current.send(JSON.stringify({ type: "chat", content }));
   }, []);
 
+  // 发送消息：streaming 中则入队，否则直接发送
+  const sendMessage = useCallback((content: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      setState((s) => ({ ...s, error: "未连接" }));
+      return;
+    }
+
+    if (isStreamingRef.current) {
+      const next = [...messageQueueRef.current, content];
+      messageQueueRef.current = next;
+      setState((s) => ({ ...s, messageQueue: next }));
+      return;
+    }
+
+    rawSend(content);
+  }, [rawSend]);
+
+  // streaming 结束后自动发送队列首条
+  useEffect(() => {
+    if (!state.isStreaming && messageQueueRef.current.length > 0) {
+      const [next, ...rest] = messageQueueRef.current;
+      messageQueueRef.current = rest;
+      setState((s) => ({ ...s, messageQueue: rest }));
+      rawSend(next);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.isStreaming]);
+
+  // 打断当前生成并立即发送指定消息（该消息优先于队列其余内容）
+  const interruptAndSend = useCallback((content: string) => {
+    messageQueueRef.current = [content];
+    setState((s) => ({ ...s, messageQueue: [content] }));
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "stop" }));
+    }
+  }, []);
+
+  // 从队列中移除指定索引的消息
+  const removeFromQueue = useCallback((index: number) => {
+    const next = messageQueueRef.current.filter((_, i) => i !== index);
+    messageQueueRef.current = next;
+    setState((s) => ({ ...s, messageQueue: next }));
+  }, []);
+
   // 清空当前对话消息
   const clearMessages = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "clear" }));
     }
+    messageQueueRef.current = [];
+    isStreamingRef.current = false;
     setState((s) =>
       updateActiveConv(s, (conv) => ({
         ...conv,
@@ -391,6 +442,7 @@ export function useChatWs() {
         title: "",
       }))
     );
+    setState((s) => ({ ...s, messageQueue: [], isStreaming: false }));
   }, []);
 
   // 新建对话
@@ -398,6 +450,8 @@ export function useChatWs() {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "clear" }));
     }
+    messageQueueRef.current = [];
+    isStreamingRef.current = false;
     const conv = makeConversation();
     setState((s) => ({
       ...s,
@@ -407,6 +461,7 @@ export function useChatWs() {
       inputTokens: 0,
       outputTokens: 0,
       isStreaming: false,
+      messageQueue: [],
       error: null,
     }));
   }, []);
@@ -416,6 +471,8 @@ export function useChatWs() {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "clear" }));
     }
+    messageQueueRef.current = [];
+    isStreamingRef.current = false;
     setState((s) => {
       const conv = s.conversations.find((c) => c.id === id);
       if (!conv || conv.id === s.activeConvId) return s;
@@ -426,6 +483,7 @@ export function useChatWs() {
         inputTokens: conv.inputTokens,
         outputTokens: conv.outputTokens,
         isStreaming: false,
+        messageQueue: [],
         error: null,
       };
     });
@@ -516,6 +574,8 @@ export function useChatWs() {
     ...state,
     sendMessage,
     stopGeneration,
+    interruptAndSend,
+    removeFromQueue,
     clearMessages,
     newConversation,
     switchConversation,
