@@ -34,12 +34,12 @@ const translations = {
   "settings.baseUrl": { zh: "Base URL", en: "Base URL" },
   "settings.apiKey": { zh: "API Key", en: "API Key" },
   "settings.openaiHelp": {
-    zh: "OpenAI 兼容 API 地址（Ollama、Groq、OpenRouter 等）",
-    en: "OpenAI-compatible API base URL (Ollama, Groq, OpenRouter, etc.)",
+    zh: "OpenAI 兼容 API 地址（Ollama、Groq、OpenRouter 等）。通常需要包含 /v1，末尾不要加 /",
+    en: "OpenAI-compatible API base URL (Ollama, Groq, OpenRouter, etc.). Usually needs /v1, no trailing /",
   },
   "settings.anthropicHelp": {
-    zh: "Anthropic API 地址（通常无需修改）",
-    en: "Anthropic API base URL (usually no change needed)",
+    zh: "Anthropic API 地址（通常无需修改）。需要包含 /v1，末尾不要加 /",
+    en: "Anthropic API base URL (usually no change needed). Needs /v1, no trailing /",
   },
   "settings.fetching": { zh: "获取中...", en: "Fetching..." },
   "settings.autoFetch": { zh: "自动获取模型", en: "Auto-fetch models" },

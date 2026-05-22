@@ -78,15 +78,29 @@ async def fetch_models(req: ModelsRequest) -> dict:
         api_key = config.get("api_key", "")
 
     try:
-        url = req.base_url.rstrip("/") + "/models"
-        headers = {"Authorization": f"Bearer {api_key}"}
+        if req.api_format == "anthropic":
+            # ChatAnthropic SDK 会自动加 /v1，所以先去掉用户填的 /v1 再拼
+            url = req.base_url.rstrip("/").split("/v1")[0] + "/v1/models"
+            headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+        else:
+            url = req.base_url.rstrip("/") + "/models"
+            headers = {"Authorization": f"Bearer {api_key}"}
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url, headers=headers)
             resp.raise_for_status()
+            text = resp.text
+            if not text.strip():
+                return {"models": [], "error": "Empty response from API"}
             data = resp.json()
 
-        models = [{"id": m["id"], "name": m.get("id")} for m in data.get("data", [])]
+        # Support both {"data": [...]} (OpenAI) and [...] (plain list) formats
+        if isinstance(data, list):
+            items = data
+        else:
+            items = data.get("data", [])
+
+        models = [{"id": m["id"], "name": m.get("id")} for m in items if isinstance(m, dict) and "id" in m]
         return {"models": models}
     except Exception as e:
         return {"models": [], "error": str(e)}
