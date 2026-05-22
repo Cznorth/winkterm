@@ -47,6 +47,7 @@ class SettingsModel(BaseModel):
     models: list[ModelInfo] = []
     selected_model: str = ""
     language: str = ""
+    agent_api_token: str = ""
 
 
 class ModelsRequest(BaseModel):
@@ -65,10 +66,12 @@ async def get_settings() -> dict:
 async def save_settings(settings: SettingsModel) -> dict:
     """保存配置"""
     data = settings.model_dump()
-    # 如果 api_key 是脱敏的（包含 ****），保留原始值
+    # 如果 api_key / agent_api_token 是脱敏的（包含 ****），保留原始值
+    original = UserConfig.load()
     if data.get("api_key") and "****" in data["api_key"]:
-        original = UserConfig.load()
         data["api_key"] = original.get("api_key", "")
+    if data.get("agent_api_token") and "****" in data["agent_api_token"]:
+        data["agent_api_token"] = original.get("agent_api_token", "")
     UserConfig.merge_save(data)
     return {"success": True}
 

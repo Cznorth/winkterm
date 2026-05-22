@@ -68,6 +68,24 @@ const translations = {
   "settings.language": { zh: "语言", en: "Language" },
   "settings.langZh": { zh: "中文", en: "Chinese" },
   "settings.langEn": { zh: "English", en: "English" },
+  "settings.agentAccess": { zh: "外部 Agent 接入", en: "External Agent Access" },
+  "settings.agentApiToken": { zh: "接口鉴权 Token", en: "API Token" },
+  "settings.agentApiTokenHelp": {
+    zh: "外部 agent 调用接口所需的 token。留空则外部接口关闭。修改后需点击下方“保存设置”。",
+    en: "Token required for external agent API calls. Leave empty to disable the API. Click \"Save Settings\" below after changes.",
+  },
+  "settings.agentApiTokenGenerate": { zh: "随机生成", en: "Generate" },
+  "settings.agentAccessDesc": {
+    zh: "复制下面的 prompt 发给你的外部 agent，它会按指引自助安装 WinkTerm 远程操作能力。",
+    en: "Copy the prompt below and send it to your external agent; it will self-install WinkTerm remote-control capability.",
+  },
+  "settings.agentAccessPrompt": {
+    zh: "根据下面的指导安装这个 skill：",
+    en: "Install this skill by following the guide at: ",
+  },
+  "settings.agentAccessOpen": { zh: "打开安装指导", en: "Open install guide" },
+  "settings.agentAccessCopy": { zh: "复制 prompt", en: "Copy prompt" },
+  "settings.agentAccessCopied": { zh: "已复制", en: "Copied" },
 
   // === SSH ===
   "ssh.title": { zh: "SSH 连接", en: "SSH Connections" },

@@ -14,6 +14,7 @@ from backend.config import settings
 from backend.api.routes import router as http_router
 from backend.api.ws_routes import router as ws_router
 from backend.api.ssh_routes import router as ssh_router
+from backend.api.agent_routes import router as agent_router, public_router as agent_public_router
 
 # Check if running in PyInstaller bundle
 IS_FROZEN = getattr(sys, 'frozen', False)
@@ -59,6 +60,8 @@ app.add_middleware(
 app.include_router(http_router, prefix="/api", tags=["analysis"])
 app.include_router(ws_router, prefix="/ws", tags=["terminal"])
 app.include_router(ssh_router, tags=["ssh"])
+app.include_router(agent_router)
+app.include_router(agent_public_router)
 
 
 @app.get("/health")

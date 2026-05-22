@@ -51,6 +51,9 @@ a = Analysis(
         (str(ROOT / "backend" / "agent" / "registry" / "agents.yaml"), "backend/agent/registry"),
         # Agent 提示词目录
         (str(ROOT / "backend" / "agent" / "prompts"), "backend/agent/prompts"),
+        # 外部 agent skill 文件
+        (str(ROOT / "agent-skill" / "SKILL.md"), "agent-skill"),
+        (str(ROOT / "agent-skill" / "INSTALL.md"), "agent-skill"),
     ],
     hiddenimports=[
         # pywebview
@@ -99,6 +102,8 @@ a = Analysis(
         "backend.ssh.transfer_jobs",
         "backend.ssh.pty_spawner",
         "backend.api.ssh_routes",
+        "backend.api.agent_routes",
+        "backend.terminal.agent_terminal",
         "paramiko",
         "paramiko.ssh_exception",
         "paramiko.transport",

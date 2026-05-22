@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
+import { getApiBaseUrl } from "@/lib/config";
 import "./SettingsPanel.css";
 
 interface ModelInfo {
@@ -16,6 +17,7 @@ interface Settings {
   api_key: string;
   models: ModelInfo[];
   selected_model: string;
+  agent_api_token: string;
 }
 
 const SettingsIcon = () => (
@@ -90,6 +92,7 @@ export default function SettingsPanel() {
     api_key: "",
     models: [],
     selected_model: "",
+    agent_api_token: "",
   });
   const [newModelId, setNewModelId] = useState("");
   const [newModelName, setNewModelName] = useState("");
@@ -97,6 +100,26 @@ export default function SettingsPanel() {
   const [fetching, setFetching] = useState(false);
   const [saved, setSaved] = useState(false);
   const [fetchError, setFetchError] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const installGuideUrl = `${getApiBaseUrl() || (typeof window !== "undefined" ? window.location.origin : "")}/api/agent/install.md`;
+  const installPrompt = `${t("settings.agentAccessPrompt")}${installGuideUrl}`;
+
+  const handleGenerateToken = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    setSettings((prev) => ({ ...prev, agent_api_token: token }));
+  };
+
+  const handleCopyInstallPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(installPrompt);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      /* clipboard 不可用时忽略 */
+    }
+  };
 
   useEffect(() => {
     axios.get("/api/settings").then((res) => {
@@ -107,6 +130,7 @@ export default function SettingsPanel() {
         api_key: data.api_key || "",
         models: data.models || [],
         selected_model: data.selected_model || "",
+        agent_api_token: data.agent_api_token || "",
       });
     });
   }, []);
@@ -363,6 +387,69 @@ export default function SettingsPanel() {
               <option value="zh">中文</option>
               <option value="en">English</option>
             </select>
+          </div>
+        </div>
+
+        <div className="settings-group">
+          <div className="settings-group-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            {t("settings.agentAccess")}
+          </div>
+          <div className="settings-field">
+            <label className="settings-label">{t("settings.agentApiToken")}</label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                className="settings-input"
+                value={settings.agent_api_token}
+                onChange={(e) => setSettings({ ...settings, agent_api_token: e.target.value })}
+                placeholder="token..."
+                style={{ flex: 1 }}
+              />
+              <button
+                className="settings-btn settings-btn-secondary"
+                onClick={handleGenerateToken}
+                type="button"
+              >
+                {t("settings.agentApiTokenGenerate")}
+              </button>
+            </div>
+            <div className="settings-help">{t("settings.agentApiTokenHelp")}</div>
+          </div>
+
+          <div className="settings-field">
+            <div className="settings-help" style={{ marginBottom: "8px" }}>
+              {t("settings.agentAccessDesc")}
+            </div>
+            <textarea
+              className="settings-input"
+              value={installPrompt}
+              readOnly
+              rows={2}
+              onFocus={(e) => e.target.select()}
+              style={{ resize: "none", fontFamily: "monospace" }}
+            />
+            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+              <button
+                className="settings-btn settings-btn-primary"
+                onClick={handleCopyInstallPrompt}
+                style={{ flex: 1 }}
+              >
+                {linkCopied ? t("settings.agentAccessCopied") : t("settings.agentAccessCopy")}
+              </button>
+              <a
+                className="settings-btn settings-btn-secondary"
+                href={installGuideUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ flex: 1, textDecoration: "none", textAlign: "center" }}
+              >
+                {t("settings.agentAccessOpen")}
+              </a>
+            </div>
           </div>
         </div>
 

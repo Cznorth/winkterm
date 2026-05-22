@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # Agent 配置
     agent_recursion_limit: int = 100
 
+    # 外部 agent HTTP 接口的鉴权 token（为空时 /api/agent/* 关闭）
+    agent_api_token: str = ""
+
     @field_validator("debug", mode="before")
     @classmethod
     def parse_debug(cls, v: Any) -> bool:
@@ -108,10 +111,16 @@ class UserConfig:
         UserConfig.save(original)
 
     @staticmethod
+    def _mask_secret(value: str) -> str:
+        """脱敏密钥：长则保留首尾，短则全隐藏。"""
+        return value[:8] + "****" + value[-4:] if len(value) > 12 else "****"
+
+    @staticmethod
     def get_masked() -> dict:
         """获取脱敏后的配置"""
         config = UserConfig.load()
         if config.get("api_key"):
-            key = config["api_key"]
-            config["api_key"] = key[:8] + "****" + key[-4:] if len(key) > 12 else "****"
+            config["api_key"] = UserConfig._mask_secret(config["api_key"])
+        if config.get("agent_api_token"):
+            config["agent_api_token"] = UserConfig._mask_secret(config["agent_api_token"])
         return config
