@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getWsBaseUrl } from "./config";
+import { getAccessKey } from "./auth";
 
 // 获取 chat WebSocket URL（基于 terminal WS URL 替换路径）
 const getChatWSUrl = () => getWsBaseUrl().replace("/terminal", "/chat");
@@ -118,7 +119,9 @@ export function useChatWs() {
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(WS_URL);
+    const accessKey = getAccessKey();
+    const wsUrl = accessKey ? `${WS_URL}?key=${encodeURIComponent(accessKey)}` : WS_URL;
+    const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.log("[ChatWS] Connected");

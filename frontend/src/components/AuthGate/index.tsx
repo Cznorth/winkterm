@@ -1,0 +1,217 @@
+"use client";
+
+import { useState, useEffect, useCallback, ReactNode } from "react";
+import axios from "@/lib/axios";
+import { setAccessKey } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
+
+type Phase = "loading" | "ok" | "setup" | "login" | "neterror";
+
+interface AuthStatus {
+  local: boolean;
+  configured: boolean;
+  authenticated: boolean;
+}
+
+export default function AuthGate({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [key, setKey] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const checkStatus = useCallback(async () => {
+    setPhase("loading");
+    try {
+      const res = await axios.get<AuthStatus>("/api/auth/status");
+      const { local, configured, authenticated } = res.data;
+      if (local || authenticated) {
+        setPhase("ok");
+      } else if (!configured) {
+        setPhase("setup");
+      } else {
+        setPhase("login");
+      }
+    } catch {
+      setPhase("neterror");
+    }
+  }, []);
+
+  useEffect(() => {
+    checkStatus();
+  }, [checkStatus]);
+
+  const handleSubmit = async () => {
+    setError("");
+    const trimmed = key.trim();
+    if (phase === "setup") {
+      if (trimmed.length < 4) {
+        setError(t("auth.errKeyShort"));
+        return;
+      }
+      if (trimmed !== confirm.trim()) {
+        setError(t("auth.errMismatch"));
+        return;
+      }
+    } else if (!trimmed) {
+      setError(t("auth.errWrongKey"));
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const endpoint = phase === "setup" ? "/api/auth/setup" : "/api/auth/login";
+      await axios.post(endpoint, { key: trimmed });
+      setAccessKey(trimmed);
+      // 重新加载，让所有 HTTP/WebSocket 客户端带上访问密钥重新初始化
+      window.location.reload();
+    } catch (e: unknown) {
+      const err = e as { response?: { status?: number; data?: { detail?: string } } };
+      const detail = err.response?.data?.detail;
+      if (phase === "login") {
+        setError(t("auth.errWrongKey"));
+      } else {
+        setError(detail || t("auth.errNetwork"));
+      }
+      setSubmitting(false);
+    }
+  };
+
+  if (phase === "ok") return <>{children}</>;
+  if (phase === "loading") return null;
+
+  if (phase === "neterror") {
+    return (
+      <Overlay>
+        <div style={titleStyle}>{t("auth.errNetwork")}</div>
+        <button style={btnStyle} onClick={checkStatus}>
+          {t("auth.retry")}
+        </button>
+      </Overlay>
+    );
+  }
+
+  const isSetup = phase === "setup";
+
+  return (
+    <Overlay>
+      <div style={titleStyle}>{isSetup ? t("auth.setupTitle") : t("auth.loginTitle")}</div>
+      <div style={descStyle}>{isSetup ? t("auth.setupDesc") : t("auth.loginDesc")}</div>
+
+      <label style={labelStyle}>{t("auth.keyLabel")}</label>
+      <input
+        type="password"
+        autoFocus
+        style={inputStyle}
+        value={key}
+        placeholder={t("auth.keyPlaceholder")}
+        onChange={(e) => setKey(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !isSetup) handleSubmit();
+        }}
+      />
+
+      {isSetup && (
+        <>
+          <label style={labelStyle}>{t("auth.confirmLabel")}</label>
+          <input
+            type="password"
+            style={inputStyle}
+            value={confirm}
+            placeholder={t("auth.confirmPlaceholder")}
+            onChange={(e) => setConfirm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSubmit();
+            }}
+          />
+        </>
+      )}
+
+      {error && <div style={errorStyle}>{error}</div>}
+
+      <button style={btnStyle} onClick={handleSubmit} disabled={submitting}>
+        {submitting ? "..." : isSetup ? t("auth.submitSetup") : t("auth.submitLogin")}
+      </button>
+    </Overlay>
+  );
+}
+
+function Overlay({ children }: { children: ReactNode }) {
+  return (
+    <div style={overlayStyle}>
+      <div style={cardStyle}>{children}</div>
+    </div>
+  );
+}
+
+const overlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "#1e1e1e",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999,
+};
+
+const cardStyle: React.CSSProperties = {
+  width: 360,
+  maxWidth: "90vw",
+  background: "#252526",
+  border: "1px solid #3c3c3c",
+  borderRadius: 10,
+  padding: "28px 28px 24px",
+  display: "flex",
+  flexDirection: "column",
+  boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+};
+
+const titleStyle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 600,
+  color: "#ffffff",
+  marginBottom: 8,
+};
+
+const descStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: "#9d9d9d",
+  marginBottom: 20,
+  lineHeight: 1.5,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#bbbbbb",
+  marginBottom: 6,
+};
+
+const inputStyle: React.CSSProperties = {
+  background: "#1e1e1e",
+  border: "1px solid #3c3c3c",
+  borderRadius: 6,
+  color: "#e4e4e4",
+  fontSize: 14,
+  padding: "9px 12px",
+  marginBottom: 14,
+  outline: "none",
+};
+
+const errorStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#f48771",
+  marginBottom: 12,
+};
+
+const btnStyle: React.CSSProperties = {
+  background: "#0e639c",
+  border: "none",
+  borderRadius: 6,
+  color: "#ffffff",
+  fontSize: 14,
+  fontWeight: 500,
+  padding: "10px 16px",
+  cursor: "pointer",
+  marginTop: 4,
+};

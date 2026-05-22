@@ -18,6 +18,7 @@ interface Settings {
   models: ModelInfo[];
   selected_model: string;
   agent_api_token: string;
+  web_access_key: string;
 }
 
 const SettingsIcon = () => (
@@ -93,6 +94,7 @@ export default function SettingsPanel() {
     models: [],
     selected_model: "",
     agent_api_token: "",
+    web_access_key: "",
   });
   const [newModelId, setNewModelId] = useState("");
   const [newModelName, setNewModelName] = useState("");
@@ -109,6 +111,12 @@ export default function SettingsPanel() {
     const bytes = crypto.getRandomValues(new Uint8Array(24));
     const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
     setSettings((prev) => ({ ...prev, agent_api_token: token }));
+  };
+
+  const handleGenerateWebKey = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(12));
+    const key = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    setSettings((prev) => ({ ...prev, web_access_key: key }));
   };
 
   const handleCopyInstallPrompt = async () => {
@@ -131,6 +139,7 @@ export default function SettingsPanel() {
         models: data.models || [],
         selected_model: data.selected_model || "",
         agent_api_token: data.agent_api_token || "",
+        web_access_key: data.web_access_key || "",
       });
     });
   }, []);
@@ -450,6 +459,37 @@ export default function SettingsPanel() {
                 {t("settings.agentAccessOpen")}
               </a>
             </div>
+          </div>
+        </div>
+
+        <div className="settings-group">
+          <div className="settings-group-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            {t("settings.webAccess")}
+          </div>
+          <div className="settings-field">
+            <label className="settings-label">{t("settings.webAccessKey")}</label>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                className="settings-input"
+                value={settings.web_access_key}
+                onChange={(e) => setSettings({ ...settings, web_access_key: e.target.value })}
+                placeholder="key..."
+                style={{ flex: 1 }}
+              />
+              <button
+                className="settings-btn settings-btn-secondary"
+                onClick={handleGenerateWebKey}
+                type="button"
+              >
+                {t("settings.agentApiTokenGenerate")}
+              </button>
+            </div>
+            <div className="settings-help">{t("settings.webAccessKeyHelp")}</div>
           </div>
         </div>
 

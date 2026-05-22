@@ -1,4 +1,5 @@
 import { getWsBaseUrl } from "./config";
+import { getAccessKey } from "./auth";
 
 const WS_BASE_URL = typeof window !== "undefined" ? getWsBaseUrl() : "";
 
@@ -66,6 +67,11 @@ export class TerminalWebSocket {
     if (this.terminalType === "ssh" && this.sshConnectionId) {
       params.set("type", "ssh");
       params.set("connection_id", this.sshConnectionId);
+    }
+
+    const accessKey = getAccessKey();
+    if (accessKey) {
+      params.set("key", accessKey);
     }
 
     return params.toString() ? `${baseUrl}?${params}` : baseUrl;

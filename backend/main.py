@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -15,6 +15,7 @@ from backend.api.routes import router as http_router
 from backend.api.ws_routes import router as ws_router
 from backend.api.ssh_routes import router as ssh_router
 from backend.api.agent_routes import router as agent_router, public_router as agent_public_router
+from backend.api.auth_routes import router as auth_router, require_web_auth
 
 # Check if running in PyInstaller bundle
 IS_FROZEN = getattr(sys, 'frozen', False)
@@ -57,9 +58,11 @@ app.add_middleware(
 )
 
 # Mount routes
-app.include_router(http_router, prefix="/api", tags=["analysis"])
+# 鉴权路由自身不挂依赖；业务路由远程访问需 Web 访问密钥（localhost 免鉴权）
+app.include_router(auth_router)
+app.include_router(http_router, prefix="/api", tags=["analysis"], dependencies=[Depends(require_web_auth)])
 app.include_router(ws_router, prefix="/ws", tags=["terminal"])
-app.include_router(ssh_router, tags=["ssh"])
+app.include_router(ssh_router, tags=["ssh"], dependencies=[Depends(require_web_auth)])
 app.include_router(agent_router)
 app.include_router(agent_public_router)
 
@@ -69,7 +72,7 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "version": "0.1.0"}
 
 
-@app.post("/exit")
+@app.post("/exit", dependencies=[Depends(require_web_auth)])
 async def exit_app():
     """Graceful exit for desktop mode."""
     import os

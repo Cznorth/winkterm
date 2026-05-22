@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # 外部 agent HTTP 接口的鉴权 token（为空时 /api/agent/* 关闭）
     agent_api_token: str = ""
 
+    # Web 远程访问密钥（localhost 桌面客户端免鉴权，远程访问需此密钥）
+    web_access_key: str = ""
+
     @field_validator("debug", mode="before")
     @classmethod
     def parse_debug(cls, v: Any) -> bool:
@@ -95,6 +98,7 @@ class UserConfig:
             "models": [],
             "selected_model": "",
             "language": "",
+            "web_access_key": "",
         }
 
     @staticmethod
@@ -123,4 +127,6 @@ class UserConfig:
             config["api_key"] = UserConfig._mask_secret(config["api_key"])
         if config.get("agent_api_token"):
             config["agent_api_token"] = UserConfig._mask_secret(config["agent_api_token"])
+        if config.get("web_access_key"):
+            config["web_access_key"] = UserConfig._mask_secret(config["web_access_key"])
         return config

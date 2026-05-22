@@ -4,7 +4,7 @@ import logging
 import webbrowser
 import httpx
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 logger = logging.getLogger("routes")
 
@@ -41,13 +41,15 @@ class ModelInfo(BaseModel):
 
 
 class SettingsModel(BaseModel):
-    api_format: Literal["openai", "anthropic"] = "openai"
-    base_url: str = ""
-    api_key: str = ""
-    models: list[ModelInfo] = []
-    selected_model: str = ""
-    language: str = ""
-    agent_api_token: str = ""
+    # 字段全部可选：仅更新请求中显式提供的字段，避免局部保存（如只改语言）清空其他字段
+    api_format: Optional[Literal["openai", "anthropic"]] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    models: Optional[list[ModelInfo]] = None
+    selected_model: Optional[str] = None
+    language: Optional[str] = None
+    agent_api_token: Optional[str] = None
+    web_access_key: Optional[str] = None
 
 
 class ModelsRequest(BaseModel):
@@ -63,15 +65,14 @@ async def get_settings() -> dict:
 
 
 @router.post("/settings")
-async def save_settings(settings: SettingsModel) -> dict:
-    """保存配置"""
-    data = settings.model_dump()
-    # 如果 api_key / agent_api_token 是脱敏的（包含 ****），保留原始值
+async def save_settings(payload: SettingsModel) -> dict:
+    """保存配置：仅更新请求中显式提供的字段。"""
+    data = payload.model_dump(exclude_none=True)
     original = UserConfig.load()
-    if data.get("api_key") and "****" in data["api_key"]:
-        data["api_key"] = original.get("api_key", "")
-    if data.get("agent_api_token") and "****" in data["agent_api_token"]:
-        data["agent_api_token"] = original.get("agent_api_token", "")
+    # 脱敏值（含 ****）表示前端未修改该密钥，保留原始值
+    for secret in ("api_key", "agent_api_token", "web_access_key"):
+        if secret in data and "****" in (data[secret] or ""):
+            data[secret] = original.get(secret, "")
     UserConfig.merge_save(data)
     return {"success": True}
 

@@ -232,6 +232,37 @@ const translations = {
   "ft.filesDownloaded": { zh: "个文件", en: "files" },
   "ft.encoding": { zh: "编码", en: "Encoding" },
   "ft.textSize": { zh: "文本大小", en: "Text size" },
+
+  // === Auth Gate ===
+  "auth.setupTitle": { zh: "设置访问密钥", en: "Set Access Key" },
+  "auth.setupDesc": {
+    zh: "首次远程访问需设置一个访问密钥。之后所有远程访问都需要此密钥。",
+    en: "First-time remote access requires setting an access key. All future remote access will need this key.",
+  },
+  "auth.loginTitle": { zh: "需要访问密钥", en: "Access Key Required" },
+  "auth.loginDesc": {
+    zh: "此 WinkTerm 已开启远程访问鉴权，请输入访问密钥。",
+    en: "This WinkTerm requires authentication for remote access. Enter the access key.",
+  },
+  "auth.keyLabel": { zh: "访问密钥", en: "Access Key" },
+  "auth.keyPlaceholder": { zh: "至少 4 个字符", en: "At least 4 characters" },
+  "auth.confirmLabel": { zh: "确认密钥", en: "Confirm Key" },
+  "auth.confirmPlaceholder": { zh: "再次输入密钥", en: "Re-enter the key" },
+  "auth.submitSetup": { zh: "设置并进入", en: "Set and Continue" },
+  "auth.submitLogin": { zh: "进入", en: "Continue" },
+  "auth.errKeyShort": { zh: "密钥至少 4 个字符", en: "Key must be at least 4 characters" },
+  "auth.errMismatch": { zh: "两次输入的密钥不一致", en: "The keys do not match" },
+  "auth.errWrongKey": { zh: "访问密钥错误", en: "Incorrect access key" },
+  "auth.errNetwork": { zh: "无法连接到服务", en: "Cannot connect to the server" },
+  "auth.retry": { zh: "重试", en: "Retry" },
+
+  // === Settings: Web Access ===
+  "settings.webAccess": { zh: "Web 远程访问", en: "Web Remote Access" },
+  "settings.webAccessKey": { zh: "访问密钥", en: "Access Key" },
+  "settings.webAccessKeyHelp": {
+    zh: "远程浏览器访问所需的密钥。本机桌面客户端始终免鉴权。未设置时，首次远程访问会要求设置密钥。修改后需点击下方“保存设置”。",
+    en: "Key required for remote browser access. The local desktop client never needs it. When unset, the first remote visit will prompt to set one. Click \"Save Settings\" below after changes.",
+  },
 } as const;
 
 type TranslationKey = keyof typeof translations;
