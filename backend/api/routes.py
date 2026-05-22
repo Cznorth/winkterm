@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+import logging
 import webbrowser
 import httpx
 from datetime import datetime
 from typing import Any, Literal
 
+logger = logging.getLogger("routes")
+
 from fastapi import APIRouter
 from pydantic import BaseModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 
 from backend.agent.graph import get_graph
 from backend.agent.tools.terminal import get_terminal_context_raw
-from backend.config import UserConfig
+from backend.config import UserConfig, settings
 
 router = APIRouter()
 
@@ -104,6 +109,59 @@ async def fetch_models(req: ModelsRequest) -> dict:
         return {"models": models}
     except Exception as e:
         return {"models": [], "error": str(e)}
+
+
+# === 对话标题生成 ===
+class TitleRequest(BaseModel):
+    message: str
+
+
+@router.post("/chat/title")
+async def generate_title(req: TitleRequest) -> dict:
+    """根据首条用户消息用 AI 生成简短对话标题"""
+    user_config = UserConfig.load()
+    api_format = user_config.get("api_format", "openai")
+    base_url = user_config.get("base_url") or settings.effective_base_url
+    api_key = user_config.get("api_key") or settings.effective_api_key
+    model = user_config.get("selected_model") or settings.effective_model
+
+    if not api_key or not model:
+        return {"title": ""}
+
+    try:
+        if api_format == "anthropic":
+            llm = ChatAnthropic(
+                model=model,
+                temperature=1,  # required when thinking disabled
+                max_tokens=100,
+                api_key=api_key,
+                base_url=base_url.split("/v1")[0] if base_url else None,
+                thinking={"type": "disabled"},
+            )
+        else:
+            llm = ChatOpenAI(
+                model=model,
+                temperature=0,
+                max_tokens=20,
+                api_key=api_key,
+                base_url=base_url if base_url else None,
+            )
+
+        system = SystemMessage(content=(
+            "Generate a very short title (3-5 words) for a conversation that starts with the user message below. "
+            "Return ONLY the title text, no quotes, no trailing punctuation."
+        ))
+        response = await llm.ainvoke([system, HumanMessage(content=req.message)])
+        content = response.content
+        if isinstance(content, list):
+            text_blocks = [b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text"]
+            content = " ".join(text_blocks)
+        title = str(content).strip().strip('"')
+        logger.info(f"Generated title: {title!r} for message: {req.message[:50]!r}")
+        return {"title": title}
+    except Exception as e:
+        logger.warning(f"Title generation failed: {e}")
+        return {"title": ""}
 
 
 # === 历史记录 ===

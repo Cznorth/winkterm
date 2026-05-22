@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useChatWs, ChatMessage, ChatMode, ToolCall, ContentBlock } from "@/lib/chatWs";
+import { useChatWs, ChatMessage, ChatMode, ToolCall, ContentBlock, Conversation } from "@/lib/chatWs";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
 import ReactMarkdown from "react-markdown";
@@ -217,9 +217,117 @@ const MODE_KEYS: Record<ChatMode, { label: "ai.chatLabel" | "ai.craftLabel"; des
   craft: { label: "ai.craftLabel", desc: "ai.craftDesc" },
 };
 
+function ConvTabs({
+  conversations,
+  activeConvId,
+  onSwitch,
+  onNew,
+  onDelete,
+}: {
+  conversations: Conversation[];
+  activeConvId: string;
+  onSwitch: (id: string) => void;
+  onNew: () => void;
+  onDelete: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  const listRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    updateScrollState();
+    el.addEventListener("scroll", updateScrollState);
+    const ro = new ResizeObserver(updateScrollState);
+    ro.observe(el);
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      el.scrollBy({ left: e.deltaY, behavior: "auto" });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("scroll", updateScrollState);
+      el.removeEventListener("wheel", onWheel);
+      ro.disconnect();
+    };
+  }, [conversations, updateScrollState]);
+
+  // Scroll active tab into view when active conv changes
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const active = el.querySelector(".ai-tab.active") as HTMLElement | null;
+    active?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeConvId]);
+
+  const scroll = (dir: "left" | "right") => {
+    listRef.current?.scrollBy({ left: dir === "left" ? -120 : 120, behavior: "smooth" });
+  };
+
+  return (
+    <div className="ai-tabs">
+      {canScrollLeft && (
+        <button className="ai-tabs-scroll-btn" onClick={() => scroll("left")}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="10" height="10">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+      )}
+      <div className="ai-tabs-list" ref={listRef}>
+        {conversations.map((conv, i) => (
+          <div
+            key={conv.id}
+            className={`ai-tab ${conv.id === activeConvId ? "active" : ""}`}
+            onClick={() => onSwitch(conv.id)}
+            title={conv.title || `${t("ai.conversation")} ${i + 1}`}
+          >
+            <span className="ai-tab-title">
+              {conv.title || `${t("ai.conversation")} ${i + 1}`}
+            </span>
+            {conversations.length > 1 && (
+              <button
+                className="ai-tab-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(conv.id);
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {canScrollRight && (
+        <button className="ai-tabs-scroll-btn" onClick={() => scroll("right")}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="10" height="10">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      )}
+      <button className="ai-tab-new" onClick={onNew} title={t("ai.newConversation")}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 export default function AIPanel() {
   const { t } = useI18n();
-  const { messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, sendMessage, stopGeneration, clearMessages, switchMode, switchModel, reconnect } = useChatWs();
+  const { conversations, activeConvId, messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, sendMessage, stopGeneration, clearMessages, newConversation, switchConversation, deleteConversation, updateConvTitle, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
@@ -267,9 +375,23 @@ export default function AIPanel() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim() && !isStreaming) {
-      sendMessage(input.trim());
-      setInput("");
+    const text = input.trim();
+    if (!text || isStreaming) return;
+
+    const activeConv = conversations.find((c) => c.id === activeConvId);
+    const isFirstMessage = activeConv?.messages.length === 0;
+    const convId = activeConvId;
+
+    sendMessage(text);
+    setInput("");
+
+    if (isFirstMessage) {
+      axios.post("/api/chat/title", { message: text })
+        .then((res) => {
+          console.log("[AIPanel] title response:", res.data, "convId:", convId);
+          if (res.data.title) updateConvTitle(convId, res.data.title);
+        })
+        .catch((e) => console.error("[AIPanel] title error:", e));
     }
   };
 
@@ -303,6 +425,14 @@ export default function AIPanel() {
           </button>
         </div>
       </div>
+
+      <ConvTabs
+        conversations={conversations}
+        activeConvId={activeConvId}
+        onSwitch={switchConversation}
+        onNew={newConversation}
+        onDelete={deleteConversation}
+      />
 
       <div className="ai-messages">
         {messages.length === 0 && (

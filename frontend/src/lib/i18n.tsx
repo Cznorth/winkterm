@@ -126,6 +126,8 @@ const translations = {
   "ai.send": { zh: "发送", en: "Send" },
   "ai.running": { zh: "执行中...", en: "Running..." },
   "ai.connectionFailed": { zh: "连接失败", en: "Connection failed" },
+  "ai.conversation": { zh: "对话", en: "Chat" },
+  "ai.newConversation": { zh: "新建对话", en: "New conversation" },
 
   // === File Transfer ===
   "ft.title": { zh: "远程文件管理器", en: "Remote File Manager" },

@@ -31,20 +31,59 @@ export interface ChatMessage {
 
 export type ChatMode = "chat" | "craft";
 
-export interface ChatState {
+export interface Conversation {
+  id: string;
+  title: string;
   messages: ChatMessage[];
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface ChatState {
+  conversations: Conversation[];
+  activeConvId: string;
+  messages: ChatMessage[];      // derived: active conversation messages
   isStreaming: boolean;
   isConnected: boolean;
   error: string | null;
   mode: ChatMode;
   model: string;
-  inputTokens: number;
-  outputTokens: number;
+  inputTokens: number;          // derived: active conversation tokens
+  outputTokens: number;         // derived: active conversation tokens
   maxContext: number;
 }
 
+function makeConversation(id?: string): Conversation {
+  return {
+    id: id || Date.now().toString(),
+    title: "",
+    messages: [],
+    inputTokens: 0,
+    outputTokens: 0,
+  };
+}
+
+// Helper: update active conversation and sync derived fields
+function updateActiveConv(s: ChatState, updater: (conv: Conversation) => Conversation): ChatState {
+  const conversations = s.conversations.map((c) =>
+    c.id === s.activeConvId ? updater(c) : c
+  );
+  const activeConv = conversations.find((c) => c.id === s.activeConvId)!;
+  return {
+    ...s,
+    conversations,
+    messages: activeConv.messages,
+    inputTokens: activeConv.inputTokens,
+    outputTokens: activeConv.outputTokens,
+  };
+}
+
+const initialConv = makeConversation("1");
+
 export function useChatWs() {
   const [state, setState] = useState<ChatState>({
+    conversations: [initialConv],
+    activeConvId: initialConv.id,
     messages: [],
     isStreaming: false,
     isConnected: false,
@@ -124,28 +163,30 @@ export function useChatWs() {
       case "thinking":
         if (data.content) {
           currentThinkingRef.current += data.content;
-          setState((s) => {
-            const messages = [...s.messages];
-            const lastMsg = messages[messages.length - 1];
-            if (lastMsg?.role === "assistant") {
-              messages[messages.length - 1] = {
-                ...lastMsg,
-                content: currentMessageRef.current,
-                thinking: currentThinkingRef.current,
-                toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
-              };
-            } else {
-              messages.push({
-                id: Date.now().toString(),
-                role: "assistant",
-                content: currentMessageRef.current,
-                thinking: currentThinkingRef.current,
-                timestamp: Date.now(),
-                toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
-              });
-            }
-            return { ...s, messages };
-          });
+          setState((s) =>
+            updateActiveConv(s, (conv) => {
+              const messages = [...conv.messages];
+              const lastMsg = messages[messages.length - 1];
+              if (lastMsg?.role === "assistant") {
+                messages[messages.length - 1] = {
+                  ...lastMsg,
+                  content: currentMessageRef.current,
+                  thinking: currentThinkingRef.current,
+                  toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
+                };
+              } else {
+                messages.push({
+                  id: Date.now().toString(),
+                  role: "assistant",
+                  content: currentMessageRef.current,
+                  thinking: currentThinkingRef.current,
+                  timestamp: Date.now(),
+                  toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
+                });
+              }
+              return { ...conv, messages };
+            })
+          );
         }
         break;
 
@@ -157,30 +198,32 @@ export function useChatWs() {
             ...currentBlocksRef.current,
             { type: "text", text: currentSegmentRef.current },
           ];
-          setState((s) => {
-            const messages = [...s.messages];
-            const lastMsg = messages[messages.length - 1];
-            if (lastMsg?.role === "assistant") {
-              messages[messages.length - 1] = {
-                ...lastMsg,
-                content: currentMessageRef.current,
-                thinking: currentThinkingRef.current || undefined,
-                contentBlocks: tokenBlocks,
-                toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
-              };
-            } else {
-              messages.push({
-                id: Date.now().toString(),
-                role: "assistant",
-                content: currentMessageRef.current,
-                thinking: currentThinkingRef.current || undefined,
-                timestamp: Date.now(),
-                contentBlocks: tokenBlocks,
-                toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
-              });
-            }
-            return { ...s, messages };
-          });
+          setState((s) =>
+            updateActiveConv(s, (conv) => {
+              const messages = [...conv.messages];
+              const lastMsg = messages[messages.length - 1];
+              if (lastMsg?.role === "assistant") {
+                messages[messages.length - 1] = {
+                  ...lastMsg,
+                  content: currentMessageRef.current,
+                  thinking: currentThinkingRef.current || undefined,
+                  contentBlocks: tokenBlocks,
+                  toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
+                };
+              } else {
+                messages.push({
+                  id: Date.now().toString(),
+                  role: "assistant",
+                  content: currentMessageRef.current,
+                  thinking: currentThinkingRef.current || undefined,
+                  timestamp: Date.now(),
+                  contentBlocks: tokenBlocks,
+                  toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
+                });
+              }
+              return { ...conv, messages };
+            })
+          );
         }
         break;
 
@@ -206,19 +249,21 @@ export function useChatWs() {
             { type: "tool", toolCall: newToolCall },
           ];
           const toolStartBlocks: ContentBlock[] = [...currentBlocksRef.current];
-          setState((s) => {
-            const messages = [...s.messages];
-            const lastMsg = messages[messages.length - 1];
-            if (lastMsg?.role === "assistant") {
-              messages[messages.length - 1] = {
-                ...lastMsg,
-                content: currentMessageRef.current,
-                contentBlocks: toolStartBlocks,
-                toolCalls: [...toolCallsRef.current],
-              };
-            }
-            return { ...s, messages };
-          });
+          setState((s) =>
+            updateActiveConv(s, (conv) => {
+              const messages = [...conv.messages];
+              const lastMsg = messages[messages.length - 1];
+              if (lastMsg?.role === "assistant") {
+                messages[messages.length - 1] = {
+                  ...lastMsg,
+                  content: currentMessageRef.current,
+                  contentBlocks: toolStartBlocks,
+                  toolCalls: [...toolCallsRef.current],
+                };
+              }
+              return { ...conv, messages };
+            })
+          );
         }
         break;
 
@@ -238,32 +283,34 @@ export function useChatWs() {
             return block;
           });
           const toolEndBlocks: ContentBlock[] = [...currentBlocksRef.current];
-          setState((s) => {
-            const messages = [...s.messages];
-            const lastMsg = messages[messages.length - 1];
-            if (lastMsg?.role === "assistant") {
-              messages[messages.length - 1] = {
-                ...lastMsg,
-                contentBlocks: toolEndBlocks,
-                toolCalls: [...toolCallsRef.current],
-              };
-            }
-            return { ...s, messages };
-          });
+          setState((s) =>
+            updateActiveConv(s, (conv) => {
+              const messages = [...conv.messages];
+              const lastMsg = messages[messages.length - 1];
+              if (lastMsg?.role === "assistant") {
+                messages[messages.length - 1] = {
+                  ...lastMsg,
+                  contentBlocks: toolEndBlocks,
+                  toolCalls: [...toolCallsRef.current],
+                };
+              }
+              return { ...conv, messages };
+            })
+          );
         }
         break;
 
       case "end":
         setState((s) => {
-          const messages = [...s.messages];
-          const lastMsg = messages[messages.length - 1];
-          if (lastMsg?.role === "assistant" && data.content) {
-            messages[messages.length - 1] = {
-              ...lastMsg,
-              content: data.content,
-            };
-          }
-          return { ...s, messages, isStreaming: false };
+          const updated = updateActiveConv(s, (conv) => {
+            const messages = [...conv.messages];
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg?.role === "assistant" && data.content) {
+              messages[messages.length - 1] = { ...lastMsg, content: data.content };
+            }
+            return { ...conv, messages };
+          });
+          return { ...updated, isStreaming: false };
         });
         break;
 
@@ -289,12 +336,17 @@ export function useChatWs() {
 
       case "usage":
         if (typeof data.input_tokens === "number" && typeof data.output_tokens === "number") {
-          setState((s) => ({
-            ...s,
-            inputTokens: data.input_tokens as number,
-            outputTokens: data.output_tokens as number,
-            maxContext: (data.max_context as number) || s.maxContext,
-          }));
+          setState((s) => {
+            const updated = updateActiveConv(s, (conv) => ({
+              ...conv,
+              inputTokens: data.input_tokens as number,
+              outputTokens: data.output_tokens as number,
+            }));
+            return {
+              ...updated,
+              maxContext: (data.max_context as number) || s.maxContext,
+            };
+          });
         }
         break;
     }
@@ -307,7 +359,6 @@ export function useChatWs() {
       return;
     }
 
-    // 添加用户消息
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: "user",
@@ -315,22 +366,97 @@ export function useChatWs() {
       timestamp: Date.now(),
     };
 
-    setState((s) => ({
-      ...s,
-      messages: [...s.messages, userMsg],
-      error: null,
-    }));
+    setState((s) =>
+      updateActiveConv(s, (conv) => ({
+        ...conv,
+        messages: [...conv.messages, userMsg],
+      }))
+    );
+    setState((s) => ({ ...s, error: null }));
 
-    // 发送到服务器
     wsRef.current.send(JSON.stringify({ type: "chat", content }));
   }, []);
 
-  // 清空消息
+  // 清空当前对话消息
   const clearMessages = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "clear" }));
     }
-    setState((s) => ({ ...s, messages: [] }));
+    setState((s) =>
+      updateActiveConv(s, (conv) => ({
+        ...conv,
+        messages: [],
+        inputTokens: 0,
+        outputTokens: 0,
+        title: "",
+      }))
+    );
+  }, []);
+
+  // 新建对话
+  const newConversation = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "clear" }));
+    }
+    const conv = makeConversation();
+    setState((s) => ({
+      ...s,
+      conversations: [...s.conversations, conv],
+      activeConvId: conv.id,
+      messages: [],
+      inputTokens: 0,
+      outputTokens: 0,
+      isStreaming: false,
+      error: null,
+    }));
+  }, []);
+
+  // 切换对话
+  const switchConversation = useCallback((id: string) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "clear" }));
+    }
+    setState((s) => {
+      const conv = s.conversations.find((c) => c.id === id);
+      if (!conv || conv.id === s.activeConvId) return s;
+      return {
+        ...s,
+        activeConvId: id,
+        messages: conv.messages,
+        inputTokens: conv.inputTokens,
+        outputTokens: conv.outputTokens,
+        isStreaming: false,
+        error: null,
+      };
+    });
+  }, []);
+
+  // 删除对话
+  const deleteConversation = useCallback((id: string) => {
+    setState((s) => {
+      if (s.conversations.length <= 1) return s;
+      const conversations = s.conversations.filter((c) => c.id !== id);
+      let activeConvId = s.activeConvId;
+      if (activeConvId === id) {
+        // Switch to the previous conversation
+        const deletedIndex = s.conversations.findIndex((c) => c.id === id);
+        const newIndex = Math.max(0, deletedIndex - 1);
+        activeConvId = conversations[newIndex].id;
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: "clear" }));
+        }
+      }
+      const activeConv = conversations.find((c) => c.id === activeConvId)!;
+      return {
+        ...s,
+        conversations,
+        activeConvId,
+        messages: activeConv.messages,
+        inputTokens: activeConv.inputTokens,
+        outputTokens: activeConv.outputTokens,
+        isStreaming: s.activeConvId === id ? false : s.isStreaming,
+      };
+    });
   }, []);
 
   // 切换模式
@@ -350,6 +476,25 @@ export function useChatWs() {
     }
     wsRef.current.send(JSON.stringify({ type: "switch_model", model }));
     setState((s) => ({ ...s, model }));
+  }, []);
+
+  // 更新对话标题
+  const updateConvTitle = useCallback((id: string, title: string) => {
+    console.log("[chatWs] updateConvTitle", id, title);
+    setState((s) => {
+      console.log("[chatWs] updateConvTitle setState, convs:", s.conversations.map(c => c.id), "target:", id);
+      const conversations = s.conversations.map((c) =>
+        c.id === id ? { ...c, title } : c
+      );
+      const activeConv = conversations.find((c) => c.id === s.activeConvId)!;
+      return {
+        ...s,
+        conversations,
+        messages: activeConv.messages,
+        inputTokens: activeConv.inputTokens,
+        outputTokens: activeConv.outputTokens,
+      };
+    });
   }, []);
 
   // 停止生成
@@ -372,6 +517,10 @@ export function useChatWs() {
     sendMessage,
     stopGeneration,
     clearMessages,
+    newConversation,
+    switchConversation,
+    deleteConversation,
+    updateConvTitle,
     switchMode,
     switchModel,
     reconnect: connect,
