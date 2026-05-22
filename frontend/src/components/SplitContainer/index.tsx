@@ -16,6 +16,8 @@ interface SplitContainerProps {
   onTabAdd: (paneId: string, options?: { type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => void;
   onTabRename: (paneId: string, tabId: string, title: string) => void;
   onTabDrop: (fromPaneId: string, toPaneId: string, tabId: string) => void;
+  onToggleAI?: () => void;
+  aiVisible?: boolean;
 }
 
 export default function SplitContainer({
@@ -26,6 +28,8 @@ export default function SplitContainer({
   onTabAdd,
   onTabRename,
   onTabDrop,
+  onToggleAI,
+  aiVisible,
 }: SplitContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // 存储所有终端实例的 ref
@@ -78,89 +82,94 @@ export default function SplitContainer({
   }, [panes]);
 
   // 更新终端实例的位置
-  useEffect(() => {
-    if (!containerRef.current) return;
-
+  const updatePositions = useCallback(() => {
     const container = containerRef.current;
+    if (!container) return;
 
-    const updatePositions = () => {
-      const panesElements = container.querySelectorAll<HTMLDivElement>("[data-pane-id]");
-      const terminalElements = container.querySelectorAll<HTMLDivElement>("[data-terminal-id]");
+    const panesElements = container.querySelectorAll<HTMLDivElement>("[data-pane-id]");
+    const terminalElements = container.querySelectorAll<HTMLDivElement>("[data-terminal-id]");
 
-      // 获取每个 pane 的位置信息
-      const paneRects = new Map<string, DOMRect>();
-      panesElements.forEach((el) => {
-        const paneId = el.dataset.paneId!;
-        paneRects.set(paneId, el.getBoundingClientRect());
-      });
+    const paneRects = new Map<string, DOMRect>();
+    panesElements.forEach((el) => {
+      const paneId = el.dataset.paneId!;
+      paneRects.set(paneId, el.getBoundingClientRect());
+    });
 
-      // 获取 TabBar 高度
-      const tabBarHeight = panesElements[0]?.querySelector(".tab-bar")?.getBoundingClientRect().height || 36;
-      const containerRect = container.getBoundingClientRect();
+    const tabBarHeight = panesElements[0]?.querySelector(".tab-bar")?.getBoundingClientRect().height || 36;
+    const containerRect = container.getBoundingClientRect();
 
-      // 定位每个终端
-      terminalElements.forEach((el) => {
-        const tabId = el.dataset.terminalId!;
-        const paneId = tabPaneMap.get(tabId);
-        const paneRect = paneId ? paneRects.get(paneId) : null;
+    terminalElements.forEach((el) => {
+      const tabId = el.dataset.terminalId!;
+      const paneId = tabPaneMap.get(tabId);
+      const paneRect = paneId ? paneRects.get(paneId) : null;
 
-        if (paneRect && activeTabSet.has(tabId)) {
-          el.style.display = "block";
-          el.style.left = `${paneRect.left - containerRect.left}px`;
-          el.style.top = `${paneRect.top - containerRect.top + tabBarHeight}px`;
-          el.style.width = `${paneRect.width}px`;
-          el.style.height = `${paneRect.height - tabBarHeight}px`;
-        } else {
-          el.style.display = "none";
+      if (paneRect && activeTabSet.has(tabId)) {
+        el.style.display = "block";
+        el.style.left = `${paneRect.left - containerRect.left}px`;
+        el.style.top = `${paneRect.top - containerRect.top + tabBarHeight}px`;
+        el.style.width = `${paneRect.width}px`;
+        el.style.height = `${paneRect.height - tabBarHeight}px`;
+      } else {
+        el.style.display = "none";
+      }
+    });
+  }, [tabPaneMap, activeTabSet]);
+
+  // fit 所有终端（同步，调用前需确保 DOM 已更新）
+  const fitAllTerminals = useCallback(() => {
+    const paneSizes = new Map<string, { cols: number; rows: number }>();
+
+    terminalRefs.current.forEach((ref, tabId) => {
+      const paneId = tabPaneMap.get(tabId);
+      if (paneId && activeTabSet.has(tabId)) {
+        ref.fit();
+        const terminalEl = document.querySelector(`[data-terminal-id="${tabId}"]`);
+        if (terminalEl) {
+          const width = terminalEl.clientWidth;
+          const height = terminalEl.clientHeight;
+          const cols = Math.floor(width / 9);
+          const rows = Math.floor(height / 20);
+          paneSizes.set(paneId, { cols, rows });
         }
-      });
-    };
+      }
+    });
 
+    terminalRefs.current.forEach((ref, tabId) => {
+      const paneId = tabPaneMap.get(tabId);
+      if (paneId && !activeTabSet.has(tabId)) {
+        const size = paneSizes.get(paneId);
+        if (size) {
+          ref.fitWithSize(size.cols, size.rows);
+        }
+      }
+    });
+  }, [tabPaneMap, activeTabSet]);
+
+  // 位置更新 + fit 一体化
+  const updateAndFit = useCallback(() => {
     updatePositions();
+    // 强制浏览器重排，确保 terminal-container 尺寸已更新
+    containerRef.current?.offsetHeight;
+    fitAllTerminals();
+  }, [updatePositions, fitAllTerminals]);
 
-    // 监听窗口 resize 事件重新计算布局
-    window.addEventListener("resize", updatePositions);
-    return () => window.removeEventListener("resize", updatePositions);
-  }, [panes, tabPaneMap, activeTabSet]);
-
-  // 布局变化后，延迟调用所有终端的 fit
   useEffect(() => {
-    // 等待 DOM 更新完成
-    const timer = setTimeout(() => {
-      // 收集每个分区可见终端的尺寸
-      const paneSizes = new Map<string, { cols: number; rows: number }>();
+    const container = containerRef.current;
+    if (!container) return;
 
-      terminalRefs.current.forEach((ref, tabId) => {
-        const paneId = tabPaneMap.get(tabId);
-        if (paneId && activeTabSet.has(tabId)) {
-          // 可见终端，执行 fit 并记录尺寸
-          ref.fit();
-          // 从 DOM 获取终端尺寸
-          const terminalEl = document.querySelector(`[data-terminal-id="${tabId}"]`);
-          if (terminalEl) {
-            const width = terminalEl.clientWidth;
-            const height = terminalEl.clientHeight;
-            // 估算 cols 和 rows（字体大小约 14px，行高约 1.4）
-            const cols = Math.floor(width / 9); // 约 9px 字符宽度
-            const rows = Math.floor(height / 20); // 约 20px 行高
-            paneSizes.set(paneId, { cols, rows });
-          }
-        }
-      });
+    updateAndFit();
 
-      // 给隐藏的终端发送相同分区的尺寸
-      terminalRefs.current.forEach((ref, tabId) => {
-        const paneId = tabPaneMap.get(tabId);
-        if (paneId && !activeTabSet.has(tabId)) {
-          const size = paneSizes.get(paneId);
-          if (size) {
-            ref.fitWithSize(size.cols, size.rows);
-          }
-        }
-      });
-    }, 100);
+    const ro = new ResizeObserver(() => updateAndFit());
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [panes, updateAndFit]);
+
+  // 布局切换
+  useEffect(() => {
+    // 等 DOM 更新完成再 fit
+    const timer = setTimeout(updateAndFit, 50);
     return () => clearTimeout(timer);
-  }, [layout, tabPaneMap, activeTabSet]);
+  }, [layout, updateAndFit]);
 
   // 注册终端 ref 的回调
   const setTerminalRef = useCallback((tabId: string) => {
@@ -174,7 +183,7 @@ export default function SplitContainer({
   }, []);
 
   // 渲染单个分区
-  const renderPane = (pane: Pane) => {
+  const renderPane = (pane: Pane, index: number) => {
     return (
       <div
         key={pane.id}
@@ -205,6 +214,7 @@ export default function SplitContainer({
             e.dataTransfer.setData("paneId", pane.id);
             e.dataTransfer.setData("tabId", tab.id);
           }}
+          {...(index === 0 && onToggleAI ? { onToggleAI, aiVisible } : {})}
         />
         <div className="pane-content" />
       </div>
@@ -213,7 +223,7 @@ export default function SplitContainer({
 
   return (
     <div ref={containerRef} className="split-container" style={gridStyle}>
-      {panes.map(renderPane)}
+      {panes.map((pane, index) => renderPane(pane, index))}
 
       {/* 全局终端池 */}
       <div className="terminal-pool">

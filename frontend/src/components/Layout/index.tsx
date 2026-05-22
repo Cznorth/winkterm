@@ -69,7 +69,7 @@ const Icons = {
   ),
 };
 
-type ActivityItem = "terminal" | "ai" | "ssh" | "settings";
+type ActivityItem = "terminal" | "ssh" | "settings";
 
 const LAYOUT_BUTTONS: { layout: LayoutType; icon: ReactNode; titleKey: "layout.single" | "layout.horizontal" | "layout.vertical" | "layout.grid" }[] = [
   { layout: "single", icon: Icons.layoutSingle, titleKey: "layout.single" },
@@ -91,8 +91,10 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     moveTab,
   } = usePanes();
 
-  const [activeActivity, setActiveActivity] = useState<ActivityItem>("ai");
+  const [activeActivity, setActiveActivity] = useState<ActivityItem>("terminal");
+  const [showAI, setShowAI] = useState(true);
   const [aiWidth, setAiWidth] = useState(320);
+  const [isDesktop, setIsDesktop] = useState(false);
   const resizingRef = useRef(false);
 
   useEffect(() => {
@@ -100,6 +102,14 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     if (saved) {
       setAiWidth(Math.min(600, Math.max(240, Number(saved))));
     }
+    const savedAI = localStorage.getItem("winkterm-ai-visible");
+    if (savedAI !== null) {
+      setShowAI(savedAI !== "false");
+    }
+    // Detect desktop mode
+    const checkDesktop = () => setIsDesktop(!!window.pywebview?.api);
+    const timer = setTimeout(checkDesktop, 300);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -133,6 +143,13 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     document.addEventListener("mouseup", onMouseUp);
   }, [aiWidth]);
 
+  const handleToggleAI = useCallback(() => {
+    setShowAI((v) => {
+      localStorage.setItem("winkterm-ai-visible", String(!v));
+      return !v;
+    });
+  }, []);
+
   // 处理 SSH 连接 - 添加到第一个分区
   const handleSSHConnect = (conn: { id: string; title: string; host: string; color?: string }) => {
     const firstPaneId = panes[0].id;
@@ -147,7 +164,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
 
   return (
     <div className="layout-container">
-      <TitleBar />
+      <TitleBar onToggleAI={handleToggleAI} aiVisible={showAI} />
       <div className="main-content">
         {/* 活动栏 */}
         <div className="activity-bar">
@@ -158,13 +175,6 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
               title={t("layout.terminal")}
             >
               {Icons.terminal}
-            </div>
-            <div
-              className={`activity-item ${activeActivity === "ai" ? "active" : ""}`}
-              onClick={() => setActiveActivity("ai")}
-              title={t("layout.aiAssistant")}
-            >
-              {Icons.ai}
             </div>
             <div
               className={`activity-item ${activeActivity === "ssh" ? "active" : ""}`}
@@ -209,14 +219,16 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
               onTabAdd={addTab}
               onTabRename={renameTab}
               onTabDrop={moveTab}
+              onToggleAI={!isDesktop ? handleToggleAI : undefined}
+              aiVisible={showAI}
             />
           </div>
           {activeActivity === "ssh" && <SSHPanel onConnect={handleSSHConnect} />}
           {activeActivity === "settings" && <SettingsPanel />}
         </div>
 
-        {/* AI 侧边栏 - 仅 AI 模式显示 */}
-        {activeActivity === "ai" && (
+        {/* AI 侧边栏 */}
+        {showAI && (
           <>
             <div className="ai-resize-handle" onMouseDown={handleResizeStart} />
             <div className="ai-section" style={{ width: aiWidth }}>

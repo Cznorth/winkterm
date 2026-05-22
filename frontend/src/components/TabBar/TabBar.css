@@ -238,3 +238,37 @@
   background: var(--bg-tertiary);
   min-width: 20px;
 }
+
+/* AI 切换按钮 */
+.tab-bar-ai-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 35px;
+  height: 35px;
+  background: transparent;
+  border: none;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.tab-bar-ai-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.tab-bar-ai-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.tab-bar-ai-toggle.active {
+  color: var(--accent-primary);
+}
+
+.tab-bar-ai-toggle.active:hover {
+  color: var(--accent-primary);
+  background: var(--bg-hover);
+}

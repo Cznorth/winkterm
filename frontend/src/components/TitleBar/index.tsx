@@ -278,7 +278,12 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
   return { startDrag };
 }
 
-export default function TitleBar() {
+interface TitleBarProps {
+  onToggleAI?: () => void;
+  aiVisible?: boolean;
+}
+
+export default function TitleBar({ onToggleAI, aiVisible }: TitleBarProps) {
   const { t } = useI18n();
   const [isMaximized, setIsMaximized] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -409,6 +414,20 @@ export default function TitleBar() {
               <WinkTermLogo size={18} className="title-bar-logo" />
               <span className="title-bar-title">WinkTerm</span>
             </div>
+            {onToggleAI && (
+              <button
+                className={`title-bar-btn ai-toggle ${aiVisible ? "active" : ""}`}
+                onClick={onToggleAI}
+                title={t("layout.aiAssistant")}
+                style={{ zIndex: 11 }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                  <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
+                  <circle cx="8" cy="14" r="1.5" fill="currentColor" />
+                  <circle cx="16" cy="14" r="1.5" fill="currentColor" />
+                </svg>
+              </button>
+            )}
           </>
         ) : (
           // Windows 风格：按钮在右侧
@@ -421,6 +440,19 @@ export default function TitleBar() {
               <WinkTermLogo size={18} className="title-bar-logo" />
               <span className="title-bar-title">WinkTerm</span>
             </div>
+            {onToggleAI && (
+              <button
+                className={`title-bar-btn ai-toggle ${aiVisible ? "active" : ""}`}
+                onClick={onToggleAI}
+                title={t("layout.aiAssistant")}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                  <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
+                  <circle cx="8" cy="14" r="1.5" fill="currentColor" />
+                  <circle cx="16" cy="14" r="1.5" fill="currentColor" />
+                </svg>
+              </button>
+            )}
             <div className="title-bar-controls">
               <button className="title-bar-btn minimize" onClick={handleMinimize} title={t("titlebar.minimize")}>
                 <svg viewBox="0 0 12 12">

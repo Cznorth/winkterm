@@ -160,18 +160,37 @@ export function useTerminal(
     DEBUG && console.log(`[useTerminal] 初始化完成, sessionId=${sessionId}, type=${terminalType}, cols=`, cols, "rows=", rows);
   }, [containerRef, sessionId, terminalType, sshConnectionId]);
 
-  // resize 监听
+  // resize 监听 - 用 ResizeObserver 监听容器尺寸变化
   useEffect(() => {
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handleResize = () => {
-      if (fitAddonRef.current && termRef.current) {
-        fitAddonRef.current.fit();
-        const { cols, rows } = termRef.current;
-        wsRef.current.sendResize(cols, rows);
-      }
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (fitAddonRef.current && termRef.current) {
+          try {
+            fitAddonRef.current.fit();
+            const { cols, rows } = termRef.current;
+            wsRef.current.sendResize(cols, rows);
+          } catch (e) {
+            // ignore fit errors during transitions
+          }
+        }
+      }, 50);
     };
 
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+
+    const resizeObserver = new ResizeObserver(handleResize);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
+    };
   }, []);
 
   // 清理

@@ -19,32 +19,71 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+const CTX_CATEGORIES = [
+  { key: "input", label: "Input tokens", color: "#6b7280" },
+  { key: "output", label: "Output tokens", color: "#a78bfa" },
+] as const;
+
 function ContextMeter({ inputTokens, outputTokens, maxContext }: { inputTokens: number; outputTokens: number; maxContext: number }) {
+  const [open, setOpen] = useState(false);
+  const popupRef = useRef<HTMLDivElement>(null);
   const total = inputTokens + outputTokens;
   const pct = Math.min(total / maxContext, 1);
+  const pctDisplay = Math.round(pct * 100);
   const circumference = 2 * Math.PI * 8;
   const offset = circumference * (1 - pct);
   const color = pct > 0.85 ? "var(--error)" : pct > 0.70 ? "var(--warning)" : "var(--success)";
 
+  const segments = [
+    { value: inputTokens, color: "#6b7280" },
+    { value: outputTokens, color: "#a78bfa" },
+  ];
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
   return (
-    <div className="ctx-meter">
-      <svg viewBox="0 0 22 22" className="ctx-meter-ring">
+    <div className="ctx-meter" ref={popupRef}>
+      <svg viewBox="0 0 22 22" className="ctx-meter-ring" onClick={() => setOpen(!open)}>
         <circle cx="11" cy="11" r="8" className="ctx-meter-track" />
         <circle cx="11" cy="11" r="8" className="ctx-meter-fill" style={{ stroke: color, strokeDasharray: circumference, strokeDashoffset: offset }} />
       </svg>
-      <div className="ctx-meter-tooltip">
-        <div className="ctx-meter-tooltip-title">Context Window</div>
-        <div className="ctx-meter-tooltip-row">
-          <span>Input</span><span className="ctx-meter-tooltip-val">{formatTokens(inputTokens)}</span>
+      {open && (
+        <div className="ctx-popup">
+          <div className="ctx-popup-header">
+            <span className="ctx-popup-title">Context</span>
+            <button className="ctx-popup-close" onClick={() => setOpen(false)}>✕</button>
+          </div>
+          <div className="ctx-popup-summary">
+            <span>{pctDisplay}% Full</span>
+            <span>~{formatTokens(total)} / {formatTokens(maxContext)} Tokens</span>
+          </div>
+          <div className="ctx-popup-bar">
+            {segments.map((seg, i) => {
+              const w = maxContext > 0 ? (seg.value / maxContext) * 100 : 0;
+              return w > 0 ? <div key={i} className="ctx-popup-bar-seg" style={{ width: `${w}%`, background: seg.color }} /> : null;
+            })}
+          </div>
+          <div className="ctx-popup-list">
+            {CTX_CATEGORIES.map((cat) => {
+              const val = cat.key === "input" ? inputTokens : outputTokens;
+              return (
+                <div key={cat.key} className="ctx-popup-row">
+                  <span className="ctx-popup-dot" style={{ background: cat.color }} />
+                  <span className="ctx-popup-label">{cat.label}</span>
+                  <span className="ctx-popup-val">{formatTokens(val)}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <div className="ctx-meter-tooltip-row">
-          <span>Output</span><span className="ctx-meter-tooltip-val">{formatTokens(outputTokens)}</span>
-        </div>
-        <div className="ctx-meter-tooltip-divider" />
-        <div className="ctx-meter-tooltip-row">
-          <span>Total</span><span className="ctx-meter-tooltip-val">{formatTokens(total)} / {formatTokens(maxContext)}</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -293,32 +332,11 @@ export default function AIPanel() {
             }}
             placeholder={isConnected ? t("ai.placeholder") : t("ai.waitingConnection")}
             disabled={!isConnected || isStreaming}
-            rows={2}
+            rows={1}
           />
-          {isStreaming ? (
-            <button
-              type="button"
-              className="ai-stop-btn"
-              onClick={stopGeneration}
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
-              {t("ai.stop")}
-            </button>
-          ) : (
-            <button
-              type="submit"
-              className="ai-send-btn"
-              disabled={!isConnected || !input.trim()}
-            >
-              {t("ai.send")}
-            </button>
-          )}
         </form>
-      </div>
 
-      <div className="ai-toolbar">
+        <div className="ai-toolbar">
         <div className="ai-mode-selector" ref={modeDropdownRef}>
           {modeDropdownOpen && isConnected && (
             <div className="ai-mode-dropdown">
@@ -378,9 +396,22 @@ export default function AIPanel() {
           </button>
         </div>
 
-        <div style={{ marginLeft: "auto" }}>
+        <div className="ai-toolbar-right">
+          {isStreaming && (
+            <button
+              type="button"
+              className="ai-stop-btn"
+              onClick={stopGeneration}
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              {t("ai.stop")}
+            </button>
+          )}
           <ContextMeter inputTokens={inputTokens} outputTokens={outputTokens} maxContext={maxContext} />
         </div>
+      </div>
       </div>
     </div>
   );

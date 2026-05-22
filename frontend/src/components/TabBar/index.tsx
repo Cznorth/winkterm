@@ -22,6 +22,8 @@ interface TabBarProps {
   onTabRename: (id: string, title: string) => void;
   paneId?: string;
   onDragStart?: (e: React.DragEvent, tab: TabState) => void;
+  onToggleAI?: () => void;
+  aiVisible?: boolean;
 }
 
 // 终端图标
@@ -63,6 +65,8 @@ export default function TabBar({
   onTabRename,
   paneId,
   onDragStart,
+  onToggleAI,
+  aiVisible,
 }: TabBarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -206,6 +210,20 @@ export default function TabBar({
         </div>
 
         <div className="tab-bar-spacer" />
+
+        {onToggleAI && (
+          <button
+            className={`tab-bar-ai-toggle ${aiVisible ? "active" : ""}`}
+            onClick={onToggleAI}
+            title={t("layout.aiAssistant")}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
+              <circle cx="8" cy="14" r="1.5" fill="currentColor" />
+              <circle cx="16" cy="14" r="1.5" fill="currentColor" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* 下拉菜单 - 使用 fixed 定位避免被裁剪 */}

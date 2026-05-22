@@ -144,6 +144,33 @@
   color: white;
 }
 
+/* AI toggle button */
+.title-bar-btn.ai-toggle {
+  width: 36px;
+  border-radius: 4px;
+  margin: 2px 4px;
+  height: calc(100% - 4px);
+}
+
+.title-bar-btn.ai-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.title-bar-btn.ai-toggle.active {
+  color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
+.title-bar-btn.ai-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.title-bar-btn.ai-toggle.active:hover {
+  color: var(--accent-primary);
+}
+
 /* 边缘调整大小区域 */
 .resize-edge {
   position: fixed;
