@@ -317,6 +317,12 @@
   color: var(--success);
 }
 
+.settings-success svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 /* 状态指示器 */
 .settings-status {
   display: flex;

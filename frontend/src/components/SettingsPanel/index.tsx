@@ -83,7 +83,7 @@ const CheckIcon = () => (
 );
 
 export default function SettingsPanel() {
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const [settings, setSettings] = useState<Settings>({
     api_format: "openai",
     base_url: "",
@@ -338,6 +338,31 @@ export default function SettingsPanel() {
                 <PlusIcon />
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="settings-group">
+          <div className="settings-group-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            {t("settings.language")}
+          </div>
+          <div className="settings-field">
+            <select
+              className="settings-select"
+              value={locale}
+              onChange={(e) => {
+                const lang = e.target.value as "zh" | "en";
+                setLocale(lang);
+                axios.post("/api/settings", { language: lang }).catch(() => {});
+              }}
+            >
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
           </div>
         </div>
 
