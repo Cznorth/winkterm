@@ -9,6 +9,7 @@ interface FileTransferDialogProps {
   connectionId: string;
   title: string;
   onClose: () => void;
+  inline?: boolean;
 }
 
 interface RemoteFileItem {
@@ -262,6 +263,7 @@ export default function FileTransferDialog({
   connectionId,
   title,
   onClose,
+  inline = false,
 }: FileTransferDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
@@ -1207,9 +1209,8 @@ export default function FileTransferDialog({
     );
   };
 
-  return (
-    <div className="file-transfer-overlay" onClick={onClose}>
-      <div className="file-transfer-dialog" onClick={(event) => event.stopPropagation()}>
+  const dialogContent = (
+      <div className={`file-transfer-dialog ${inline ? "inline" : ""}`} onClick={inline ? undefined : (event) => event.stopPropagation()}>
         <div className="file-transfer-header">
           <div>
             <div className="file-transfer-title">远程文件管理器</div>
@@ -1547,6 +1548,15 @@ export default function FileTransferDialog({
           </div>
         )}
       </div>
+  );
+
+  if (inline) {
+    return dialogContent;
+  }
+
+  return (
+    <div className="file-transfer-overlay" onClick={onClose}>
+      {dialogContent}
     </div>
   );
 }

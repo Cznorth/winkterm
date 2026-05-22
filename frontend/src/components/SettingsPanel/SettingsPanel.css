@@ -39,6 +39,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 0;
+  max-width: 600px;
 }
 
 /* 分组 */

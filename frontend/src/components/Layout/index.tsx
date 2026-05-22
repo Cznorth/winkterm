@@ -156,29 +156,29 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           </div>
         </div>
 
-        {/* 终端区域 - 使用 SplitContainer */}
+        {/* 主内容区域 - 终端始终挂载，SSH/设置覆盖显示 */}
         <div className="terminal-section">
-          <SplitContainer
-            layout={layout}
-            panes={panes}
-            onTabClick={switchTab}
-            onTabClose={closeTab}
-            onTabAdd={addTab}
-            onTabRename={renameTab}
-            onTabDrop={moveTab}
-          />
+          <div className="terminal-layer" style={{ display: activeActivity === "ssh" || activeActivity === "settings" ? "none" : "flex" }}>
+            <SplitContainer
+              layout={layout}
+              panes={panes}
+              onTabClick={switchTab}
+              onTabClose={closeTab}
+              onTabAdd={addTab}
+              onTabRename={renameTab}
+              onTabDrop={moveTab}
+            />
+          </div>
+          {activeActivity === "ssh" && <SSHPanel onConnect={handleSSHConnect} />}
+          {activeActivity === "settings" && <SettingsPanel />}
         </div>
 
-        {/* 右侧面板 */}
-        <div className="ai-section">
-          {activeActivity === "settings" ? (
-            <SettingsPanel />
-          ) : activeActivity === "ssh" ? (
-            <SSHPanel onConnect={handleSSHConnect} />
-          ) : (
-            aiPanel
-          )}
-        </div>
+        {/* AI 侧边栏 - 仅 AI 模式显示 */}
+        {activeActivity === "ai" && (
+          <div className="ai-section">
+            {aiPanel}
+          </div>
+        )}
       </div>
     </div>
   );

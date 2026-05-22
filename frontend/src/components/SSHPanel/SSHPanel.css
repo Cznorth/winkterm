@@ -77,7 +77,7 @@
 .ssh-header-dropdown {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
+  right: 0;
   min-width: 160px;
   padding: 4px;
   border: 1px solid var(--border-default);
@@ -111,11 +111,18 @@
   cursor: not-allowed;
 }
 
+/* 主体区域 - 列表 + 表单并排 */
+.ssh-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
 /* 连接列表 */
 .ssh-list {
-  flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 16px;
+  flex-shrink: 0;
 }
 
 .ssh-empty {
@@ -153,7 +160,6 @@
 .ssh-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 10px 12px;
   margin-bottom: 4px;
   background: var(--bg-primary);
@@ -161,10 +167,17 @@
   border-left: 3px solid var(--accent-primary);
   cursor: pointer;
   transition: background var(--transition-fast);
+  max-width: 520px;
+  gap: 12px;
 }
 
 .ssh-item:hover {
   background: var(--bg-hover);
+}
+
+.ssh-item.selected {
+  background: var(--bg-hover);
+  border-left-width: 3px;
 }
 
 .ssh-item-info {
@@ -243,43 +256,57 @@
   color: white;
 }
 
-/* 表单 */
-.ssh-form-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
+/* 内联表单 - 右侧面板 */
 .ssh-form {
-  width: 400px;
-  max-width: 90%;
+  width: 360px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-default);
-  box-shadow: var(--shadow-lg);
+  border-left: 1px solid var(--border-default);
 }
 
 .ssh-form-header {
-  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 35px;
   border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
 }
 
 .ssh-form-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ssh-form-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  transition: all var(--transition-fast);
+}
+
+.ssh-form-close:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
 }
 
 .ssh-form-body {
+  flex: 1;
   padding: 16px;
-  max-height: 60vh;
   overflow-y: auto;
 }
 

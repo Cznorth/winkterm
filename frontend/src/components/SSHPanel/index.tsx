@@ -86,6 +86,7 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
   };
 
   const handleOpenTransfer = (conn: SSHConnection) => {
+    setShowForm(false);
     setTransferTarget(conn);
   };
 
@@ -114,6 +115,7 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
   };
 
   const handleEdit = (conn: SSHConnection) => {
+    setTransferTarget(null);
     setEditingId(conn.id);
     setForm({
       title: conn.title,
@@ -170,6 +172,7 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
   };
 
   const handleNewConnection = () => {
+    setTransferTarget(null);
     setEditingId(null);
     setForm({
       title: "",
@@ -223,12 +226,6 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
               </div>
             )}
           </div>
-          <button className="ssh-btn ssh-btn-primary" onClick={handleNewConnection}>
-            New
-          </button>
-          <button className="ssh-btn" onClick={handleImportClick}>
-            Import
-          </button>
           <input
             ref={fileInputRef}
             type="file"
@@ -239,78 +236,72 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
         </div>
       </div>
 
-      <div className="ssh-list">
-        {connections.length === 0 ? (
-          <div className="ssh-empty">
-            <p>No SSH connections</p>
-            <p>Click "New" to add one, or use "More" &gt; "File transfer"</p>
-            <button className="ssh-empty-action" onClick={handleQuickTransfer}>
-              Open file transfer
-            </button>
-          </div>
-        ) : (
-          connections.map((conn) => (
-            <div
-              key={conn.id}
-              className="ssh-item"
-              style={{ borderLeftColor: conn.color || "#0078d4" }}
-            >
-              <div className="ssh-item-info">
-                <div className="ssh-item-title">{conn.title || conn.host}</div>
-                <div className="ssh-item-detail">
-                  {conn.username}@{conn.host}:{conn.port}
+      <div className="ssh-body">
+        <div className="ssh-list">
+          {connections.length === 0 ? (
+            <div className="ssh-empty">
+              <p>No SSH connections</p>
+              <p>Click &quot;More&quot; &gt; &quot;New connection&quot; to add one</p>
+              <button className="ssh-empty-action" onClick={handleQuickTransfer}>
+                Open file transfer
+              </button>
+            </div>
+          ) : (
+            connections.map((conn) => (
+              <div
+                key={conn.id}
+                className={`ssh-item ${editingId === conn.id && showForm ? "selected" : ""}`}
+                style={{ borderLeftColor: conn.color || "#0078d4" }}
+              >
+                <div className="ssh-item-info">
+                  <div className="ssh-item-title">{conn.title || conn.host}</div>
+                  <div className="ssh-item-detail">
+                    {conn.username}@{conn.host}:{conn.port}
+                  </div>
+                </div>
+                <div className="ssh-item-actions">
+                  {onConnect && (
+                    <button
+                      className="ssh-item-btn connect"
+                      onClick={() => onConnect(conn)}
+                      title="Connect"
+                    >
+                      Connect
+                    </button>
+                  )}
+                  <button
+                    className="ssh-item-btn transfer"
+                    onClick={() => handleOpenTransfer(conn)}
+                    title="File transfer"
+                    aria-label="File transfer"
+                  >
+                    <TransferIcon />
+                  </button>
+                  <button
+                    className="ssh-item-btn"
+                    onClick={() => handleEdit(conn)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="ssh-item-btn delete"
+                    onClick={() => handleDelete(conn.id)}
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
-              <div className="ssh-item-actions">
-                {onConnect && (
-                  <button
-                    className="ssh-item-btn connect"
-                    onClick={() => onConnect(conn)}
-                    title="Connect"
-                  >
-                    Connect
-                  </button>
-                )}
-                <button
-                  className="ssh-item-btn transfer"
-                  onClick={() => handleOpenTransfer(conn)}
-                  title="File transfer"
-                  aria-label="File transfer"
-                >
-                  <TransferIcon />
-                </button>
-                <button
-                  className="ssh-item-btn"
-                  onClick={() => handleEdit(conn)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="ssh-item-btn delete"
-                  onClick={() => handleDelete(conn.id)}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+            ))
+          )}
+        </div>
 
-      {transferTarget && (
-        <FileTransferDialog
-          open={true}
-          connectionId={transferTarget.id}
-          title={transferTarget.title || transferTarget.host}
-          onClose={handleCloseTransfer}
-        />
-      )}
-
-      {showForm && (
-        <div className="ssh-form-overlay">
+        {showForm && (
           <div className="ssh-form">
             <div className="ssh-form-header">
               <h3>{editingId ? "Edit Connection" : "New Connection"}</h3>
+              <button className="ssh-form-close" onClick={() => setShowForm(false)} title="Close">
+                ✕
+              </button>
             </div>
 
             <div className="ssh-form-body">
@@ -405,8 +396,17 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+        {transferTarget && (
+          <FileTransferDialog
+            open={true}
+            connectionId={transferTarget.id}
+            title={transferTarget.title || transferTarget.host}
+            onClose={handleCloseTransfer}
+            inline
+          />
+        )}
+      </div>
     </div>
   );
 }

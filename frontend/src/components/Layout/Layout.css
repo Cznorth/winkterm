@@ -84,6 +84,12 @@
   border-right: 1px solid var(--border-default);
 }
 
+.terminal-layer {
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 /* AI 面板区域 */
 .ai-section {
   display: flex;
