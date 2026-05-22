@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useChatWs, ChatMessage, ChatMode, ToolCall } from "@/lib/chatWs";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
@@ -225,11 +225,25 @@ export default function AIPanel() {
   const modeDropdownRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const fetchModels = useCallback(() => {
     axios.get("/api/settings").then((res) => {
       setModels(res.data.models || []);
-    });
-  }, []);
+      if (!model && res.data.selected_model) {
+        switchModel(res.data.selected_model);
+      }
+    }).catch(() => {});
+  }, [model, switchModel]);
+
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
+
+  // Re-fetch models when panel gains focus (e.g. after settings change)
+  useEffect(() => {
+    const onFocus = () => fetchModels();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchModels]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -369,7 +383,7 @@ export default function AIPanel() {
         <div className="ai-toolbar-divider" />
 
         <div className="ai-mode-selector" ref={modelDropdownRef}>
-          {modelDropdownOpen && isConnected && models.length > 0 && (
+          {modelDropdownOpen && models.length > 0 && (
             <div className="ai-mode-dropdown">
               {models.map((m) => (
                 <div
@@ -385,8 +399,8 @@ export default function AIPanel() {
           )}
           <button
             className="ai-mode-btn"
-            onClick={() => isConnected && models.length > 0 && setModelDropdownOpen(!modelDropdownOpen)}
-            disabled={!isConnected || models.length === 0}
+            onClick={() => models.length > 0 && setModelDropdownOpen(!modelDropdownOpen)}
+            disabled={models.length === 0}
             title={model || "Select model"}
           >
             <span className="ai-mode-btn-text">
@@ -397,7 +411,8 @@ export default function AIPanel() {
         </div>
 
         <div className="ai-toolbar-right">
-          {isStreaming && (
+          <ContextMeter inputTokens={inputTokens} outputTokens={outputTokens} maxContext={maxContext} />
+          {isStreaming ? (
             <button
               type="button"
               className="ai-stop-btn"
@@ -408,8 +423,19 @@ export default function AIPanel() {
               </svg>
               {t("ai.stop")}
             </button>
+          ) : (
+            <button
+              type="button"
+              className="ai-send-btn"
+              disabled={!isConnected || !input.trim()}
+              onClick={handleSubmit}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
           )}
-          <ContextMeter inputTokens={inputTokens} outputTokens={outputTokens} maxContext={maxContext} />
         </div>
       </div>
       </div>

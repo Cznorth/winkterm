@@ -400,6 +400,37 @@
   height: 14px;
 }
 
+.ai-send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--transition-fast), opacity var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.ai-send-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.ai-send-btn:disabled {
+  background: var(--bg-active);
+  color: var(--fg-muted);
+  cursor: not-allowed;
+}
+
+.ai-send-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* ========== 错误提示 ========== */
 .ai-error {
   display: flex;
@@ -643,15 +674,17 @@
 }
 
 .ctx-meter-ring {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: block;
+  filter: drop-shadow(0 0 1px var(--fg-muted));
 }
 
 .ctx-meter-track {
   fill: none;
-  stroke: var(--bg-input);
+  stroke: var(--fg-muted);
   stroke-width: 2;
+  opacity: 0.3;
 }
 
 .ctx-meter-fill {
