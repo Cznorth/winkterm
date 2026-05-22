@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useChatWs, ChatMessage, ChatMode, ToolCall } from "@/lib/chatWs";
+import { useChatWs, ChatMessage, ChatMode, ToolCall, ContentBlock } from "@/lib/chatWs";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
 import ReactMarkdown from "react-markdown";
@@ -188,15 +188,18 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
             )}
           </div>
         )}
-        {msg.toolCalls && msg.toolCalls.length > 0 && (
-          <div style={{ marginBottom: msg.content ? "12px" : 0 }}>
-            {msg.toolCalls.map((tc) => (
-              <ToolCallDisplay key={tc.id} toolCall={tc} />
-            ))}
-          </div>
-        )}
         {isUser ? (
           msg.content
+        ) : msg.contentBlocks && msg.contentBlocks.length > 0 ? (
+          msg.contentBlocks.map((block: ContentBlock, i: number) =>
+            block.type === "tool" ? (
+              <ToolCallDisplay key={block.toolCall.id} toolCall={block.toolCall} />
+            ) : block.text ? (
+              <div key={i} className="md-content">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.text}</ReactMarkdown>
+              </div>
+            ) : null
+          )
         ) : msg.content ? (
           <div className="md-content">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>

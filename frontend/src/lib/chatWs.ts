@@ -15,12 +15,17 @@ export interface ToolCall {
   result?: string;
 }
 
+export type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool"; toolCall: ToolCall };
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: number;
   toolCalls?: ToolCall[];
+  contentBlocks?: ContentBlock[];
   thinking?: string;  // AI 思考过程
 }
 
@@ -55,6 +60,8 @@ export function useChatWs() {
   const currentMessageRef = useRef<string>("");
   const currentThinkingRef = useRef<string>("");
   const toolCallsRef = useRef<ToolCall[]>([]);
+  const currentBlocksRef = useRef<ContentBlock[]>([]);
+  const currentSegmentRef = useRef<string>("");
 
   // 连接 WebSocket
   const connect = useCallback(() => {
@@ -109,6 +116,8 @@ export function useChatWs() {
         currentMessageRef.current = "";
         currentThinkingRef.current = "";
         toolCallsRef.current = [];
+        currentBlocksRef.current = [];
+        currentSegmentRef.current = "";
         setState((s) => ({ ...s, isStreaming: true }));
         break;
 
@@ -143,6 +152,11 @@ export function useChatWs() {
       case "token":
         if (data.content) {
           currentMessageRef.current += data.content;
+          currentSegmentRef.current += data.content;
+          const tokenBlocks: ContentBlock[] = [
+            ...currentBlocksRef.current,
+            { type: "text", text: currentSegmentRef.current },
+          ];
           setState((s) => {
             const messages = [...s.messages];
             const lastMsg = messages[messages.length - 1];
@@ -151,6 +165,7 @@ export function useChatWs() {
                 ...lastMsg,
                 content: currentMessageRef.current,
                 thinking: currentThinkingRef.current || undefined,
+                contentBlocks: tokenBlocks,
                 toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
               };
             } else {
@@ -160,6 +175,7 @@ export function useChatWs() {
                 content: currentMessageRef.current,
                 thinking: currentThinkingRef.current || undefined,
                 timestamp: Date.now(),
+                contentBlocks: tokenBlocks,
                 toolCalls: toolCallsRef.current.length > 0 ? [...toolCallsRef.current] : undefined,
               });
             }
@@ -170,6 +186,14 @@ export function useChatWs() {
 
       case "tool_start":
         if (data.tool) {
+          // Finalize current text segment before tool
+          if (currentSegmentRef.current) {
+            currentBlocksRef.current = [
+              ...currentBlocksRef.current,
+              { type: "text", text: currentSegmentRef.current },
+            ];
+            currentSegmentRef.current = "";
+          }
           const newToolCall: ToolCall = {
             id: `${Date.now()}-${data.tool}`,
             tool: data.tool,
@@ -177,6 +201,11 @@ export function useChatWs() {
             status: "running",
           };
           toolCallsRef.current = [...toolCallsRef.current, newToolCall];
+          currentBlocksRef.current = [
+            ...currentBlocksRef.current,
+            { type: "tool", toolCall: newToolCall },
+          ];
+          const toolStartBlocks: ContentBlock[] = [...currentBlocksRef.current];
           setState((s) => {
             const messages = [...s.messages];
             const lastMsg = messages[messages.length - 1];
@@ -184,6 +213,7 @@ export function useChatWs() {
               messages[messages.length - 1] = {
                 ...lastMsg,
                 content: currentMessageRef.current,
+                contentBlocks: toolStartBlocks,
                 toolCalls: [...toolCallsRef.current],
               };
             }
@@ -199,12 +229,22 @@ export function useChatWs() {
               ? { ...tc, status: "done" as const, result: data.result }
               : tc
           );
+          let toolEndUpdated = false;
+          currentBlocksRef.current = currentBlocksRef.current.map((block) => {
+            if (!toolEndUpdated && block.type === "tool" && block.toolCall.tool === data.tool && block.toolCall.status === "running") {
+              toolEndUpdated = true;
+              return { type: "tool" as const, toolCall: { ...block.toolCall, status: "done" as const, result: data.result } };
+            }
+            return block;
+          });
+          const toolEndBlocks: ContentBlock[] = [...currentBlocksRef.current];
           setState((s) => {
             const messages = [...s.messages];
             const lastMsg = messages[messages.length - 1];
             if (lastMsg?.role === "assistant") {
               messages[messages.length - 1] = {
                 ...lastMsg,
+                contentBlocks: toolEndBlocks,
                 toolCalls: [...toolCallsRef.current],
               };
             }
