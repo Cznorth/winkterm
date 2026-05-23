@@ -1,6 +1,6 @@
 ---
 name: winkterm-remote
-version: 2
+version: 3
 description: 通过 HTTP 远程操作 WinkTerm —— 查看 SSH 连接列表、新建本地/SSH 终端、发送命令并读取输出、获取终端快照、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
 ---
 
@@ -13,6 +13,7 @@ description: 通过 HTTP 远程操作 WinkTerm —— 查看 SSH 连接列表、
 
 - **Base URL**: `${WINKTERM_BASE_URL}`（默认 `http://localhost:8000`）
 - **鉴权**: 所有请求带 HTTP 头 `Authorization: Bearer ${WINKTERM_AGENT_TOKEN}`
+- 或在 URL 上加 `?token=<token>`（SSE/EventSource 不支持自定义 header 时用）。
 - token 未配置时接口返回 `503`；token 错误返回 `401`。
 
 ### Token 自动发现（**会话开始就做**）
@@ -99,9 +100,18 @@ GET /api/agent/ssh/connections
 POST /api/agent/terminals
 body: { "type": "local" }                              # 本地 shell
       { "type": "ssh", "connection_id": "ab12cd34" }   # SSH 连接
-可选: "cols" (默认 120), "rows" (默认 40)
-→ { "id": "f3a9...", "type": "...", "alive": true, "created_at": "...", "size": 0 }
+可选:
+  "cols": 120, "rows": 40,
+  "name": "miner-fix",        # 自定义标签，便于在事件流 / 前端面板里识别
+  "ttl_seconds": 1800         # 空闲多少秒后自动回收（0/负数 = 永不过期）
+→ {
+    "id": "f3a9...", "type": "...", "name": "...", "cwd": null,
+    "alive": true, "created_at": "...", "size": 0,
+    "idle_seconds": 0, "ttl_seconds": 1800
+  }
 ```
+
+终端默认 30 分钟空闲自动回收。长任务把 ``ttl_seconds`` 调大或设为 0。
 
 ### 原子执行（推荐）—— `/exec`
 
@@ -113,12 +123,15 @@ body: {
   "command": "ls -la /tmp",        # 命令文本
   "command_b64": "<base64>",       # 替代/拼接 command，避开多层引号转义
   "timeout": 30.0,                 # 最长等待秒数（默认 30）
-  "idle": 0.3                      # 保留字段（默认 0.3）
+  "idle": 0.3,                     # 保留字段（默认 0.3）
+  "cwd": "/var/log",               # 临时切目录（subshell，不污染终端持久 cwd）
+  "env": { "LANG": "C", "MY_VAR": "x" }  # 临时环境变量（subshell 内 export，对整条命令生效）
 }
 → {
   "ok": true,
   "exit_code": 0,                  # 命令真实退出码
   "stdout": "...",                 # 已剥离回显和 sentinel
+  "cwd": "/root",                  # 终端持久 cwd（每次 exec 后自动更新）
   "size": 12345,
   "alive": true
 }
@@ -209,12 +222,42 @@ body: {
 
 ### 终端快照
 ```
-GET /api/agent/terminals/{id}/snapshot?since=<偏移>&strip_ansi=true
-→ { "output": "<文本>", "size": <累计字节数>, "truncated": false, "alive": true }
+GET /api/agent/terminals/{id}/snapshot
+  ?since=<偏移>           # 增量查询起点
+  &strip_ansi=true
+  &pattern=<正则>         # 服务端 grep：仅返回匹配行
+  &context=2              # grep 上下文行数（0-20）
+  &case_insensitive=false
+
+→ {
+    "output": "<文本>",
+    "size": <累计字节数>,
+    "truncated": false,
+    "alive": true,
+    "grep": {                # 仅 pattern 给定时存在
+      "match_count": 3,
+      "total_lines": 120,
+      "matches": [{ "line_no": 17, "line": "...", "match": true }, ...]
+    }
+  }
 ```
 - 不带 `since` 返回全部缓冲；带 `since` 只返回该偏移之后的新增输出（增量轮询）。
 - 把上次返回的 `size` 作为下次的 `since`。
 - `truncated: true` 表示请求的偏移过旧、部分输出已被缓冲淘汰（每终端保留最近 256KB）。
+- 用 `pattern` 在服务端 grep，省去把 256KB 全拉下来再 grep 的带宽。
+
+### 终端实时流（SSE）
+```
+GET /api/agent/terminals/{id}/stream?since=<偏移>&token=<token>
+→ text/event-stream
+   id: <累计字节数>
+   event: output | heartbeat | end
+   data: {"text": "<chunk>", "size": <total>}
+```
+
+Server-Sent Events 实时推送新输出，**做长命令监控 / tail -f 的杀手锏**。
+断线重连时把上次的 `id` 当 `since` 续传。EventSource 不支持自定义 header，
+所以这里把 token 放在 query 参数里。
 
 ### 终端管理
 ```
@@ -222,6 +265,41 @@ GET    /api/agent/terminals            列出所有终端
 GET    /api/agent/terminals/{id}       获取单个终端信息
 DELETE /api/agent/terminals/{id}       关闭并删除终端
 ```
+
+### 一次性 SSH 执行（推荐用于简单命令）
+
+跑完一条命令就走，省去 create / exec / delete 三次调用。
+后端自动新建临时终端 → 等 SSH 横幅落定 → exec → 关闭。
+
+```
+POST /api/agent/ssh/{conn_id}/run
+body: {
+  "command": "uptime; df -h",
+  "command_b64": "<base64>",
+  "timeout": 60.0,
+  "initial_wait": 2.5,     # 等 SSH 登录横幅的秒数（默认 2.5）
+  "cwd": "/tmp",           # 可选
+  "env": { "K": "v" }      # 可选
+}
+→ { "ok": true, "exit_code": 0, "stdout": "...", "cwd": "...", "request_id": "..." }
+```
+
+如果要复用 shell 状态（cd、环境变量）请走 `/terminals` + `/exec` 两步流程。
+
+### 操作事件流
+
+agent 的每个动作（create/exec/input/close/file 操作等）都被记录到环形缓冲，
+前端 / 监控工具可实时订阅：
+
+```
+GET /api/agent/events/recent?since_id=N&limit=100
+→ { "events": [{ "id": 42, "ts": 1779511837.18, "action": "terminal_exec", ... }, ...] }
+
+GET /api/agent/events/stream?since_id=0&token=<token>
+→ SSE 流，event 名 "agent_event" / "heartbeat"
+```
+
+无持久化，进程重启后清零。最多保留 500 条。
 
 ### SSH 文件传输
 文件传输的本地路径指 WinkTerm 后端所在机器的路径。

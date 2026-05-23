@@ -41,12 +41,25 @@ def _resolve_agent_token() -> str:
     return UserConfig.load().get("agent_api_token") or settings.agent_api_token
 
 
-def require_agent_token(authorization: Optional[str] = Header(default=None)) -> None:
-    """校验 Bearer token。"""
-    token = _resolve_agent_token()
-    if not token:
+def require_agent_token(
+    authorization: Optional[str] = Header(default=None),
+    token: Optional[str] = Query(default=None, description="备用 token 入口（SSE/EventSource 无法发自定义 header 时用）"),
+) -> None:
+    """校验 Bearer token。
+
+    支持两种入口：
+    1. `Authorization: Bearer <token>` 头（首选）
+    2. `?token=<token>` 查询参数（EventSource 等不支持自定义 header 的场景）
+    """
+    expected = _resolve_agent_token()
+    if not expected:
         raise HTTPException(status_code=503, detail="Agent API 未启用：请在设置页配置 token 或设环境变量 AGENT_API_TOKEN")
-    if authorization != f"Bearer {token}":
+    provided = None
+    if authorization and authorization.startswith("Bearer "):
+        provided = authorization[len("Bearer "):]
+    elif token:
+        provided = token
+    if provided != expected:
         raise HTTPException(status_code=401, detail="无效或缺失的 token")
 
 
@@ -84,17 +97,33 @@ async def download_skill() -> Response:
     )
 
 
-def _is_localhost(request: Request) -> bool:
-    """判断请求是否来自本机 loopback。"""
-    client = request.client.host if request.client else ""
-    return client in ("127.0.0.1", "::1", "localhost")
-
-
 @public_router.get("/api/agent/handshake")
 async def agent_handshake(request: Request) -> dict:
-    """Localhost-only：返回当前 agent token，供本地 agent 自动接入。"""
-    if not _is_localhost(request):
-        raise HTTPException(status_code=403, detail="仅 localhost 可调用 handshake")
+    """返回当前 agent token，供已可信的客户端自动接入。
+
+    放行条件：
+    1. 来自 localhost loopback（本机 agent / 桌面客户端）；
+    2. 远程访问者已通过 web access key 鉴权（X-Access-Key 头），
+       即和 WinkTerm 主面板用同一份密钥。
+    """
+    from backend.api.auth_routes import (
+        is_local_request,
+        resolve_web_key,
+        verify_web_key,
+    )
+
+    authorized = is_local_request(request)
+    if not authorized:
+        web_key = resolve_web_key()
+        if web_key and verify_web_key(request.headers.get("X-Access-Key", "")):
+            authorized = True
+
+    if not authorized:
+        raise HTTPException(
+            status_code=403,
+            detail="handshake 需在 localhost 调用，或携带有效的 X-Access-Key 头",
+        )
+
     token = _resolve_agent_token()
     if not token:
         raise HTTPException(
