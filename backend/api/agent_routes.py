@@ -24,7 +24,7 @@ from backend.ssh.file_transfer import (
     SSHFileTransferError,
     SSHInvalidPathError,
 )
-from backend.terminal.agent_terminal import get_terminal_pool
+from backend.terminal.agent_terminal import UnknownKeyError, get_terminal_pool
 
 logger = logging.getLogger("agent_routes")
 
@@ -81,6 +81,30 @@ async def download_skill() -> Response:
     )
 
 
+def _is_localhost(request: Request) -> bool:
+    """判断请求是否来自本机 loopback。"""
+    client = request.client.host if request.client else ""
+    return client in ("127.0.0.1", "::1", "localhost")
+
+
+@public_router.get("/api/agent/handshake")
+async def agent_handshake(request: Request) -> dict:
+    """Localhost-only：返回当前 agent token，供本地 agent 自动接入。
+
+    安全模型：与 WinkTerm 桌面客户端一致 —— 本机 loopback 视为可信边界。
+    远程访问者拿不到 token（403），仍需手动配置或通过其他渠道获得。
+    """
+    if not _is_localhost(request):
+        raise HTTPException(status_code=403, detail="仅 localhost 可调用 handshake")
+    token = _resolve_agent_token()
+    if not token:
+        raise HTTPException(
+            status_code=503,
+            detail="Agent API 未启用：请在 WinkTerm 设置页配置 token 或设环境变量 AGENT_API_TOKEN",
+        )
+    return {"token": token, "base_url": str(request.base_url).rstrip("/")}
+
+
 @public_router.get("/api/agent/install.md")
 async def install_guide(request: Request) -> Response:
     """下发外部 agent 接入指导，{BASE_URL} 替换为当前后端地址。"""
@@ -106,13 +130,31 @@ class TerminalCreate(BaseModel):
 
 
 class TerminalInput(BaseModel):
-    """终端输入请求。"""
+    """终端输入请求。
 
-    data: str
+    三种输入方式可组合使用：
+    - ``data``: 直接文本。
+    - ``data_b64``: base64 编码文本，遇到多层引号嵌套首选此方式。
+    - ``keys``: 命名控制键列表，例如 ``["ctrl+c"]``、``["up","enter"]``。
+    """
+
+    data: str = ""
+    data_b64: Optional[str] = None
+    keys: Optional[list[str]] = None
     enter: bool = True
     wait: bool = False
     timeout: float = 10.0
     idle: float = 0.6
+    strip_echo: bool = False
+
+
+class TerminalExec(BaseModel):
+    """一次性命令执行请求（带 exit code）。"""
+
+    command: str = ""
+    command_b64: Optional[str] = None
+    timeout: float = 30.0
+    idle: float = 0.3
 
 
 class FileWriteRequest(BaseModel):
@@ -233,17 +275,51 @@ async def terminal_snapshot(
 async def terminal_input(terminal_id: str, req: TerminalInput) -> dict:
     """向终端发送命令或控制键。
 
-    wait=true 时同步等待输出稳定后返回新增输出；否则立即返回。
-    控制键直接传原始字符，如 data="\\u0003" 表示 Ctrl+C。
+    输入方式：
+    - ``data``: 直接文本；
+    - ``data_b64``: base64 编码文本（避开 JSON / shell 多层转义）；
+    - ``keys``: 命名控制键列表，如 ``["ctrl+c"]``、``["up","enter"]``。
+
+    wait=true 时同步等待输出稳定后返回新增输出，并附带 ``reason`` 字段
+    （``idle`` / ``timeout`` / ``no_output``）让调用方区分三种结束情况。
+    ``strip_echo=true`` 会剥离命令回显行。
     """
     terminal = _get_terminal_or_404(terminal_id)
-    return await terminal.send(
-        req.data,
-        enter=req.enter,
-        wait=req.wait,
-        timeout=req.timeout,
-        idle=req.idle,
-    )
+    try:
+        return await terminal.send(
+            data=req.data,
+            data_b64=req.data_b64,
+            keys=req.keys,
+            enter=req.enter,
+            wait=req.wait,
+            timeout=req.timeout,
+            idle=req.idle,
+            strip_echo=req.strip_echo,
+        )
+    except UnknownKeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/terminals/{terminal_id}/exec")
+async def terminal_exec(terminal_id: str, req: TerminalExec) -> dict:
+    """原子执行 POSIX shell 命令，返回 stdout + exit_code。
+
+    实现细节：命令后追加 sentinel 标记 ``echo <ID>$?``，读循环扫到标记
+    即刻返回，stdout 已剥离命令回显。仅适用于 bash / zsh / sh / dash
+    等 POSIX shell。Windows cmd.exe 请走 ``/input``。
+    """
+    terminal = _get_terminal_or_404(terminal_id)
+    try:
+        return await terminal.exec(
+            command=req.command,
+            command_b64=req.command_b64,
+            timeout=req.timeout,
+            idle=req.idle,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # -----------------------------------------------------------

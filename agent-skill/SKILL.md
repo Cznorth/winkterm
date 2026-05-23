@@ -14,12 +14,47 @@ description: 通过 HTTP 远程操作 WinkTerm —— 查看 SSH 连接列表、
 - **鉴权**: 所有请求带 HTTP 头 `Authorization: Bearer ${WINKTERM_AGENT_TOKEN}`
 - token 未配置时接口返回 `503`；token 错误返回 `401`。
 
+### Token 自动发现（**会话开始就做**）
+
+会话第一次用本 skill 时，按顺序尝试：
+
+**1. 查持久化 memory / 上下文**：用户之前可能已经告诉你 token，写到了 memory 文件 / CLAUDE.md / 环境变量。先找一遍：
+- env `WINKTERM_AGENT_TOKEN`
+- agent memory 系统（Claude Code 等：`~/.claude/projects/<...>/memory/`）
+- 项目级 `CLAUDE.md`
+
+**2. 本地 handshake**（只对 WinkTerm 同机的 agent 有效）：
+
+```bash
+curl -s http://localhost:8000/api/agent/handshake
+→ {"token":"<bearer-token>","base_url":"http://localhost:8000"}
+```
+
+该端点免鉴权但**仅 localhost 可访问**（远程 IP 返回 `403`）。
+
+**3. 远程 agent / 全部失败**：问用户**一次** token，**立刻写入 memory**（或等价持久化层），后续会话直接复用。
+不要每次会话都问用户 —— 一次提供，永久记住。
+
+如果调 API 时收到 `401`，token 可能已轮换：清掉 memory 里的旧值，重走以上流程。
+
+## 选 input 还是 exec
+
+| 场景 | 用哪个 |
+|------|-------|
+| 跑一条命令，要 stdout 和退出码 | **`/exec`**（POSIX shell only，bash/zsh/sh/dash）|
+| 发控制键（Ctrl+C、方向键、Tab 补全）| `/input` + `keys` 字段 |
+| 交互式程序（vim/top/分页器）| `/input` + snapshot 轮询 |
+| Windows 本地 cmd.exe | `/input` |
+| 想要"零回显、零 prompt 干扰" | **`/exec`** |
+
 ## 工作流程
 
 1. `GET /api/agent/ssh/connections` 查看可用 SSH 连接，拿到 `id`。
 2. `POST /api/agent/terminals` 新建终端（local 或 ssh），拿到终端 `id`。
-3. `POST /api/agent/terminals/{id}/input` 发送命令。带 `wait: true` 可同步拿到输出。
-4. `GET /api/agent/terminals/{id}/snapshot` 随时查看终端当前内容。
+3. 操作终端：
+   - **首选** `POST /api/agent/terminals/{id}/exec` 跑命令（带 exit code）。
+   - 或 `POST /api/agent/terminals/{id}/input` 发原始输入 / 控制键。
+4. `GET /api/agent/terminals/{id}/snapshot` 查看终端当前内容。
 5. 用完 `DELETE /api/agent/terminals/{id}` 关闭。
 
 ## 接口参考
@@ -40,20 +75,109 @@ body: { "type": "local" }                              # 本地 shell
 → { "id": "f3a9...", "type": "...", "alive": true, "created_at": "...", "size": 0 }
 ```
 
-### 发送命令
+### 原子执行（推荐）—— `/exec`
+
+跑一条 POSIX shell 命令，返回 stdout + exit_code。命令回显行和后续 prompt 都被剥离。
+
+```
+POST /api/agent/terminals/{id}/exec
+body: {
+  "command": "ls -la /tmp",        # 命令文本
+  "command_b64": "<base64>",       # 替代/拼接 command，避开多层引号转义
+  "timeout": 30.0,                 # 最长等待秒数（默认 30）
+  "idle": 0.3                      # 保留字段（默认 0.3）
+}
+→ {
+  "ok": true,
+  "exit_code": 0,                  # 命令真实退出码
+  "stdout": "...",                 # 已剥离回显和 sentinel
+  "size": 12345,
+  "alive": true
+}
+
+# 超时
+→ { "ok": false, "reason": "timeout", "stdout": "<已收到>", "size": ..., "alive": ... }
+```
+
+**为什么用 `command_b64`**：当命令含多层引号嵌套（awk 单引号包双引号、jq 过滤器、HEREDOC 等），
+在 JSON body 里写 `command` 要做三层转义（shell → JSON → POSIX shell）极易出错。
+把命令 base64 编码后塞 `command_b64` 完全绕开转义，最稳。
+
+实现细节：服务端在命令后追加 `; printf '\n__WT_EXEC_<id>__%d\n' "$?"` sentinel，
+读到 sentinel 即返回。仅支持 POSIX shell（bash/zsh/sh/dash 等）。Windows cmd.exe 走 `/input`。
+
+### 发送命令 / 控制键 —— `/input`
+
 ```
 POST /api/agent/terminals/{id}/input
 body: {
-  "data": "ls -la",      # 要输入的文本
-  "enter": true,         # 是否追加回车执行（默认 true）
-  "wait": true,          # 同步等待输出稳定后返回（默认 false）
-  "timeout": 10.0,       # wait 模式最长等待秒数
-  "idle": 0.6            # wait 模式连续无新增输出多少秒视为稳定
+  "data": "ls -la",         # 直接文本输入
+  "data_b64": "<base64>",   # base64 编码文本（替代/拼接 data）
+  "keys": ["ctrl+c"],       # 命名控制键列表（替代/拼接前两者）
+  "enter": true,            # 是否追加回车执行（默认 true，发控制键时通常设 false）
+  "wait": true,             # 同步等待输出稳定后返回（默认 false）
+  "timeout": 10.0,          # wait 模式最长等待秒数
+  "idle": 0.6,              # wait 模式连续无新增输出多少秒视为稳定
+  "strip_echo": false       # 是否剥离命令回显行（仅 wait=true 生效）
 }
 ```
-- `wait: true` → 返回 `{ "ok": true, "since": <起始偏移>, "output": "<新增输出>", "size": <累计字节数>, "alive": true }`
-- `wait: false` → 立即返回 `{ "ok": true, "since": <起始偏移> }`，之后用 snapshot 轮询。
-- **控制键**：把控制字符放进 `data` 并设 `enter: false`。在 JSON body 里用对应码点的 Unicode 转义：Ctrl+C 用 U+0003、Ctrl+D 用 U+0004、Esc 用 U+001B、Tab 用 U+0009、方向键上 用 U+001B 后接 `[A`。
+
+`data` / `data_b64` / `keys` 三者可同时使用，按 keys → data → data_b64 顺序拼接。
+
+- `wait: true` → 返回：
+  ```
+  {
+    "ok": true,
+    "since": <起始偏移>,
+    "output": "<新增输出>",
+    "size": <累计字节数>,
+    "alive": true,
+    "reason": "idle" | "timeout" | "no_output"
+  }
+  ```
+  - `idle`: 看到新输出后，连续 `idle` 秒无新增，正常收尾。
+  - `timeout`: 到了 `timeout` 还在持续出输出（可能进程没结束）。
+  - `no_output`: 自始至终没看到新输出（命令默默运行，或没事发生）。
+
+- `wait: false` → 立即返回 `{"ok": true, "since": <起始偏移>}`，之后用 snapshot 轮询。
+
+#### 命名控制键（`keys` 字段）
+
+避免在 JSON 里塞 `` 这种控制字符（curl / PowerShell 经常把它处理坏）。
+
+| 键名 | 字节 | 备注 |
+|------|------|------|
+| `ctrl+c` … `ctrl+z` | `\x01` … `\x1a` | 所有控制字符 |
+| `tab` (= `ctrl+i`) | `\x09` | 触发补全 |
+| `enter` / `return` | `\x0d` | 回车 |
+| `esc` / `escape` | `\x1b` | |
+| `space` | ` ` | |
+| `backspace` / `del` | `\x7f` | 删除前一字符 |
+| `up` / `down` / `left` / `right` | xterm 方向键序列 | 命令历史、菜单导航 |
+| `home` / `end` / `pageup` / `pagedown` / `insert` / `delete` | | 编辑键 |
+| `f1` … `f12` | | 功能键 |
+
+未知键名返回 `400`。键名大小写不敏感、空格忽略。
+
+#### 常用模式
+
+```jsonc
+// 打断卡死的命令
+{ "keys": ["ctrl+c"], "enter": false }
+
+// 退出 vim
+{ "keys": ["esc"], "enter": false }
+{ "data": ":q!", "enter": true }
+
+// 命令历史上一条并执行
+{ "keys": ["up", "enter"], "enter": false }
+
+// 跑复杂带嵌套引号的 awk —— 避免 JSON 转义
+{ "data_b64": "<base64(awk '...')>" }
+
+// less / more 分页时翻页
+{ "data": " ", "enter": false }
+```
 
 ### 终端快照
 ```
@@ -90,10 +214,13 @@ DELETE /api/agent/ssh/{conn_id}/paths                            批量删除
 
 ## 使用建议
 
-- 交互式命令（如分页器、确认提示）先发命令再用 snapshot 查看，再发对应按键。
+- **优先 `/exec`**：拿退出码 + 干净 stdout，省去自己 strip 回显和 prompt。
+- 复杂引号嵌套命令一律走 `command_b64` / `data_b64`，省一层转义就少一层翻车。
+- 交互式命令（如分页器、确认提示）发命令再 snapshot 查看，再用 `keys` 发对应按键。
 - 命令运行慢时把 `timeout` 调大，或 `wait: false` 后轮询 snapshot。
 - SSH 终端启动后首屏可能是登录横幅；发命令前可先 snapshot 确认 shell 就绪。
 - 终端是有状态的：`cd`、环境变量在同一终端内保持，跨命令复用同一终端 id。
+- `/exec` 会在 shell 历史里留下 sentinel 包装的命令；若要避免，发 `export HISTFILE=/dev/null` 后再 exec。
 
 ## 示例（curl）
 
@@ -101,14 +228,26 @@ DELETE /api/agent/ssh/{conn_id}/paths                            批量删除
 BASE=http://localhost:8000
 AUTH="Authorization: Bearer $WINKTERM_AGENT_TOKEN"
 
-# 新建本地终端
+# 新建 SSH 终端
 TID=$(curl -s -X POST $BASE/api/agent/terminals -H "$AUTH" \
-  -H 'Content-Type: application/json' -d '{"type":"local"}' | jq -r .id)
+  -H 'Content-Type: application/json' \
+  -d '{"type":"ssh","connection_id":"ab12cd34"}' | jq -r .id)
 
-# 发命令并同步取输出
+# 推荐：用 /exec 拿 stdout + 退出码
+curl -s -X POST $BASE/api/agent/terminals/$TID/exec -H "$AUTH" \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"uptime"}' | jq
+
+# 多层引号的 awk —— base64 输入
+CMD=$(echo -n "ps aux | awk '\$3>0 {print \$2}'" | base64 -w0)
+curl -s -X POST $BASE/api/agent/terminals/$TID/exec -H "$AUTH" \
+  -H 'Content-Type: application/json' \
+  -d "{\"command_b64\":\"$CMD\"}" | jq
+
+# 打断卡死命令
 curl -s -X POST $BASE/api/agent/terminals/$TID/input -H "$AUTH" \
   -H 'Content-Type: application/json' \
-  -d '{"data":"echo hello","wait":true}' | jq -r .output
+  -d '{"keys":["ctrl+c"],"enter":false}' | jq
 
 # 关闭
 curl -s -X DELETE $BASE/api/agent/terminals/$TID -H "$AUTH"
