@@ -31,6 +31,7 @@
 <p align="center">
   <a href="#-demo">Demo</a> •
   <a href="#-features">Features</a> •
+  <a href="#-agent-api-highlights">Agent API</a> •
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-why-winkterm">Why WinkTerm?</a> •
   <a href="#-architecture">Architecture</a> •
@@ -66,12 +67,62 @@ The AI writes directly into your terminal's input line. You stay in control — 
 - **In-Terminal Chat** — Type `#` followed by your question, right where your shell prompt is. No need to alt-tab.
 - **Sidebar AI Panel** — Full conversational interface with multi-conversation tabs, AI-generated titles, and chat/craft mode switching.
 - **Streaming Queue & Suggestions** — Queue follow-up messages while the AI is responding (interrupt or drop queued items anytime), and get one-click follow-up suggestion chips after each answer.
-- **External Agent API** — An authenticated HTTP interface lets external agents drive your terminal, SSH, and file transfers via an installable skill.
+- **External Agent API** — An authenticated HTTP interface lets external agents drive your terminal, SSH, and file transfers via an installable skill (see Agent API highlights below).
+- **Live Agent Monitoring Panel** — Read-only UI showing every terminal the agent is operating on plus a real-time event feed. One click in the activity bar.
 - **Remote Access Auth** — Web access is protected by an access key; the local desktop client needs no authentication.
 - **SSH Remote Connections** — Connect to remote servers with built-in file transfer.
 - **Internationalization** — Built-in English / Chinese UI, with language selection on first launch.
 - **Multi-Model Support** — Bring your own LLM. OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint.
 - **Docker & Desktop** — Deploy instantly with `docker compose up` or package as a standalone desktop app (Windows/macOS).
+
+---
+
+## 🤖 Agent API Highlights
+
+WinkTerm's HTTP Agent API is designed for AI agents (Claude Code, Cursor, etc.) to drive the terminal remotely — not just an afterthought.
+
+### Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/agent/terminals/{id}/exec` | **Atomic execution**: returns stdout + real `exit_code` + current `cwd`. Sentinel marker auto-strips command echo and prompt. Supports `cwd` / `env` subshell injection (doesn't pollute persistent terminal state). |
+| `POST /api/agent/ssh/{conn_id}/run` | **One-shot SSH execution**: bundles create → exec → close into one call, saving 3 round-trips. |
+| `POST /api/agent/terminals/{id}/input` | **Named control keys**: `{"keys": ["ctrl+c"]}` instead of stuffing control chars into JSON. `data_b64` input bypasses multi-layer quote escape hell. |
+| `GET /api/agent/terminals/{id}/snapshot?pattern=...` | **Server-side grep**: regex-match within the 256KB rolling buffer. Save bandwidth. |
+| `GET /api/agent/terminals/{id}/stream` | **SSE live output**: killer feature for long-running commands / `tail -f`. Resume with `since` after disconnect. |
+| `GET /api/agent/events/stream` | **Operation event feed**: every agent action is pushed to a ring buffer (no persistence), broadcast via SSE. |
+| `GET /api/agent/handshake` | **Zero-config onboarding**: localhost or web-auth'd clients get the token automatically. The agent doesn't need to ask the user every session. |
+
+### Key Design Choices
+
+- **Exit codes are first-class**: no need to grep output to detect failure — `exit_code` is in the response.
+- **30+ named keys**: `ctrl+c` / `up` / `tab` / `esc` / `f1` — no raw control chars in JSON.
+- **base64 input**: complex awk / jq / heredoc commands go through `command_b64`, sidestepping triple-escaping.
+- **Persistent cwd tracking**: the exec sentinel reports `$PWD` after every run; the monitoring panel displays the terminal's current directory.
+- **TTL auto-cleanup**: terminals default to 30-minute idle TTL, so forgotten terminals don't leak.
+- **wait reason field**: distinguishes `idle` / `timeout` / `no_output` so callers know what happened.
+
+### Installable Skill
+
+```bash
+curl -s http://<your-winkterm-host>:8000/api/agent/skill.md > SKILL.md
+```
+
+Drop SKILL.md into Claude Code / Cursor / any agent tool's skills directory and the AI immediately knows how to drive the API. The skill is versioned — agents check for updates each session.
+
+### Live Monitoring Panel
+
+A new icon in the activity bar opens a three-column view:
+
+```
+┌────────────────┬──────────────────┬────────────────┐
+│ Agent terminals│ Selected output  │ Event feed     │
+│ name/host:port │ (SSE push)       │ (color-coded   │
+│ cwd/idle/size  │ auto-scrolling   │  by action)    │
+└────────────────┴──────────────────┴────────────────┘
+```
+
+Read-only viewer, doesn't interfere with agent operations. No persistence, pure real-time.
 
 ---
 
