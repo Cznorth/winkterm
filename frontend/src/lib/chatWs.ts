@@ -164,6 +164,7 @@ export function useChatWs() {
     input_tokens?: number;
     output_tokens?: number;
     max_context?: number;
+    conv_id?: string;
   }) => {
     switch (data.type) {
       case "start":
@@ -355,12 +356,15 @@ export function useChatWs() {
 
       case "usage":
         if (typeof data.input_tokens === "number" && typeof data.output_tokens === "number") {
+          const targetId = data.conv_id || streamingConvIdRef.current;
           setState((s) => {
-            const updated = updateConv(s, streamingConvIdRef.current, (conv) => ({
-              ...conv,
-              inputTokens: data.input_tokens as number,
-              outputTokens: data.output_tokens as number,
-            }));
+            const updated = targetId
+              ? updateConv(s, targetId, (conv) => ({
+                  ...conv,
+                  inputTokens: data.input_tokens as number,
+                  outputTokens: data.output_tokens as number,
+                }))
+              : s;
             return {
               ...updated,
               maxContext: (data.max_context as number) || s.maxContext,
@@ -393,7 +397,7 @@ export function useChatWs() {
     );
     setState((s) => ({ ...s, error: null }));
 
-    wsRef.current.send(JSON.stringify({ type: "chat", content }));
+    wsRef.current.send(JSON.stringify({ type: "chat", content, conv_id: activeConvIdRef.current }));
   }, []);
 
   // 发送消息：streaming 中则入队，否则直接发送
@@ -442,9 +446,6 @@ export function useChatWs() {
 
   // 新建对话
   const newConversation = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "clear" }));
-    }
     messageQueueRef.current = [];
     isStreamingRef.current = false;
     const conv = makeConversation();
@@ -463,11 +464,7 @@ export function useChatWs() {
 
   // 切换对话
   const switchConversation = useCallback((id: string) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "clear" }));
-    }
     messageQueueRef.current = [];
-    isStreamingRef.current = false;
     setState((s) => {
       const conv = s.conversations.find((c) => c.id === id);
       if (!conv || conv.id === s.activeConvId) return s;
@@ -477,7 +474,6 @@ export function useChatWs() {
         messages: conv.messages,
         inputTokens: conv.inputTokens,
         outputTokens: conv.outputTokens,
-        isStreaming: false,
         messageQueue: [],
         error: null,
       };
@@ -486,18 +482,17 @@ export function useChatWs() {
 
   // 删除对话
   const deleteConversation = useCallback((id: string) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "delete_conv", conv_id: id }));
+    }
     setState((s) => {
       if (s.conversations.length <= 1) return s;
       const conversations = s.conversations.filter((c) => c.id !== id);
       let activeConvId = s.activeConvId;
       if (activeConvId === id) {
-        // Switch to the previous conversation
         const deletedIndex = s.conversations.findIndex((c) => c.id === id);
         const newIndex = Math.max(0, deletedIndex - 1);
         activeConvId = conversations[newIndex].id;
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: "clear" }));
-        }
       }
       const activeConv = conversations.find((c) => c.id === activeConvId)!;
       return {

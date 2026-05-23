@@ -243,15 +243,11 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           {activeActivity === "settings" && <SettingsPanel />}
         </div>
 
-        {/* AI 侧边栏 */}
-        {showAI && (
-          <>
-            <div className="ai-resize-handle" onMouseDown={handleResizeStart} />
-            <div className="ai-section" style={{ width: aiWidth }}>
-              {aiPanel}
-            </div>
-          </>
-        )}
+        {/* AI 侧边栏 - 始终挂载，通过 display 隐藏以保留 state 和 WS 连接 */}
+        <div className="ai-resize-handle" onMouseDown={handleResizeStart} style={{ display: showAI ? undefined : "none" }} />
+        <div className="ai-section" style={{ width: aiWidth, display: showAI ? undefined : "none" }}>
+          {aiPanel}
+        </div>
       </div>
     </div>
   );

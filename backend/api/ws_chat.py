@@ -30,11 +30,21 @@ class ChatWSHandler:
         self.ws = websocket
         self.agents: dict[str, CompiledGraph] = {}
         self.current_mode = "craft"  # 默认 craft 模式
-        self.history: list[HumanMessage | AIMessage] = []  # 会话历史
+        # 按 conv_id 隔离会话状态
+        self.histories: dict[str, list[HumanMessage | AIMessage]] = {}
+        self.tokens: dict[str, dict[str, int]] = {}  # conv_id -> {input, output}
         self._stop_requested = False  # 停止生成标志
         self._current_task: asyncio.Task | None = None  # 当前处理任务
-        self.total_input_tokens = 0
-        self.total_output_tokens = 0
+
+    def _get_history(self, conv_id: str) -> list[HumanMessage | AIMessage]:
+        if conv_id not in self.histories:
+            self.histories[conv_id] = []
+        return self.histories[conv_id]
+
+    def _get_tokens(self, conv_id: str) -> dict[str, int]:
+        if conv_id not in self.tokens:
+            self.tokens[conv_id] = {"input": 0, "output": 0}
+        return self.tokens[conv_id]
 
     async def handle(self) -> None:
         await self.ws.accept()
@@ -46,8 +56,7 @@ class ChatWSHandler:
         if current_model:
             await self._send({"type": "model_changed", "model": current_model})
 
-        # 发送初始 token 使用量
-        await self._send_usage()
+        # 初始无 conv 上下文，不发 usage（前端切到具体 conv 时按需获取）
 
         # 预加载常用 agent
         try:
@@ -74,9 +83,13 @@ class ChatWSHandler:
                 msg_type = msg.get("type")
 
                 if msg_type == "chat":
+                    conv_id = msg.get("conv_id", "")
+                    if not conv_id:
+                        await self._send_error("缺少 conv_id")
+                        continue
                     # 将处理放入独立任务，支持中断
                     self._current_task = asyncio.create_task(
-                        self._handle_chat(msg.get("content", ""))
+                        self._handle_chat(msg.get("content", ""), conv_id)
                     )
                 elif msg_type == "stop":
                     # 停止生成
@@ -84,13 +97,16 @@ class ChatWSHandler:
                     if self._current_task:
                         self._current_task.cancel()
                     logger.info("[STOP] 用户请求停止")
-                elif msg_type == "clear":
-                    # 清空历史
-                    self.history = []
-                    self.total_input_tokens = 0
-                    self.total_output_tokens = 0
-                    await self._send_usage()
-                    logger.info("[CLEAR] 会话历史已清空")
+                elif msg_type == "delete_conv":
+                    conv_id = msg.get("conv_id", "")
+                    if conv_id:
+                        self.histories.pop(conv_id, None)
+                        self.tokens.pop(conv_id, None)
+                        logger.info(f"[DELETE] 会话 {conv_id} 已删除")
+                elif msg_type == "get_usage":
+                    conv_id = msg.get("conv_id", "")
+                    if conv_id:
+                        await self._send_usage(conv_id)
                 elif msg_type == "switch_mode":
                     mode = msg.get("mode", "craft")
                     if mode in self.agents:
@@ -107,7 +123,7 @@ class ChatWSHandler:
                     UserConfig.save(config)
                     logger.info(f"[MODEL] 切换到: {model}")
                     await self._send({"type": "model_changed", "model": model})
-                    await self._send_usage()
+                    # 切换模型不重发 usage，前端按需 get_usage
                 else:
                     logger.warning(f"[MSG] 未知消息类型: {msg_type}")
 
@@ -118,7 +134,7 @@ class ChatWSHandler:
         finally:
             logger.info("[CLEANUP] Chat WebSocket 关闭")
 
-    async def _handle_chat(self, content: str) -> None:
+    async def _handle_chat(self, content: str, conv_id: str) -> None:
         """处理对话消息，流式输出。"""
         if not content.strip():
             return
@@ -131,11 +147,12 @@ class ChatWSHandler:
             await self._send_error(f"Agent 未加载: {self.current_mode}")
             return
 
-        logger.info(f"[CHAT] 用户 ({self.current_mode}): {content[:50]}")
+        logger.info(f"[CHAT] 用户 ({self.current_mode}, conv={conv_id}): {content[:50]}")
 
+        history = self._get_history(conv_id)
         # 添加用户消息到历史
         user_msg = HumanMessage(content=content)
-        self.history.append(user_msg)
+        history.append(user_msg)
 
         # 获取终端上下文
         terminal_output = get_terminal_context_raw(50)
@@ -155,7 +172,7 @@ class ChatWSHandler:
             logger.debug(f"[CHAT] 终端上下文: {len(terminal_output)} 字符")
 
         # 构建消息：历史 + 当前用户消息
-        messages = list(self.history)
+        messages = list(history)
 
         # 初始状态
         state: AgentState = {
@@ -167,7 +184,7 @@ class ChatWSHandler:
         }
 
         # 发送开始标记
-        await self._send({"type": "start"})
+        await self._send({"type": "start", "conv_id": conv_id})
 
         # 流式处理
         collected_content = ""
@@ -242,16 +259,17 @@ class ChatWSHandler:
 
             # 正常结束：添加 AI 回复到历史
             if collected_content and not self._stop_requested:
-                self.history.append(AIMessage(content=collected_content))
+                history.append(AIMessage(content=collected_content))
 
             # 用 tiktoken 计算 token 用量
-            self.total_input_tokens = count_history_tokens(self.history)
-            self.total_output_tokens += count_tokens(collected_content)
+            tok = self._get_tokens(conv_id)
+            tok["input"] = count_history_tokens(history)
+            tok["output"] += count_tokens(collected_content)
             logger.info(
-                f"[CHAT] token 用量: 输入={self.total_input_tokens}, "
-                f"输出={self.total_output_tokens}"
+                f"[CHAT] conv={conv_id} token 用量: 输入={tok['input']}, "
+                f"输出={tok['output']}"
             )
-            await self._send_usage()
+            await self._send_usage(conv_id)
 
             # 发送结束标记
             if self._stop_requested:
@@ -259,7 +277,8 @@ class ChatWSHandler:
             else:
                 await self._send({
                     "type": "end",
-                    "content": collected_content
+                    "content": collected_content,
+                    "conv_id": conv_id,
                 })
 
         except asyncio.CancelledError:
@@ -269,8 +288,8 @@ class ChatWSHandler:
 
         except Exception as e:
             # 出错时移除已添加的用户消息
-            if self.history and self.history[-1] == user_msg:
-                self.history.pop()
+            if history and history[-1] == user_msg:
+                history.pop()
             logger.exception(f"[CHAT] 处理失败: {e}")
             await self._send_error(str(e))
 
@@ -288,7 +307,7 @@ class ChatWSHandler:
         """发送错误消息。"""
         await self._send({"type": "error", "message": message})
 
-    async def _send_usage(self) -> None:
+    async def _send_usage(self, conv_id: str) -> None:
         """发送 token 使用量信息。"""
         config = UserConfig.load()
         current_model = config.get("selected_model", "")
@@ -297,9 +316,11 @@ class ChatWSHandler:
             ctx = await fetch_model_context_length(current_model)
             if ctx:
                 max_context = ctx
+        tok = self._get_tokens(conv_id)
         await self._send({
             "type": "usage",
-            "input_tokens": self.total_input_tokens,
-            "output_tokens": self.total_output_tokens,
+            "conv_id": conv_id,
+            "input_tokens": tok["input"],
+            "output_tokens": tok["output"],
             "max_context": max_context,
         })
