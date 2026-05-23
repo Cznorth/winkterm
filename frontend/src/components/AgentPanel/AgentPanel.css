@@ -123,6 +123,21 @@
   gap: 6px;
 }
 
+.agent-terminal-server {
+  font-size: 11px;
+  color: #c5c5c5;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-terminal-host {
+  font-size: 11px;
+  color: #6a9955;
+  margin-bottom: 4px;
+}
+
 .agent-dead-badge {
   color: #f48771;
   font-weight: 700;

@@ -11,6 +11,9 @@ interface TerminalInfo {
   connection_id: string | null;
   title: string;
   name: string;
+  host: string | null;
+  port: number | null;
+  username: string | null;
   cwd: string | null;
   cols: number;
   rows: number;
@@ -219,29 +222,40 @@ export default function AgentPanel() {
         <div className="agent-terminals">
           <div className="agent-section-title">Agent 终端</div>
           {terminals.length === 0 && <div className="agent-empty">无活跃终端</div>}
-          {terminals.map((t) => (
-            <div
-              key={t.id}
-              className={`agent-terminal-item ${selectedId === t.id ? "active" : ""} ${t.alive ? "" : "dead"}`}
-              onClick={() => setSelectedId(t.id)}
-            >
-              <div className="agent-terminal-title">
-                {t.name || t.title || t.id}
-                {!t.alive && <span className="agent-dead-badge">×</span>}
+          {terminals.map((t) => {
+            const hostPort = t.host
+              ? `${t.username ? t.username + "@" : ""}${t.host}${t.port && t.port !== 22 ? ":" + t.port : ""}`
+              : null;
+            return (
+              <div
+                key={t.id}
+                className={`agent-terminal-item ${selectedId === t.id ? "active" : ""} ${t.alive ? "" : "dead"}`}
+                onClick={() => setSelectedId(t.id)}
+              >
+                <div className="agent-terminal-title">
+                  {t.name || t.title || t.id}
+                  {!t.alive && <span className="agent-dead-badge">×</span>}
+                </div>
+                {t.title && t.title !== t.name && (
+                  <div className="agent-terminal-server">{t.title}</div>
+                )}
+                {hostPort && (
+                  <div className="agent-terminal-host agent-mono">{hostPort}</div>
+                )}
+                <div className="agent-terminal-meta">
+                  <span className="agent-mono">{t.id.slice(0, 8)}</span>
+                  <span>·</span>
+                  <span>{t.type}</span>
+                  {t.cwd && <span className="agent-cwd">{t.cwd}</span>}
+                </div>
+                <div className="agent-terminal-meta">
+                  <span>idle {Math.round(t.idle_seconds)}s</span>
+                  <span>·</span>
+                  <span>{(t.size / 1024).toFixed(1)}KB</span>
+                </div>
               </div>
-              <div className="agent-terminal-meta">
-                <span className="agent-mono">{t.id.slice(0, 8)}</span>
-                <span>·</span>
-                <span>{t.type}</span>
-                {t.cwd && <span className="agent-cwd">{t.cwd}</span>}
-              </div>
-              <div className="agent-terminal-meta">
-                <span>idle {Math.round(t.idle_seconds)}s</span>
-                <span>·</span>
-                <span>{(t.size / 1024).toFixed(1)}KB</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* 中：输出查看 */}

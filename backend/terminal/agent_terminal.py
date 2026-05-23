@@ -163,6 +163,9 @@ class AgentTerminal:
         self.connection_id = connection_id
         self.title = title
         self.name = name
+        self.host: Optional[str] = None
+        self.port: Optional[int] = None
+        self.username: Optional[str] = None
         self.cols = cols
         self.rows = rows
         self.created_at = datetime.now()
@@ -235,6 +238,9 @@ class AgentTerminal:
             "connection_id": self.connection_id,
             "title": self.title,
             "name": self.name,
+            "host": self.host,
+            "port": self.port,
+            "username": self.username,
             "cwd": self.cwd,
             "cols": self.cols,
             "rows": self.rows,
@@ -601,6 +607,10 @@ class AgentTerminalPool:
             terminal_type, connection_id, cols, rows, title,
             name=name, ttl_seconds=ttl_seconds,
         )
+        if ssh_config:
+            terminal.host = ssh_config.get("host")
+            terminal.port = ssh_config.get("port")
+            terminal.username = ssh_config.get("username")
         await terminal.start(ssh_config)
 
         with self._lock:
