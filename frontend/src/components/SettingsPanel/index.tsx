@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
 import { getApiBaseUrl } from "@/lib/config";
+import { getAccessKey } from "@/lib/auth";
 import "./SettingsPanel.css";
 
 interface ModelInfo {
@@ -103,6 +104,41 @@ export default function SettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+
+  const copyToClipboard = (text: string) => {
+    if (navigator.clipboard?.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.position = "fixed";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+    return Promise.resolve();
+  };
+
+  const handleCopyToken = async () => {
+    if (!settings.agent_api_token) return;
+    let tokenToCopy = settings.agent_api_token;
+    try {
+      const baseUrl = getApiBaseUrl() || (typeof window !== "undefined" ? window.location.origin : "");
+      const headers: Record<string, string> = {};
+      const accessKey = getAccessKey();
+      if (accessKey) headers["X-Access-Key"] = accessKey;
+      const r = await fetch(`${baseUrl}/api/settings/token/reveal`, { headers });
+      if (r.ok) {
+        const d = await r.json();
+        tokenToCopy = d.token;
+      }
+    } catch { /* fallback to masked value */ }
+    await copyToClipboard(tokenToCopy);
+    setTokenCopied(true);
+    setTimeout(() => setTokenCopied(false), 1500);
+  };
 
   const installGuideUrl = `${getApiBaseUrl() || (typeof window !== "undefined" ? window.location.origin : "")}/api/agent/install.md`;
   const installPrompt = `${t("settings.agentAccessPrompt")}${installGuideUrl}`;
@@ -418,6 +454,14 @@ export default function SettingsPanel() {
                 placeholder="token..."
                 style={{ flex: 1 }}
               />
+              <button
+                className="settings-btn settings-btn-secondary"
+                onClick={handleCopyToken}
+                type="button"
+                disabled={!settings.agent_api_token}
+              >
+                {tokenCopied ? t("settings.copied") : t("settings.copy")}
+              </button>
               <button
                 className="settings-btn settings-btn-secondary"
                 onClick={handleGenerateToken}

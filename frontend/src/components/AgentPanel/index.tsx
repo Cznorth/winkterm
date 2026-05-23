@@ -91,7 +91,29 @@ export default function AgentPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [output, setOutput] = useState<string>("");
   const [outputSize, setOutputSize] = useState<number>(0);
+  const [copied, setCopied] = useState(false);
   const outputRef = useRef<HTMLPreElement>(null);
+
+  const copyToken = () => {
+    if (!token) return;
+    const write = navigator.clipboard?.writeText
+      ? navigator.clipboard.writeText(token)
+      : new Promise<void>((resolve) => {
+          const el = document.createElement("textarea");
+          el.value = token;
+          el.style.position = "fixed";
+          el.style.opacity = "0";
+          document.body.appendChild(el);
+          el.select();
+          document.execCommand("copy");
+          document.body.removeChild(el);
+          resolve();
+        });
+    write.then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
   const baseUrl = useMemo(() => getApiBaseUrl(), []);
 
   // 1) 取 token（远程访问时附带 web 鉴权 key）
@@ -214,6 +236,13 @@ export default function AgentPanel() {
           <span>{terminals.length} 终端</span>
           <span>·</span>
           <span>{events.length} 事件</span>
+          <span>·</span>
+          <span className="agent-token-display" title={token ?? ""}>
+            token: <span className="agent-mono">{token ? token.slice(0, 8) + "…" : "—"}</span>
+          </span>
+          <button className="agent-copy-btn" onClick={copyToken} title="复制 token">
+            {copied ? "已复制" : "复制"}
+          </button>
         </div>
       </div>
 

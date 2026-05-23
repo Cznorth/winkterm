@@ -8,7 +8,7 @@ from typing import Any, Literal, Optional
 
 logger = logging.getLogger("routes")
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -62,6 +62,20 @@ class ModelsRequest(BaseModel):
 async def get_settings() -> dict:
     """获取配置（API Key 脱敏）"""
     return UserConfig.get_masked()
+
+
+@router.get("/settings/token/reveal")
+async def reveal_agent_token(request: Request) -> dict:
+    """返回完整 agent_api_token，用于设置页复制。
+    鉴权：本机直接放行；远程需携带有效 X-Access-Key 头。
+    """
+    from backend.api.auth_routes import is_local_request, verify_web_key
+    if not is_local_request(request) and not verify_web_key(request.headers.get("X-Access-Key", "")):
+        raise HTTPException(status_code=403, detail="需本机访问或有效的 X-Access-Key")
+    token = UserConfig.load().get("agent_api_token") or settings.agent_api_token
+    if not token:
+        raise HTTPException(status_code=404, detail="未配置 agent_api_token")
+    return {"token": token}
 
 
 @router.post("/settings")

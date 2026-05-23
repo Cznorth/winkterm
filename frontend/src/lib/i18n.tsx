@@ -75,6 +75,8 @@ const translations = {
     en: "Token required for external agent API calls. Leave empty to disable the API. Click \"Save Settings\" below after changes.",
   },
   "settings.agentApiTokenGenerate": { zh: "随机生成", en: "Generate" },
+  "settings.copy": { zh: "复制", en: "Copy" },
+  "settings.copied": { zh: "已复制", en: "Copied" },
   "settings.agentAccessDesc": {
     zh: "复制下面的 prompt 发给你的外部 agent，它会按指引自助安装 WinkTerm 远程操作能力。",
     en: "Copy the prompt below and send it to your external agent; it will self-install WinkTerm remote-control capability.",

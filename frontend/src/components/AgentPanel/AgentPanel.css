@@ -26,9 +26,30 @@
 
 .agent-stats {
   display: flex;
+  align-items: center;
   gap: 6px;
   font-size: 12px;
   color: var(--text-muted, #888);
+}
+
+.agent-token-display {
+  color: var(--text-muted, #888);
+}
+
+.agent-copy-btn {
+  padding: 1px 7px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 3px;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.agent-copy-btn:hover {
+  color: var(--text-color, #d4d4d4);
+  border-color: var(--text-muted, #888);
 }
 
 .agent-body {
