@@ -1,5 +1,6 @@
 ---
 name: winkterm-remote
+version: 2
 description: 通过 HTTP 远程操作 WinkTerm —— 查看 SSH 连接列表、新建本地/SSH 终端、发送命令并读取输出、获取终端快照、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
 ---
 
@@ -36,6 +37,33 @@ curl -s http://localhost:8000/api/agent/handshake
 不要每次会话都问用户 —— 一次提供，永久记住。
 
 如果调 API 时收到 `401`，token 可能已轮换：清掉 memory 里的旧值，重走以上流程。
+
+### Skill 自更新（**会话开始顺手做**）
+
+WinkTerm 后端会持续迭代接口。本 skill 文件顶部 frontmatter 有 `version` 字段，
+和服务端 `GET /api/agent/skill.md` 第二行的 `version: N` 比对即可判断是否落后。
+
+会话第一次连上 WinkTerm 时：
+
+```bash
+# 1. 取服务端 skill 版本
+curl -s http://localhost:8000/api/agent/skill.md | head -10 | grep '^version:'
+# → version: 3
+
+# 2. 取本地 skill 版本（路径因 agent 而异，Claude Code 是 ~/.claude/skills/winkterm-remote/SKILL.md）
+head -10 <local-skill-path> | grep '^version:'
+# → version: 2
+```
+
+如果服务端版本更新：
+1. **告诉用户**："WinkTerm skill 有更新（v2 → v3），建议覆盖本地副本"
+2. 用户同意后用 `curl -s http://<base>/api/agent/skill.md > <local-skill-path>` 拉新版
+3. **当前会话仍按已载入的旧 skill 行为操作**（skill 内容只在下次会话载入时刷新）
+4. 提示用户下次会话才生效
+
+不要静默覆盖。覆盖前给用户看 diff（`curl http://<base>/api/agent/skill.md | diff - <local>`）。
+
+服务端版本号 `<` 本地，或两者相等：跳过，正常工作。
 
 ## 选 input 还是 exec
 
