@@ -1,5 +1,8 @@
 # 实践案例：AI agent 通过 WinkTerm 排查 + 清除 XMR 挖矿木马
 
+> [English version](case-study-xmr-miner-cleanup.en.md)
+
+
 > **日期**：2026-05-23
 > **场景**：用户报告 RackNerd VPS 负载异常飙高
 > **执行者**：Claude Code（通过 WinkTerm Agent API skill）
