@@ -118,6 +118,12 @@ curl -s http://<your-winkterm-host>:8000/api/agent/skill.md > SKILL.md
 
 只读查看，不影响 agent 正常操作。无持久化，纯实时。
 
+### 实战案例
+
+[📖 案例：AI agent 用 WinkTerm 30 分钟定位 + 清除 XMR 挖矿木马](docs/case-study-xmr-miner-cleanup.md)
+
+真实事件复盘：用户只说"107.173 开头服务器负载很高"，AI agent 通过 Agent API 完成从发现 → 定位 → 还原入侵链 → 加固 → 上报 abuse 全流程。本次更新的 9 个新功能就是从这次案例的痛点反推出来的。
+
 ---
 
 ## 🔥 为什么选择 WinkTerm？

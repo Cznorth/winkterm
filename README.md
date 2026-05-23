@@ -124,6 +124,12 @@ A new icon in the activity bar opens a three-column view:
 
 Read-only viewer, doesn't interfere with agent operations. No persistence, pure real-time.
 
+### Case Study
+
+[📖 Case: AI agent locates and removes an XMR cryptojacker in 30 minutes via WinkTerm](docs/case-study-xmr-miner-cleanup.md)
+
+A real incident write-up: user said only "the 107.173 server's load is high," and the AI agent completed discovery → investigation → kill chain reconstruction → hardening → abuse reporting end-to-end via the Agent API. The 9 new features in this release were reverse-engineered from the pain points hit during this exact case.
+
 ---
 
 ## 🔥 Why WinkTerm?
