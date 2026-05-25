@@ -231,8 +231,15 @@ class PtyManager:
         self._read_callbacks = [c for c in self._read_callbacks if c is not cb]
 
     async def start_read_loop(self) -> None:
-        """启动读取循环：后台线程读 PTY，放入 asyncio queue。"""
+        """启动读取循环：后台线程读 PTY，放入 asyncio queue。
+
+        幂等:若已有读线程在跑则直接 await 现有任务(防多 agent/WS 重复触发)。
+        """
         if self._proc is None or not hasattr(self._proc, "read"):
+            return
+
+        if self._read_thread is not None and self._read_thread.is_alive():
+            logger.debug("[READ_LOOP] 读线程已在跑,跳过重启")
             return
 
         self._loop = asyncio.get_event_loop()

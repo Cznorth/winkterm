@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.agent.factory import get_agent
 from backend.agent.core.state import AgentState
-from backend.agent.tools.terminal import get_terminal_context_raw
+from backend.agent.tools.terminal_legacy import get_terminal_context_raw
 from backend.config import UserConfig, settings
 from backend.utils.token_utils import count_tokens, count_history_tokens, fetch_model_context_length
 
@@ -247,10 +247,20 @@ class ChatWSHandler:
 
                 elif event_type == "on_tool_end":
                     tool_name = event.get("name", "unknown")
-                    tool_result = event.get("data", {}).get("output", "")
-                    # 截断过长的结果
+                    raw = event.get("data", {}).get("output", "")
+                    # output 可能是 ToolMessage / dict / str,统一序列化成字符串
+                    if hasattr(raw, "content"):
+                        tool_result = raw.content
+                    elif isinstance(raw, (dict, list)):
+                        try:
+                            tool_result = json.dumps(raw, ensure_ascii=False, default=str)
+                        except Exception:
+                            tool_result = str(raw)
+                    else:
+                        tool_result = str(raw) if raw is not None else ""
                     if isinstance(tool_result, str) and len(tool_result) > 5000:
                         tool_result = tool_result[:5000] + "...(已截断)"
+                    logger.debug(f"[TOOL_END] {tool_name}, result_len={len(tool_result) if isinstance(tool_result, str) else 'n/a'}")
                     await self._send({
                         "type": "tool_end",
                         "tool": tool_name,

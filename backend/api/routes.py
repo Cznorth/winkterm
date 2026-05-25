@@ -17,7 +17,7 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 
 from backend.agent.graph import get_graph
-from backend.agent.tools.terminal import get_terminal_context_raw
+from backend.agent.tools.terminal_legacy import get_terminal_context_raw
 from backend.config import UserConfig, settings
 
 router = APIRouter()

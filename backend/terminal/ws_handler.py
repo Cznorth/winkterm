@@ -24,6 +24,9 @@ logging.basicConfig(
 
 # resize 事件格式: ESC[8;rows;colst
 _RESIZE_PATTERN = re.compile(r"\x1b\[8;(\d+);(\d+)t")
+# 终端查询类 ANSI(DA/DA2/DSR/Window report 等):回放时必须剥掉,
+# 否则 xterm 解析后会再次回复 → shell 把回复当输入显示在 prompt。
+_TERM_QUERY_PATTERN = re.compile(r"\x1b\[[\?>=]?[\d;]*[cn]")
 # 屏幕内容响应格式: ESC[?9999;screen;<encoded_content>h
 _SCREEN_CONTENT_PATTERN = re.compile(r"\x1b\[\?9999;screen;([^\x1b]*)h")
 # 激活会话: ESC[?9999;activateh
@@ -68,6 +71,10 @@ class TerminalWSHandler:
 
         # 检测回车键
         if data in ("\r", "\n", "\r\n"):
+            # SSH 远端回显有网络延迟,前端 serialize 抢在回显前发出 → 屏幕
+            # 还没渲染最后输入的字符。等屏幕同步上来再 parse。
+            if self.terminal_type == "ssh":
+                await asyncio.sleep(0.4)
             logger.debug("[COMMAND] 检测到回车，解析屏幕内容中的命令")
             await self._parse_last_command_from_screen()
 
@@ -100,12 +107,23 @@ class TerminalWSHandler:
                 self.pty.spawn()
                 logger.info(f"[SPAWN] PTY 已启动: pid={getattr(self.pty, '_pid', 'N/A')}")
 
+        # session 持有读循环,WS 断开不停止;此处只确保启动
+        self.session.ensure_read_loop()
+
+        # 重连场景:同步抓 buffer 快照 + 立即挂 callback(无 await 间隔),
+        # 然后再 await 发回放。callback 已就位,后续增量不丢。
+        # 顺序很关键:中间任何 await 都会让 read coro 跑,
+        # 没挂 callback 的话期间产生的输出会丢失。
+        snap = self.session.snapshot(strip=False)
         self.pty.add_output_callback(self._on_pty_output)
+        replay = snap.get("output", "")
+        if replay:
+            # 剥掉终端查询序列,避免 xterm 再次回复污染 shell 输入
+            replay = _TERM_QUERY_PATTERN.sub("", replay)
+            await self._send(replay)
 
         # 激活此会话（agent tools 会使用激活会话的 PTY）
         self.session_manager.set_active_session(self.session_id)
-
-        read_task = asyncio.create_task(self.pty.start_read_loop())
 
         try:
             while True:
@@ -148,12 +166,11 @@ class TerminalWSHandler:
         except Exception as exc:
             logger.exception(f"[ERROR] 异常: {exc}")
         finally:
-            read_task.cancel()
+            # WS 断开不关 session,保活 pty + 读循环(session 持有)。
+            # session 由用户显式删 tab(DELETE /api/sessions/{id})或 TTL 回收。
             if self.pty:
                 self.pty.remove_output_callback(self._on_pty_output)
-            if self.session:
-                self.session_manager.close_session(self.session_id)
-            logger.debug(f"[CLEANUP] 会话 {self.session_id} 资源已释放")
+            logger.debug(f"[CLEANUP] WS 断开但 session {self.session_id} 保活")
 
     async def _parse_last_command_from_screen(self) -> None:
         """从屏幕内容解析最后一行命令"""

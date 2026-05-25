@@ -2,11 +2,11 @@
 
 import { ReactNode, useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { usePanes, LAYOUT_CONFIG, type LayoutType } from "@/hooks/usePanes";
+import { useSessionsStream, type SessionInfo } from "@/hooks/useSessionsStream";
 import { useI18n } from "@/lib/i18n";
 import Terminal from "@/components/Terminal";
 import SettingsPanel from "@/components/SettingsPanel";
 import SSHPanel from "@/components/SSHPanel";
-import AgentPanel from "@/components/AgentPanel";
 import TitleBar from "@/components/TitleBar";
 import SplitContainer from "@/components/SplitContainer";
 import "./Layout.css";
@@ -34,13 +34,6 @@ const Icons = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  ),
-  agent: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
     </svg>
   ),
   settings: (
@@ -77,7 +70,7 @@ const Icons = {
   ),
 };
 
-type ActivityItem = "terminal" | "ssh" | "agent" | "settings";
+type ActivityItem = "terminal" | "ssh" | "settings";
 
 const LAYOUT_BUTTONS: { layout: LayoutType; icon: ReactNode; titleKey: "layout.single" | "layout.horizontal" | "layout.vertical" | "layout.grid" }[] = [
   { layout: "single", icon: Icons.layoutSingle, titleKey: "layout.single" },
@@ -94,6 +87,8 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     setLayout,
     addTab,
     closeTab,
+    closeTabById,
+    hasTab,
     switchTab,
     renameTab,
     moveTab,
@@ -158,6 +153,37 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     });
   }, []);
 
+  // 后端 session 事件 → 自动同步标签栏(agent 创建的可见终端自动加 tab)
+  const handleSessionCreated = useCallback((s: SessionInfo) => {
+    if (!s.user_visible) return;
+    if (hasTab(s.id)) return;
+    const firstPaneId = panes[0]?.id;
+    if (!firstPaneId) return;
+    addTab(firstPaneId, {
+      id: s.id,
+      type: s.type,
+      sshConnectionId: s.connection_id || undefined,
+      title: s.title || s.name || (s.type === "ssh" ? `${s.username}@${s.host}` : "Terminal"),
+    });
+  }, [panes, addTab, hasTab]);
+
+  const handleSessionClosed = useCallback((id: string) => {
+    if (hasTab(id)) closeTabById(id);
+  }, [hasTab, closeTabById]);
+
+  useSessionsStream({
+    onCreated: handleSessionCreated,
+    onClosed: handleSessionClosed,
+  });
+
+  // tab X 按钮:先通知后端关 session,再删本地标签(后端 close 也会广播,前端幂等)
+  const handleTabClose = useCallback((paneId: string, tabId: string) => {
+    closeTab(paneId, tabId);
+    import("@/lib/axios").then(({ default: axios }) => {
+      axios.delete(`/api/sessions/${encodeURIComponent(tabId)}`).catch(() => {});
+    });
+  }, [closeTab]);
+
   // 处理 SSH 连接 - 添加到第一个分区
   const handleSSHConnect = (conn: { id: string; title: string; host: string; color?: string }) => {
     const firstPaneId = panes[0].id;
@@ -191,13 +217,6 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
             >
               {Icons.ssh}
             </div>
-            <div
-              className={`activity-item ${activeActivity === "agent" ? "active" : ""}`}
-              onClick={() => setActiveActivity("agent")}
-              title="Agent 实时监控"
-            >
-              {Icons.agent}
-            </div>
           </div>
           <div className="activity-bar-bottom">
             {/* 布局切换按钮 */}
@@ -225,12 +244,12 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
 
         {/* 主内容区域 - 终端始终挂载，SSH/设置覆盖显示 */}
         <div className="terminal-section">
-          <div className="terminal-layer" style={{ display: activeActivity === "ssh" || activeActivity === "settings" || activeActivity === "agent" ? "none" : "flex" }}>
+          <div className="terminal-layer" style={{ display: activeActivity === "ssh" || activeActivity === "settings" ? "none" : "flex" }}>
             <SplitContainer
               layout={layout}
               panes={panes}
               onTabClick={switchTab}
-              onTabClose={closeTab}
+              onTabClose={handleTabClose}
               onTabAdd={addTab}
               onTabRename={renameTab}
               onTabDrop={moveTab}
@@ -239,7 +258,6 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
             />
           </div>
           {activeActivity === "ssh" && <SSHPanel onConnect={handleSSHConnect} />}
-          {activeActivity === "agent" && <AgentPanel />}
           {activeActivity === "settings" && <SettingsPanel />}
         </div>
 

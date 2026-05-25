@@ -255,7 +255,7 @@ export function useChatWs() {
             currentSegmentRef.current = "";
           }
           const newToolCall: ToolCall = {
-            id: `${Date.now()}-${data.tool}`,
+            id: `${Date.now()}-${data.tool}-${Math.random().toString(36).slice(2, 10)}`,
             tool: data.tool,
             args: data.args || {},
             status: "running",

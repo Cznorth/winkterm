@@ -1,7 +1,7 @@
 # Agent Configuration Registry
 agents:
   terminal:
-    description: In-terminal agent, operates the terminal directly
+    description: In-terminal lightweight agent, operates the active terminal directly
     tools:
       - write_command
       - get_terminal_context
@@ -15,9 +15,8 @@ agents:
     model: default
 
   craft:
-    description: Code and automation assistant with terminal access
+    description: Full terminal toolset agent for cross-terminal orchestration
     tools:
-      - terminal_input
-      - get_terminal_context
+      - terminal
     prompt: craft.yaml
     model: default

@@ -15,6 +15,7 @@ from backend.api.routes import router as http_router
 from backend.api.ws_routes import router as ws_router
 from backend.api.ssh_routes import router as ssh_router
 from backend.api.agent_routes import router as agent_router, public_router as agent_public_router
+from backend.api.sessions_routes import router as sessions_router
 from backend.api.auth_routes import router as auth_router, require_web_auth
 
 # Check if running in PyInstaller bundle
@@ -65,6 +66,7 @@ app.include_router(ws_router, prefix="/ws", tags=["terminal"])
 app.include_router(ssh_router, tags=["ssh"], dependencies=[Depends(require_web_auth)])
 app.include_router(agent_router)
 app.include_router(agent_public_router)
+app.include_router(sessions_router)
 
 
 @app.get("/health")

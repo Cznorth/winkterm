@@ -103,7 +103,7 @@ a = Analysis(
         "backend.ssh.pty_spawner",
         "backend.api.ssh_routes",
         "backend.api.agent_routes",
-        "backend.terminal.agent_terminal",
+        "backend.terminal._term_utils",
         "paramiko",
         "paramiko.ssh_exception",
         "paramiko.transport",

@@ -111,7 +111,9 @@ export interface UsePanesReturn {
   layout: LayoutType;
   panes: Pane[];
   setLayout: (layout: LayoutType) => void;
-  addTab: (paneId: string, options?: { type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => string;
+  addTab: (paneId: string, options?: { id?: string; type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => string;
+  closeTabById: (tabId: string) => void;
+  hasTab: (tabId: string) => boolean;
   closeTab: (paneId: string, tabId: string) => void;
   switchTab: (paneId: string, tabId: string) => void;
   renameTab: (paneId: string, tabId: string, title: string) => void;
@@ -194,8 +196,8 @@ export function usePanes(): UsePanesReturn {
   }, []);
 
   // 添加标签页
-  const addTab = useCallback((paneId: string, options?: { type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => {
-    const newId = `tab-${++tabIdCounter}`;
+  const addTab = useCallback((paneId: string, options?: { id?: string; type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => {
+    const newId = options?.id || `tab-${++tabIdCounter}`;
     const tabType = options?.type || "local";
 
     const newTab: TabState = {
@@ -216,6 +218,36 @@ export function usePanes(): UsePanesReturn {
     }));
 
     return newId;
+  }, []);
+
+  const hasTab = useCallback((tabId: string): boolean => {
+    return state.panes.some((pane) => pane.tabs.some((tab) => tab.id === tabId));
+  }, [state]);
+
+  const closeTabById = useCallback((tabId: string) => {
+    setState((prev) => ({
+      ...prev,
+      panes: prev.panes.map((pane) => {
+        if (!pane.tabs.some((t) => t.id === tabId)) return pane;
+        const newTabs = pane.tabs.filter((t) => t.id !== tabId);
+        if (newTabs.length === 0) {
+          // 保底:不让 pane 空,创建占位 local 标签
+          tabIdCounter++;
+          const placeholder: TabState = {
+            id: `tab-${tabIdCounter}`,
+            title: `Terminal ${tabIdCounter}`,
+            type: "local",
+          };
+          return { ...pane, tabs: [placeholder], activeTabId: placeholder.id };
+        }
+        let newActive = pane.activeTabId;
+        if (newActive === tabId) {
+          const idx = pane.tabs.findIndex((t) => t.id === tabId);
+          newActive = newTabs[Math.min(idx, newTabs.length - 1)].id;
+        }
+        return { ...pane, tabs: newTabs, activeTabId: newActive };
+      }),
+    }));
   }, []);
 
   // 关闭标签页
@@ -303,6 +335,8 @@ export function usePanes(): UsePanesReturn {
     setLayout,
     addTab,
     closeTab,
+    closeTabById,
+    hasTab,
     switchTab,
     renameTab,
     moveTab,
