@@ -35,6 +35,9 @@ COPY backend/ /app/backend/
 # Copy frontend build output
 COPY --from=frontend-builder /frontend/out /app/frontend/out
 
+# Copy agent skill files
+COPY agent-skill/ /app/agent-skill/
+
 EXPOSE 8000
 
 ENV PYTHONPATH=/app

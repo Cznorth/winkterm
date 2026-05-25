@@ -558,6 +558,19 @@ export default function SettingsPanel() {
               t("settings.save")
             )}
           </button>
+          <div style={{ marginTop: "12px" }}>
+            <a
+              className="settings-btn settings-btn-secondary settings-btn-full"
+              href={`${getApiBaseUrl() || (typeof window !== "undefined" ? window.location.origin : "")}/api/settings/export`}
+              download="winkterm-config.json"
+              style={{ textDecoration: "none", textAlign: "center", display: "block" }}
+            >
+              {t("settings.exportConfig")}
+            </a>
+            <div className="settings-help" style={{ marginTop: "6px" }}>
+              {t("settings.exportConfigHelp")}
+            </div>
+          </div>
         </div>
       </div>
     </div>

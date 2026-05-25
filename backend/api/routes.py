@@ -8,7 +8,9 @@ from typing import Any, Literal, Optional
 
 logger = logging.getLogger("routes")
 
+import json
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -76,6 +78,21 @@ async def reveal_agent_token(request: Request) -> dict:
     if not token:
         raise HTTPException(status_code=404, detail="未配置 agent_api_token")
     return {"token": token}
+
+
+@router.get("/settings/export")
+async def export_settings(request: Request) -> Response:
+    """导出完整配置文件（含明文密钥），需本机或有效 X-Access-Key。"""
+    from backend.api.auth_routes import is_local_request, verify_web_key
+    if not is_local_request(request) and not verify_web_key(request.headers.get("X-Access-Key", "")):
+        raise HTTPException(status_code=403, detail="需本机访问或有效的 X-Access-Key")
+    config = UserConfig.load()
+    content = json.dumps(config, indent=2, ensure_ascii=False)
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=winkterm-config.json"},
+    )
 
 
 @router.post("/settings")
