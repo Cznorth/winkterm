@@ -71,7 +71,7 @@ const translations = {
   "settings.agentAccess": { zh: "外部 Agent 接入", en: "External Agent Access" },
   "settings.agentApiToken": { zh: "接口鉴权 Token", en: "API Token" },
   "settings.agentApiTokenHelp": {
-    zh: "外部 agent 调用接口所需的 token。留空则外部接口关闭。修改后需点击下方“保存设置”。",
+    zh: "外部 agent 调用接口所需的 token。留空则外部接口关闭。修改后需点击下方「保存设置」。",
     en: "Token required for external agent API calls. Leave empty to disable the API. Click \"Save Settings\" below after changes.",
   },
   "settings.agentApiTokenGenerate": { zh: "随机生成", en: "Generate" },
@@ -262,8 +262,13 @@ const translations = {
   "settings.webAccess": { zh: "Web 远程访问", en: "Web Remote Access" },
   "settings.webAccessKey": { zh: "访问密钥", en: "Access Key" },
   "settings.webAccessKeyHelp": {
-    zh: "远程浏览器访问所需的密钥。本机桌面客户端始终免鉴权。未设置时，首次远程访问会要求设置密钥。修改后需点击下方“保存设置”。",
+    zh: "远程浏览器访问所需的密钥。本机桌面客户端始终免鉴权。未设置时，首次远程访问会要求设置密钥。修改后需点击下方「保存设置」。",
     en: "Key required for remote browser access. The local desktop client never needs it. When unset, the first remote visit will prompt to set one. Click \"Save Settings\" below after changes.",
+  },
+  "settings.exportConfig": { zh: "导出配置文件", en: "Export Config" },
+  "settings.exportConfigHelp": {
+    zh: "下载包含所有配置（含密钥明文）的 JSON 文件，请妥善保管。",
+    en: "Download a JSON file with all settings including plaintext secrets. Keep it safe.",
   },
 } as const;
 
