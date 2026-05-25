@@ -167,14 +167,20 @@ export function useTerminal(
     const handleResize = () => {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        if (fitAddonRef.current && termRef.current) {
-          try {
-            fitAddonRef.current.fit();
-            const { cols, rows } = termRef.current;
+        if (!fitAddonRef.current || !termRef.current || !containerRef.current) return;
+        // 容器隐藏/过小(如 tab 切换到其他 pane 时 display:none)绝不 fit。
+        // 否则 fitAddon 用 0 维容器算出来的 cols 会把 xterm 缩成 2 之类,
+        // 等切回来 xterm 还残留小 cols → prompt 显示截断。
+        const el = containerRef.current;
+        if (el.clientWidth < 100 || el.clientHeight < 50) return;
+        try {
+          fitAddonRef.current.fit();
+          const { cols, rows } = termRef.current;
+          if (cols >= 20 && rows >= 5) {
             wsRef.current.sendResize(cols, rows);
-          } catch (e) {
-            // ignore fit errors during transitions
           }
+        } catch (e) {
+          // ignore fit errors during transitions
         }
       }, 50);
     };
@@ -214,19 +220,26 @@ export function useTerminal(
 
   // 手动触发 fit（用于布局切换后）
   const fit = useCallback(() => {
-    if (fitAddonRef.current && termRef.current) {
-      // 始终执行 fit，即使容器不可见
-      try {
-        fitAddonRef.current.fit();
-        const { cols, rows } = termRef.current;
+    if (!fitAddonRef.current || !termRef.current || !containerRef.current) return;
+    const el = containerRef.current;
+    // 容器过小/不可见时不 fit,避免 xterm.cols 被算成异常小值
+    if (el.clientWidth < 100 || el.clientHeight < 50) {
+      DEBUG && console.log(`[useTerminal] 容器过小跳过 fit, sessionId=${sessionId}, w=${el.clientWidth}, h=${el.clientHeight}`);
+      return;
+    }
+    try {
+      fitAddonRef.current.fit();
+      const { cols, rows } = termRef.current;
+      if (cols >= 20 && rows >= 5) {
         wsRef.current.sendResize(cols, rows);
         DEBUG && console.log(`[useTerminal] fit 完成, sessionId=${sessionId}, cols=${cols}, rows=${rows}`);
-      } catch (e) {
-        // 容器不可见时可能会报错，忽略
-        DEBUG && console.log(`[useTerminal] fit 失败（容器可能不可见）, sessionId=${sessionId}`, e);
+      } else {
+        DEBUG && console.log(`[useTerminal] fit 结果异常 cols=${cols} rows=${rows},不发 resize`);
       }
+    } catch (e) {
+      DEBUG && console.log(`[useTerminal] fit 失败, sessionId=${sessionId}`, e);
     }
-  }, [sessionId]);
+  }, [containerRef, sessionId]);
 
   // 使用指定的尺寸发送 resize（用于隐藏的终端）
   const fitWithSize = useCallback((cols: number, rows: number) => {

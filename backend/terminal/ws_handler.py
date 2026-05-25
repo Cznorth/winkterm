@@ -86,41 +86,35 @@ class TerminalWSHandler:
         self.session = self.session_manager.create_session(self.session_id)
         self.pty = self.session.pty
 
-        # 如果 PTY 未启动，则启动
-        if not self.pty.is_alive():
-            if self.terminal_type == "ssh" and self.ssh_connection_id:
-                # SSH 连接
-                from backend.ssh.connection_manager import SSHConnectionManager
-                conn = SSHConnectionManager.get_connection(self.ssh_connection_id)
-                if conn:
-                    ssh_config = conn.to_dict()
-                    self.pty.spawn(ssh_config=ssh_config)
-                    # 更新最后连接时间
-                    SSHConnectionManager.update_last_connected(self.ssh_connection_id)
-                    logger.info(f"[SPAWN SSH] SSH 已启动: {conn.username}@{conn.host}:{conn.port}")
-                else:
-                    logger.error(f"[SPAWN SSH] SSH 连接不存在: {self.ssh_connection_id}")
-                    await self._send(f"\r\n\033[31m❌ SSH 连接不存在: {self.ssh_connection_id}\033[0m\r\n")
-                    return
-            else:
-                # 本地 shell
-                self.pty.spawn()
-                logger.info(f"[SPAWN] PTY 已启动: pid={getattr(self.pty, '_pid', 'N/A')}")
+        # SSH 连接配置预取(校验失败立即返回)
+        ssh_config: dict | None = None
+        if self.terminal_type == "ssh" and self.ssh_connection_id:
+            from backend.ssh.connection_manager import SSHConnectionManager
+            conn = SSHConnectionManager.get_connection(self.ssh_connection_id)
+            if not conn:
+                logger.error(f"[SPAWN SSH] SSH 连接不存在: {self.ssh_connection_id}")
+                await self._send(f"\r\n\033[31m❌ SSH 连接不存在: {self.ssh_connection_id}\033[0m\r\n")
+                return
+            ssh_config = conn.to_dict()
+            SSHConnectionManager.update_last_connected(self.ssh_connection_id)
 
-        # session 持有读循环,WS 断开不停止;此处只确保启动
-        self.session.ensure_read_loop()
-
-        # 重连场景:同步抓 buffer 快照 + 立即挂 callback(无 await 间隔),
-        # 然后再 await 发回放。callback 已就位,后续增量不丢。
-        # 顺序很关键:中间任何 await 都会让 read coro 跑,
-        # 没挂 callback 的话期间产生的输出会丢失。
-        snap = self.session.snapshot(strip=False)
-        self.pty.add_output_callback(self._on_pty_output)
-        replay = snap.get("output", "")
-        if replay:
-            # 剥掉终端查询序列,避免 xterm 再次回复污染 shell 输入
-            replay = _TERM_QUERY_PATTERN.sub("", replay)
-            await self._send(replay)
+        # pty 启动推迟到 resize 事件稳定后,用最终 cols/rows 启动 → shell prompt
+        # 从一开始就在正确宽度渲染。
+        # debounce 原因:前端 fit 早期会先用瞬时小 cols 触发 sendResize(xterm
+        # css 还没完全 layout),然后才稳定到真实宽度。直接用首个 resize 会让
+        # PowerShell PSReadLine 在 8 cols 之类的宽度画 prompt → "PS D:\Cz" 截断。
+        self._pending_spawn: bool = not self.pty.is_alive()
+        self._pending_ssh_config: dict | None = ssh_config if self._pending_spawn else None
+        self._pending_replay: bytes | str | None = None
+        self._spawn_dims: tuple[int, int] | None = None
+        self._spawn_task: asyncio.Task | None = None
+        if not self._pending_spawn:
+            # 重连场景:pty 已存活,首个 resize 后回放屏幕快照
+            screen_replay = self.pty.get_screen_content()
+            self._pending_replay = screen_replay if screen_replay else "__REDRAW__"
+            # callback 立即挂,后续 pty 输出实时转发
+            self.pty.add_output_callback(self._on_pty_output)
+            self.session.ensure_read_loop()
 
         # 激活此会话（agent tools 会使用激活会话的 PTY）
         self.session_manager.set_active_session(self.session_id)
@@ -152,9 +146,33 @@ class TerminalWSHandler:
                 if match:
                     rows, cols = int(match.group(1)), int(match.group(2))
                     logger.debug(f"[RESIZE] rows={rows}, cols={cols}")
-                    self.pty.resize(cols, rows)
+                    # 异常瞬时小 size 直接忽略(前端过渡态)
+                    if cols < 20 or rows < 5:
+                        logger.debug(f"[RESIZE] 忽略异常 size cols={cols} rows={rows}")
+                        continue
+                    if self._pending_spawn:
+                        # debounce: 收一个 resize 重置 spawn 计时,稳定后用最终值 spawn
+                        self._spawn_dims = (cols, rows)
+                        if self._spawn_task and not self._spawn_task.done():
+                            self._spawn_task.cancel()
+                        self._spawn_task = asyncio.create_task(self._spawn_after_settle(0.25))
+                    else:
+                        self.pty.resize(cols, rows)
+                        # 首个 resize 到达 = xterm 已 fit 完毕,这时再 replay/redraw
+                        if self._pending_replay is not None:
+                            pending = self._pending_replay
+                            self._pending_replay = None
+                            if pending == "__REDRAW__":
+                                # 无 screen 快照,踢一下 shell 重打 prompt
+                                self.pty.write(b"\r")
+                            elif isinstance(pending, str):
+                                await self._send(pending)
                 else:
                     # 普通输入，透传给 PTY
+                    if self._pending_spawn:
+                        # pty 还没启动(resize 未稳定),丢弃输入避免 NPE
+                        logger.warning(f"[INPUT] pty 未启动,丢弃输入 len={len(data)}")
+                        continue
                     logger.debug(f"[INPUT] len={len(data)} data={_truncate(data)}")
                     self.pty.write(data.encode("utf-8"))
                 await self.hookinput(data) # 自定义操作
@@ -168,9 +186,33 @@ class TerminalWSHandler:
         finally:
             # WS 断开不关 session,保活 pty + 读循环(session 持有)。
             # session 由用户显式删 tab(DELETE /api/sessions/{id})或 TTL 回收。
+            if self._spawn_task and not self._spawn_task.done():
+                self._spawn_task.cancel()
             if self.pty:
                 self.pty.remove_output_callback(self._on_pty_output)
             logger.debug(f"[CLEANUP] WS 断开但 session {self.session_id} 保活")
+
+    async def _spawn_after_settle(self, delay: float) -> None:
+        """resize 事件稳定后用最终 cols/rows 启动 pty。每次新 resize 都会
+        cancel 重建本 task,只有最后一次能跑到 spawn,从而避开早期瞬时小 cols。
+        """
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            return
+        if not self._pending_spawn or self._spawn_dims is None:
+            return
+        cols, rows = self._spawn_dims
+        self._pending_spawn = False
+        try:
+            self.pty.spawn(cols=cols, rows=rows, ssh_config=self._pending_ssh_config)
+            logger.info(f"[SPAWN] pty 启动 cols={cols} rows={rows} pid={getattr(self.pty, '_pid', 'N/A')}")
+        except Exception as e:
+            logger.exception(f"[SPAWN] 启动失败: {e}")
+            await self._send(f"\r\n\033[31m❌ 终端启动失败: {e}\033[0m\r\n")
+            return
+        self.pty.add_output_callback(self._on_pty_output)
+        self.session.ensure_read_loop()
 
     async def _parse_last_command_from_screen(self) -> None:
         """从屏幕内容解析最后一行命令"""
