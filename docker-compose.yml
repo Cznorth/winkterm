@@ -22,6 +22,10 @@ services:
       - PYTHONPATH=/app
     volumes:
       - ./backend:/app/backend
+      - winkterm-data:/root/.winkterm
+
+volumes:
+  winkterm-data:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
