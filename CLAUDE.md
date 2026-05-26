@@ -103,11 +103,42 @@ AI 消息通过 pty output 返回，保证人机合一体验。
 | `NEXT_PUBLIC_API_URL` | 后端 HTTP API 地址 | 否 |
 | `NEXT_PUBLIC_WS_URL` | 后端 WebSocket 地址 | 否 |
 
-## 前端调试方法 (Claude 自验证)
+## 前端调试方法 (Agent 自验证)
 
-Claude 没有浏览器 MCP,但可用 puppeteer-core + 系统 Chrome 驱动 localhost:3000 验证前端修复。
+验证前端修复时，**按运行环境选一种方式**（不要混用）：
 
-### 一键测试模板
+| 环境 | 方式 |
+|------|------|
+| **Cursor IDE** | 内置浏览器（Browser MCP） |
+| **其他**（Claude Code、CI、无 MCP 的 Agent） | puppeteer-core + 系统 Chrome（见下文） |
+
+### Cursor：内置浏览器（优先）
+
+在 Cursor 里测 `http://localhost:3000` 时，让 Agent **只用内置浏览器**，不要起 puppeteer。
+
+**前置**：前后端已启动；已复制 `frontend/.env.example` → `frontend/.env.local`（指向 `localhost:8000`）。
+
+**推荐流程**：
+
+1. `browser_navigate` → `http://localhost:3000`
+2. `browser_lock` → 操作 → `browser_unlock`
+3. 常规控件：`browser_snapshot` → `browser_click` / `browser_type` / `browser_fill`
+4. **xterm 终端**：先点 `.xterm-screen`（或 `browser_cdp` 点击），再用 `browser_press_key` 输入；读输出用 `browser_cdp` + `Runtime.evaluate` 读 `.xterm-rows`（不要用整页 `textContent`）
+5. **侧栏活动栏 / 分屏布局**：快照里常无 ref，用 `browser_cdp` 点 `.activity-item`、`.layout-btn` 等
+
+**可覆盖的冒烟项**：鉴权、本地终端 echo、新建标签、`+` 下拉、SSH 列表、设置页、AI 侧栏与对话、分屏布局。
+
+**密码/密钥保存**：编辑 SSH 或设置时未改密码/API Key 字段，保存后不应被清空（前后端已做保留逻辑，可顺带用 API 校验 `~/.winkterm/config.json`）。
+
+后端联动、增量读终端等仍可用下文 **「跑场景」** 的 Agent HTTP API；与浏览器测 UI 互补。
+
+### 其他环境：puppeteer-core + 系统 Chrome
+
+无 Browser MCP 时，用 puppeteer-core 驱动系统 Chrome 访问 `localhost:3000`。
+
+可选脚本：`node scripts/e2e-frontend-test.mjs`（需本机已装 Chrome，并在临时目录 `npm install puppeteer-core`）。
+
+### 一键测试模板（puppeteer）
 
 ```bash
 # 1. 临时目录装依赖(只装 puppeteer-core,不下 Chromium)
@@ -197,7 +228,8 @@ await new Promise((r) => setTimeout(r, 2500));  // 等 SplitContainer fit + repl
 
 ### 注意
 
-- 用完删 `/c/Users/$USER/AppData/Local/Temp/winkterm-test` 避免堆积。
+- **Cursor** 用内置浏览器时无需 puppeteer 临时目录。
+- **puppeteer 路径**：用完删 `/c/Users/$USER/AppData/Local/Temp/winkterm-test` 避免堆积。
 - 前端 dev server 是 Next.js + Turbopack,改文件秒热更新,无需重启。
 - 后端 `--reload` 模式同样热更新,但 pty 子进程不重启。
 

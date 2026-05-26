@@ -12,6 +12,19 @@ from backend.ssh.models import SSHConnection
 
 logger = logging.getLogger("ssh_manager")
 
+_MASKED_SECRET = "********"
+
+
+def _secret_unchanged(value) -> bool:
+    """空字符串或脱敏占位表示用户未修改该密钥。"""
+    if value is None:
+        return True
+    if value == "":
+        return True
+    if value == _MASKED_SECRET:
+        return True
+    return "****" in str(value)
+
 
 class SSHConnectionManager:
     """SSH 连接配置管理器。"""
@@ -83,8 +96,11 @@ class SSHConnectionManager:
 
         for i, conn in enumerate(connections):
             if conn.get("id") == conn_id:
-                # 更新字段
-                for key, value in data.items():
+                updates = dict(data)
+                for secret_key in ("password", "passphrase"):
+                    if secret_key in updates and _secret_unchanged(updates[secret_key]):
+                        updates.pop(secret_key)
+                for key, value in updates.items():
                     conn[key] = value
                 connections[i] = conn
                 break

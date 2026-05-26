@@ -100,9 +100,12 @@ async def save_settings(payload: SettingsModel) -> dict:
     """保存配置：仅更新请求中显式提供的字段。"""
     data = payload.model_dump(exclude_none=True)
     original = UserConfig.load()
-    # 脱敏值（含 ****）表示前端未修改该密钥，保留原始值
+    # 脱敏值（含 ****）或空字符串（编辑时未填写）表示未修改，保留原始值
     for secret in ("api_key", "agent_api_token", "web_access_key"):
-        if secret in data and "****" in (data[secret] or ""):
+        if secret not in data:
+            continue
+        val = data[secret] or ""
+        if "****" in val or (val == "" and original.get(secret)):
             data[secret] = original.get(secret, "")
     UserConfig.merge_save(data)
     return {"success": True}
