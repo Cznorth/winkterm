@@ -175,6 +175,11 @@ export function useChatWs() {
         currentBlocksRef.current = [];
         currentSegmentRef.current = "";
         isStreamingRef.current = true;
+        // resume 场景:本 WS 没发过 chat 但服务端推 start (in-flight 流接管),
+        // 用 start 自带的 conv_id 让后续 token 能落到对应 conv 上。
+        if (data.conv_id) {
+          streamingConvIdRef.current = data.conv_id;
+        }
         setState((s) => ({ ...s, isStreaming: true }));
         break;
 

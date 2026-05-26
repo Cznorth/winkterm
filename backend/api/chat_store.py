@@ -120,6 +120,46 @@ def set_messages(conv_id: str, messages: list[dict[str, Any]]) -> None:
         _flush()
 
 
+def update_last_assistant(
+    conv_id: str,
+    content: str,
+    *,
+    thinking: str | None = None,
+    content_blocks: list[dict[str, Any]] | None = None,
+    flush_disk: bool = False,
+) -> None:
+    """流式追加场景:就地更新最后一条 assistant 消息的内容。
+    如果末尾不是 assistant 就 append 一条。flush_disk=False 时只更内存,
+    减小流式期间频繁写盘开销;end 时 flush_disk=True 落盘。"""
+    _ensure_loaded()
+    global _dirty
+    with _lock:
+        conv = _conversations.setdefault(conv_id, _new_conv())
+        msgs = conv.get("messages") or []
+        last = msgs[-1] if msgs else None
+        if not last or last.get("role") != "assistant":
+            msgs.append(
+                {
+                    "role": "assistant",
+                    "content": content,
+                    "thinking": thinking,
+                    "contentBlocks": content_blocks,
+                    "timestamp": time.time(),
+                }
+            )
+            conv["messages"] = msgs
+        else:
+            last["content"] = content
+            if thinking is not None:
+                last["thinking"] = thinking
+            if content_blocks is not None:
+                last["contentBlocks"] = content_blocks
+        conv["updated_at"] = time.time()
+        _dirty = True
+        if flush_disk:
+            _flush()
+
+
 def update_tokens(conv_id: str, input_tokens: int, output_tokens: int) -> None:
     _ensure_loaded()
     global _dirty
