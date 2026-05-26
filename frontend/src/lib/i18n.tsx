@@ -43,6 +43,15 @@ const translations = {
   },
   "settings.fetching": { zh: "获取中...", en: "Fetching..." },
   "settings.autoFetch": { zh: "自动获取模型", en: "Auto-fetch models" },
+  "settings.streamTest": { zh: "流式测试", en: "Stream test" },
+  "settings.streamTesting": { zh: "测试中...", en: "Testing..." },
+  "settings.streamTestNeedModel": {
+    zh: "请先选择或添加模型后再测试",
+    en: "Select or add a model before testing",
+  },
+  "settings.streamTestFailed": { zh: "流式测试失败", en: "Stream test failed" },
+  "settings.streamTestSuccess": { zh: "流式连接正常", en: "Streaming OK" },
+  "settings.streamTestStop": { zh: "停止", en: "Stop" },
   "settings.noModelsReturned": {
     zh: "未返回模型列表，请检查 Base URL 和 API Key。",
     en: "No models returned. Check your Base URL and API Key.",

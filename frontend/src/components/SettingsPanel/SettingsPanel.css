@@ -191,6 +191,31 @@
   width: 100%;
 }
 
+.settings-inline-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-inline-actions .settings-btn-full {
+  flex: 1;
+  width: auto;
+}
+
+.settings-stream-output {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  color: var(--fg-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
 /* 模型列表 */
 .settings-models-list {
   max-height: 180px;

@@ -10,7 +10,7 @@ logger = logging.getLogger("routes")
 
 import json
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -58,6 +58,13 @@ class ModelsRequest(BaseModel):
     base_url: str
     api_key: str
     api_format: Literal["openai", "anthropic"]
+
+
+class StreamTestRequest(BaseModel):
+    base_url: str
+    api_key: str
+    api_format: Literal["openai", "anthropic"]
+    model: str = ""
 
 
 @router.get("/settings")
@@ -147,6 +154,81 @@ async def fetch_models(req: ModelsRequest) -> dict:
         return {"models": models}
     except Exception as e:
         return {"models": [], "error": str(e)}
+
+
+@router.post("/models/stream-test")
+async def stream_test(req: StreamTestRequest) -> StreamingResponse:
+    """发送简短流式请求，验证 API 配置与模型是否支持 streaming。"""
+    api_key = req.api_key
+    if "****" in api_key:
+        config = UserConfig.load()
+        api_key = config.get("api_key", "")
+
+    model = req.model.strip()
+    if not model:
+        user_config = UserConfig.load()
+        model = user_config.get("selected_model") or settings.effective_model
+
+    if not api_key or not req.base_url or not model:
+        raise HTTPException(status_code=400, detail="缺少 base_url、api_key 或 model")
+
+    async def gen():
+        try:
+            if req.api_format == "anthropic":
+                llm = ChatAnthropic(
+                    model=model,
+                    temperature=1,
+                    max_tokens=32,
+                    api_key=api_key,
+                    base_url=req.base_url.rstrip("/").split("/v1")[0] if req.base_url else None,
+                    thinking={"type": "disabled"},
+                )
+            else:
+                llm = ChatOpenAI(
+                    model=model,
+                    temperature=0,
+                    max_tokens=32,
+                    api_key=api_key,
+                    base_url=req.base_url if req.base_url else None,
+                )
+
+            messages = [HumanMessage(content="Reply with exactly: OK")]
+            chunk_count = 0
+            async for chunk in llm.astream(messages):
+                content = chunk.content
+                if isinstance(content, list):
+                    text_blocks = [
+                        b["text"] for b in content
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    ]
+                    content = "".join(text_blocks)
+                if content:
+                    chunk_count += 1
+                    payload = json.dumps(
+                        {"type": "token", "content": str(content)},
+                        ensure_ascii=False,
+                    )
+                    yield f"data: {payload}\n\n"
+
+            done_payload = json.dumps(
+                {"type": "done", "chunks": chunk_count},
+                ensure_ascii=False,
+            )
+            yield f"data: {done_payload}\n\n"
+        except Exception as e:
+            logger.warning(f"Stream test failed: {e}")
+            err_payload = json.dumps(
+                {"type": "error", "message": str(e)},
+                ensure_ascii=False,
+            )
+            yield f"data: {err_payload}\n\n"
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)
 
 
 # === 对话历史持久化(进程级 + 文件) ===

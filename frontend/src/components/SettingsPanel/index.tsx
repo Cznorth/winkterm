@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
 import { getApiBaseUrl } from "@/lib/config";
@@ -105,6 +105,11 @@ export default function SettingsPanel() {
   const [fetchError, setFetchError] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
+  const [streamTesting, setStreamTesting] = useState(false);
+  const [streamOutput, setStreamOutput] = useState("");
+  const [streamError, setStreamError] = useState("");
+  const [streamSuccess, setStreamSuccess] = useState(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const copyToClipboard = (text: string) => {
     if (navigator.clipboard?.writeText) {
@@ -179,6 +184,107 @@ export default function SettingsPanel() {
       });
     });
   }, []);
+
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+    };
+  }, []);
+
+  const testModel = settings.selected_model || settings.models?.[0]?.id || "";
+
+  const handleStreamTest = async () => {
+    if (!settings.base_url || !settings.api_key) return;
+    if (!testModel) {
+      setStreamError(t("settings.streamTestNeedModel"));
+      setStreamSuccess(false);
+      setStreamOutput("");
+      return;
+    }
+
+    streamAbortRef.current?.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
+    setStreamTesting(true);
+    setStreamOutput("");
+    setStreamError("");
+    setStreamSuccess(false);
+
+    try {
+      const baseUrl = getApiBaseUrl() || (typeof window !== "undefined" ? window.location.origin : "");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const accessKey = getAccessKey();
+      if (accessKey) headers["X-Access-Key"] = accessKey;
+
+      const resp = await fetch(`${baseUrl}/api/models/stream-test`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          base_url: settings.base_url,
+          api_key: settings.api_key,
+          api_format: settings.api_format,
+          model: testModel,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${resp.status}`);
+      }
+
+      const reader = resp.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6)) as {
+              type: string;
+              content?: string;
+              message?: string;
+            };
+            if (data.type === "token" && data.content) {
+              setStreamOutput((prev) => prev + data.content);
+            } else if (data.type === "error") {
+              setStreamError(data.message || t("settings.streamTestFailed"));
+            } else if (data.type === "done") {
+              setStreamSuccess(true);
+            }
+          } catch {
+            /* ignore malformed SSE lines */
+          }
+        }
+      }
+    } catch (e: unknown) {
+      if ((e as Error).name !== "AbortError") {
+        setStreamError((e as Error).message || t("settings.streamTestFailed"));
+      }
+    } finally {
+      setStreamTesting(false);
+      if (streamAbortRef.current === controller) {
+        streamAbortRef.current = null;
+      }
+    }
+  };
+
+  const handleStopStreamTest = () => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    setStreamTesting(false);
+  };
 
   const handleFetchModels = async () => {
     if (!settings.base_url || !settings.api_key) return;
@@ -296,23 +402,73 @@ export default function SettingsPanel() {
             />
           </div>
 
-          <button
-            className="settings-btn settings-btn-secondary settings-btn-full"
-            onClick={handleFetchModels}
-            disabled={fetching || !settings.base_url || !settings.api_key}
-          >
-            {fetching ? (
-              <>
-                <span className="settings-spinner" />
-                {t("settings.fetching")}
-              </>
-            ) : (
-              <>
-                <RefreshIcon />
-                {t("settings.autoFetch")}
-              </>
-            )}
-          </button>
+          <div className="settings-inline-actions">
+            <button
+              className="settings-btn settings-btn-secondary settings-btn-full"
+              onClick={handleFetchModels}
+              disabled={fetching || !settings.base_url || !settings.api_key}
+            >
+              {fetching ? (
+                <>
+                  <span className="settings-spinner" />
+                  {t("settings.fetching")}
+                </>
+              ) : (
+                <>
+                  <RefreshIcon />
+                  {t("settings.autoFetch")}
+                </>
+              )}
+            </button>
+
+            <button
+              className="settings-btn settings-btn-secondary settings-btn-full"
+              onClick={handleStreamTest}
+              disabled={streamTesting || !settings.base_url || !settings.api_key || !testModel}
+            >
+              {streamTesting ? (
+                <>
+                  <span className="settings-spinner" />
+                  {t("settings.streamTesting")}
+                </>
+              ) : (
+                t("settings.streamTest")
+              )}
+            </button>
+          </div>
+
+          {streamTesting && (
+            <button
+              className="settings-btn settings-btn-secondary settings-btn-full"
+              onClick={handleStopStreamTest}
+              style={{ marginTop: "8px" }}
+            >
+              {t("settings.streamTestStop")}
+            </button>
+          )}
+
+          {(streamOutput || streamError || streamSuccess) && (
+            <div className="settings-stream-result" style={{ marginTop: "12px" }}>
+              {streamError ? (
+                <div className="settings-error">
+                  <span className="settings-error-icon"><ErrorIcon /></span>
+                  {streamError}
+                </div>
+              ) : (
+                <>
+                  {streamSuccess && (
+                    <div className="settings-success">
+                      <CheckIcon />
+                      {t("settings.streamTestSuccess")}
+                    </div>
+                  )}
+                  {streamOutput && (
+                    <pre className="settings-stream-output">{streamOutput}</pre>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {fetchError && (
             <div className="settings-error" style={{ marginTop: "12px" }}>
