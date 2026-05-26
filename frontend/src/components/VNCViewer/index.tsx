@@ -18,26 +18,13 @@ export interface VNCViewerRef {
   reconnect: () => void;
 }
 
-type RFBClass = new (
-  target: HTMLElement,
-  url: string,
-  options?: { shared?: boolean; credentials?: { password?: string } }
-) => {
-  scaleViewport: boolean;
-  viewOnly: boolean;
-  disconnect: () => void;
-  requestResize: (w: number, h: number) => void;
-  addEventListener: (type: string, fn: () => void) => void;
-};
+type RFBClass = typeof import("@novnc/novnc").default;
 
 let rfbModulePromise: Promise<{ default: RFBClass }> | null = null;
 
 function loadRFB(): Promise<{ default: RFBClass }> {
   if (!rfbModulePromise) {
-    rfbModulePromise = import(
-      /* webpackIgnore: true */
-      "https://cdn.jsdelivr.net/npm/@novnc/novnc@1.7.0/core/rfb.js"
-    ) as Promise<{ default: RFBClass }>;
+    rfbModulePromise = import("@novnc/novnc");
   }
   return rfbModulePromise;
 }

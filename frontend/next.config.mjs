@@ -3,6 +3,7 @@ const nextConfig = {
   reactStrictMode: false,
   // 静态导出配置（用于桌面应用打包）
   output: 'export',
+  transpilePackages: ['@novnc/novnc'],
   experimental: {
     forceSwcTransforms: process.env.NODE_ENV === 'development',
   },
