@@ -34,7 +34,6 @@ frontend/.next/
 frontend/.next-dev/
 frontend/out/
 frontend/.turbo/
-frontend/package-lock.json
 frontend/pnpm-lock.yaml
 *.tsbuildinfo
 
