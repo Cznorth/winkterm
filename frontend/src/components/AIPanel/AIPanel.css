@@ -236,6 +236,48 @@
   box-shadow: 0 0 4px var(--error);
 }
 
+.ai-header-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--fg-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ai-header-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--fg-secondary);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ai-header-icon-btn:hover,
+.ai-header-icon-btn:active,
+.ai-header-close:hover,
+.ai-header-close:active {
+  color: var(--fg-primary);
+  background: var(--bg-hover);
+}
+
 /* ========== 消息区域 ========== */
 .ai-messages {
   flex: 1;

@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { ReactNode, useState, useRef, useCallback, useEffect, useMemo, isValidElement, cloneElement } from "react";
 import { usePanes, LAYOUT_CONFIG, type LayoutType } from "@/hooks/usePanes";
 import { useSessionsStream, type SessionInfo } from "@/hooks/useSessionsStream";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
@@ -22,13 +22,6 @@ const Icons = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="4 17 10 11 4 5" />
       <line x1="12" y1="19" x2="20" y2="19" />
-    </svg>
-  ),
-  ai: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
-      <circle cx="8" cy="14" r="1.5" fill="currentColor" />
-      <circle cx="16" cy="14" r="1.5" fill="currentColor" />
     </svg>
   ),
   ssh: (
@@ -80,6 +73,12 @@ const LAYOUT_BUTTONS: { layout: LayoutType; icon: ReactNode; titleKey: "layout.s
   { layout: "grid", icon: Icons.layoutGrid, titleKey: "layout.grid" },
 ];
 
+const ACTIVITY_ITEMS: { id: ActivityItem; icon: ReactNode; labelKey: "layout.terminal" | "layout.sshConnections" | "layout.settings"; mobileLabelKey?: "layout.sshShort" }[] = [
+  { id: "terminal", icon: Icons.terminal, labelKey: "layout.terminal" },
+  { id: "ssh", icon: Icons.ssh, labelKey: "layout.sshConnections", mobileLabelKey: "layout.sshShort" },
+  { id: "settings", icon: Icons.settings, labelKey: "layout.settings" },
+];
+
 export default function SplitLayout({ aiPanel }: LayoutProps) {
   const { t } = useI18n();
   const {
@@ -98,11 +97,15 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
   const [activeActivity, setActiveActivity] = useState<ActivityItem>("terminal");
   const [showAI, setShowAI] = useState(true);
   const [aiWidth, setAiWidth] = useState(320);
-  const [isDesktop, setIsDesktop] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && !!window.pywebview?.api
+  );
   const resizingRef = useRef(false);
   const breakpoint = useBreakpoint();
-  const isCompact = breakpoint === "mobile";
-  const isTablet = breakpoint === "tablet" || isCompact;
+  const useResponsiveShell = !isDesktop;
+  const isCompact = useResponsiveShell && breakpoint === "mobile";
+  const isTablet = useResponsiveShell && (breakpoint === "tablet" || isCompact);
+  const useMobileNav = useResponsiveShell && breakpoint !== "desktop";
 
   useEffect(() => {
     const saved = localStorage.getItem("winkterm-ai-width");
@@ -237,7 +240,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
 
   return (
     <div
-      className={`layout-container${isCompact ? " compact" : ""}${isTablet ? " tablet" : ""}`}
+      className={`layout-container${isDesktop ? " desktop-app" : ""}${isCompact ? " compact" : ""}${isTablet ? " tablet" : ""}`}
       style={layoutStyle}
     >
       <TitleBar onToggleAI={handleToggleAI} aiVisible={showAI} />
@@ -251,47 +254,44 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
       )}
       <div className="layout-workspace">
         <div className="workspace-main">
-          {/* 活动栏 */}
-          <div className="activity-bar">
-          <div className="activity-bar-top">
-            <div
-              className={`activity-item ${activeActivity === "terminal" ? "active" : ""}`}
-              onClick={() => setActiveActivity("terminal")}
-              title={t("layout.terminal")}
-            >
-              {Icons.terminal}
-            </div>
-            <div
-              className={`activity-item ${activeActivity === "ssh" ? "active" : ""}`}
-              onClick={() => setActiveActivity("ssh")}
-              title={t("layout.sshConnections")}
-            >
-              {Icons.ssh}
-            </div>
-          </div>
-          <div className="activity-bar-bottom">
-            {/* 布局切换按钮 */}
-            <div className="layout-buttons">
-              {LAYOUT_BUTTONS.map((btn) => (
-                <div
-                  key={btn.layout}
-                  className={`layout-btn ${layout === btn.layout ? "active" : ""}`}
-                  onClick={() => setLayout(btn.layout)}
-                  title={t(btn.titleKey)}
-                >
-                  {btn.icon}
+          {/* 桌面：左侧活动栏 */}
+          {!useMobileNav && (
+            <div className="activity-bar">
+              <div className="activity-bar-top">
+                {ACTIVITY_ITEMS.filter((item) => item.id !== "settings").map((item) => (
+                  <div
+                    key={item.id}
+                    className={`activity-item ${activeActivity === item.id ? "active" : ""}`}
+                    onClick={() => setActiveActivity(item.id)}
+                    title={t(item.labelKey)}
+                  >
+                    {item.icon}
+                  </div>
+                ))}
+              </div>
+              <div className="activity-bar-bottom">
+                <div className="layout-buttons">
+                  {LAYOUT_BUTTONS.map((btn) => (
+                    <div
+                      key={btn.layout}
+                      className={`layout-btn ${layout === btn.layout ? "active" : ""}`}
+                      onClick={() => setLayout(btn.layout)}
+                      title={t(btn.titleKey)}
+                    >
+                      {btn.icon}
+                    </div>
+                  ))}
                 </div>
-              ))}
+                <div
+                  className={`activity-item ${activeActivity === "settings" ? "active" : ""}`}
+                  title={t("layout.settings")}
+                  onClick={() => setActiveActivity("settings")}
+                >
+                  {Icons.settings}
+                </div>
+              </div>
             </div>
-            <div
-              className={`activity-item ${activeActivity === "settings" ? "active" : ""}`}
-              title={t("layout.settings")}
-              onClick={() => setActiveActivity("settings")}
-            >
-              {Icons.settings}
-            </div>
-          </div>
-        </div>
+          )}
 
         {/* 主内容区域 - 终端始终挂载，SSH/设置覆盖显示 */}
         <div className="terminal-section">
@@ -304,13 +304,14 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
               onTabAdd={addTab}
               onTabRename={renameTab}
               onTabDrop={moveTab}
-              onToggleAI={!isDesktop ? handleToggleAI : undefined}
+              onToggleAI={handleToggleAI}
               aiVisible={showAI}
             />
           </div>
           {activeActivity === "ssh" && <SSHPanel onConnect={handleSSHConnect} onVNCConnect={handleVNCConnect} />}
           {activeActivity === "settings" && <SettingsPanel />}
         </div>
+
         </div>
 
         {/* AI 侧边栏 - 置于 workspace 层，避免被 overflow 裁切 */}
@@ -323,9 +324,31 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           className={`ai-section${isCompact && showAI ? " ai-section-overlay" : ""}`}
           style={{ display: showAI ? undefined : "none" }}
         >
-          {aiPanel}
+          {isValidElement(aiPanel)
+            ? cloneElement(aiPanel, {
+                onClose: isCompact && showAI ? handleToggleAI : undefined,
+              })
+            : aiPanel}
         </div>
       </div>
+
+      {/* 手机/平板：固定底栏，置于 layout 顶层避免被 AI overlay 遮挡 */}
+      {useMobileNav && (
+        <nav className="mobile-nav-bar" aria-label={t("layout.navigation")}>
+          {ACTIVITY_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`mobile-nav-item${activeActivity === item.id ? " active" : ""}`}
+              onClick={() => setActiveActivity(item.id)}
+              aria-current={activeActivity === item.id ? "page" : undefined}
+            >
+              <span className="mobile-nav-icon">{item.icon}</span>
+              <span className="mobile-nav-label">{t(item.mobileLabelKey ?? item.labelKey)}</span>
+            </button>
+          ))}
+        </nav>
+      )}
     </div>
   );
 }

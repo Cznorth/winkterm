@@ -171,6 +171,18 @@
   color: var(--accent-primary);
 }
 
+/* Mac：AI 按钮固定于右侧，避免被拖拽层遮挡 */
+.title-bar.mac-style .title-bar-btn.ai-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 11;
+  width: 32px;
+  height: calc(100% - 8px);
+  margin: 0;
+}
+
 /* 边缘调整大小区域 */
 .resize-edge {
   position: fixed;

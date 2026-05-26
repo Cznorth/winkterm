@@ -79,7 +79,8 @@
   display: flex;
   flex: 1;
   min-height: 0;
-  overflow: visible;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .workspace-main {
@@ -131,6 +132,8 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  align-self: stretch;
+  height: 100%;
   width: var(--ai-panel-width, 320px);
   min-width: 240px;
   max-width: 600px;
@@ -159,13 +162,97 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: auto;
+  align-self: auto;
+}
+
+.layout-container.compact .ai-backdrop {
+  bottom: calc(var(--mobile-nav-height) + var(--safe-bottom));
 }
 
 .layout-container.compact .ai-section.ai-section-overlay {
-  width: min(calc(100vw - 48px - var(--safe-left) - var(--safe-right)), 420px) !important;
+  width: min(92vw, 420px) !important;
   max-width: none !important;
   min-width: 0 !important;
+  height: auto !important;
   box-sizing: border-box;
+  bottom: calc(var(--mobile-nav-height) + var(--safe-bottom));
+}
+
+.layout-container.tablet:not(.desktop-app) .layout-workspace,
+.layout-container.compact .layout-workspace {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 手机/平板底部导航 - flex 底栏，避免 fixed 在嵌入浏览器中被裁切 */
+.mobile-nav-bar {
+  display: flex;
+  flex-shrink: 0;
+  width: 100%;
+  border-top: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  padding-bottom: var(--safe-bottom);
+  min-height: var(--mobile-nav-height);
+  box-sizing: border-box;
+}
+
+.mobile-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 52px;
+  padding: 6px 4px;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+  position: relative;
+  transition: color var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-item:hover,
+.mobile-nav-item:active {
+  color: var(--fg-primary);
+}
+
+.mobile-nav-item.active {
+  color: var(--accent-primary);
+}
+
+.mobile-nav-item.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--accent-primary);
+  border-radius: 0 0 2px 2px;
+}
+
+.mobile-nav-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.mobile-nav-label {
+  font-size: 10px;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout-container.compact .workspace-main,
+.layout-container.tablet:not(.desktop-app) .workspace-main {
+  flex-direction: column;
 }
 
 /* 布局切换按钮 */
@@ -206,33 +293,19 @@
 
 /* ========== 响应式布局 ========== */
 
-/* 平板：收窄 AI 侧栏，隐藏拖拽手柄 */
-.layout-container.tablet .ai-section {
+/* 平板：收窄 AI 侧栏，隐藏拖拽手柄（桌面应用除外） */
+.layout-container.tablet:not(.desktop-app) .ai-section {
   max-width: min(45vw, 600px);
 }
 
-.layout-container.tablet .ai-resize-handle {
+.layout-container.tablet:not(.desktop-app) .ai-resize-handle {
   display: none !important;
 }
 
-/* 手机：隐藏分屏按钮，缩小活动栏 */
+/* 手机：隐藏分屏按钮 */
 @media (max-width: 768px) {
-  .layout-buttons {
+  .layout-container.compact:not(.desktop-app) .layout-buttons {
     display: none;
-  }
-
-  .activity-bar {
-    width: 40px;
-  }
-
-  .activity-item {
-    width: 40px;
-    height: 40px;
-  }
-
-  .activity-item svg {
-    width: 20px;
-    height: 20px;
   }
 
   .main-content {
@@ -241,22 +314,6 @@
 
   .workspace-main {
     min-width: 0;
-  }
-}
-
-@media (max-width: 480px) {
-  .activity-bar {
-    width: 36px;
-  }
-
-  .activity-item {
-    width: 36px;
-    height: 36px;
-  }
-
-  .activity-item svg {
-    width: 18px;
-    height: 18px;
   }
 }
 

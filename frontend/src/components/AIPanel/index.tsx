@@ -349,7 +349,7 @@ function ConvTabs({
   );
 }
 
-export default function AIPanel() {
+export default function AIPanel({ onClose }: { onClose?: () => void }) {
   const { t } = useI18n();
   const { conversations, activeConvId, messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, messageQueue, sendMessage, stopGeneration, interruptAndSend, removeFromQueue, newConversation, switchConversation, deleteConversation, updateConvTitle, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
@@ -478,9 +478,34 @@ export default function AIPanel() {
             <span className={`ai-status-dot ${isConnected ? "" : "disconnected"}`} />
             {isConnected ? t("ai.connected") : t("ai.disconnected")}
           </div>
+          {onClose && (
+            <>
+              <button
+                type="button"
+                className="ai-header-icon-btn"
+                onClick={newConversation}
+                aria-label={t("ai.newConversation")}
+                title={t("ai.newConversation")}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="ai-header-icon-btn ai-header-close"
+                onClick={onClose}
+                aria-label={t("layout.closeAiPanel")}
+              >
+                ✕
+              </button>
+            </>
+          )}
         </div>
       </div>
 
+      {!onClose && (
       <ConvTabs
         conversations={conversations}
         activeConvId={activeConvId}
@@ -489,6 +514,7 @@ export default function AIPanel() {
         onDelete={deleteConversation}
         onRegenerateTitle={handleRegenerateTitle}
       />
+      )}
 
       <div className="ai-messages">
         {messages.length === 0 && (

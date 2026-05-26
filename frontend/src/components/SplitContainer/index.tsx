@@ -221,7 +221,7 @@ export default function SplitContainer({
             e.dataTransfer.setData("paneId", pane.id);
             e.dataTransfer.setData("tabId", tab.id);
           }}
-          {...(index === 0 && onToggleAI ? { onToggleAI, aiVisible } : {})}
+          {...(onToggleAI ? { onToggleAI, aiVisible } : {})}
         />
         <div className="pane-content" />
       </div>

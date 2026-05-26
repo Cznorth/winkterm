@@ -12,6 +12,7 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+  --mobile-nav-height: 52px;
 }
 
 @supports (height: 100dvh) {

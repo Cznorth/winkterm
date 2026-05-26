@@ -97,7 +97,10 @@ export default function TabBar({
   const [showTabList, setShowTabList] = useState(false);
   const { t } = useI18n();
   const breakpoint = useBreakpoint();
-  const isMobileTabBar = breakpoint === "mobile";
+  const [isDesktopApp, setIsDesktopApp] = useState(
+    () => typeof window !== "undefined" && !!window.pywebview?.api
+  );
+  const isMobileTabBar = breakpoint === "mobile" && !isDesktopApp;
   const [sshConnections, setSSHConnections] = useState<SSHConnection[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const tabListRef = useRef<HTMLButtonElement>(null);
@@ -110,6 +113,10 @@ export default function TabBar({
   const activeTabRef = useRef<HTMLDivElement>(null);
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+
+  useEffect(() => {
+    setIsDesktopApp(!!window.pywebview?.api);
+  }, []);
 
   // 加载 SSH 连接列表
   useEffect(() => {
@@ -259,6 +266,7 @@ export default function TabBar({
           </>
         ) : (
           <>
+        <div className="tab-bar-scroll">
         {tabs.map((tab) => (
           <div
             key={tab.id}
@@ -317,9 +325,9 @@ export default function TabBar({
             +
           </button>
         </div>
+        </div>
 
-        <div className="tab-bar-spacer" />
-
+        <div className="tab-bar-actions">
         {onToggleAI && (
           <button
             className={`tab-bar-ai-toggle ${aiVisible ? "active" : ""}`}
@@ -333,6 +341,7 @@ export default function TabBar({
             </svg>
           </button>
         )}
+        </div>
           </>
         )}
       </div>

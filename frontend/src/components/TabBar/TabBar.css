@@ -7,8 +7,28 @@
   height: 35px;
   padding: 0;
   user-select: none;
+  overflow: hidden;
+}
+
+.tab-bar-scroll {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
+}
+
+.tab-bar-scroll::-webkit-scrollbar {
+  height: 3px;
+}
+
+.tab-bar-actions {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
 }
 
 .tab-bar::-webkit-scrollbar {
