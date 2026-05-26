@@ -1,10 +1,16 @@
 .layout-container {
   display: flex;
   flex-direction: column;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  height: var(--app-height, 100vh);
+  max-height: var(--app-height, 100vh);
   background: var(--bg-primary);
-  overflow: hidden;
+  overflow: visible;
+  padding-top: var(--safe-top);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
 }
 
 /* 活动栏 - 左侧图标栏 */
@@ -68,7 +74,23 @@
   height: 24px;
 }
 
-/* 主内容区域 */
+/* 主工作区 */
+.layout-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: visible;
+}
+
+.workspace-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 兼容旧类名引用 */
 .main-content {
   display: flex;
   flex: 1;
@@ -109,7 +131,41 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  width: var(--ai-panel-width, 320px);
+  min-width: 240px;
+  max-width: 600px;
   background: var(--bg-secondary);
+}
+
+/* AI 面板遮罩（移动端抽屉） */
+.ai-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.ai-section-overlay {
+  position: fixed;
+  top: var(--safe-top);
+  right: var(--safe-right);
+  bottom: var(--safe-bottom);
+  z-index: 200;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.layout-container.compact .ai-section.ai-section-overlay {
+  width: min(calc(100vw - 48px - var(--safe-left) - var(--safe-right)), 420px) !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
 }
 
 /* 布局切换按钮 */
@@ -146,5 +202,61 @@
 .layout-btn svg {
   width: 16px;
   height: 16px;
+}
+
+/* ========== 响应式布局 ========== */
+
+/* 平板：收窄 AI 侧栏，隐藏拖拽手柄 */
+.layout-container.tablet .ai-section {
+  max-width: min(45vw, 600px);
+}
+
+.layout-container.tablet .ai-resize-handle {
+  display: none !important;
+}
+
+/* 手机：隐藏分屏按钮，缩小活动栏 */
+@media (max-width: 768px) {
+  .layout-buttons {
+    display: none;
+  }
+
+  .activity-bar {
+    width: 40px;
+  }
+
+  .activity-item {
+    width: 40px;
+    height: 40px;
+  }
+
+  .activity-item svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .main-content {
+    min-width: 0;
+  }
+
+  .workspace-main {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .activity-bar {
+    width: 36px;
+  }
+
+  .activity-item {
+    width: 36px;
+    height: 36px;
+  }
+
+  .activity-item svg {
+    width: 18px;
+    height: 18px;
+  }
 }
 

@@ -229,7 +229,7 @@ export default function SplitContainer({
   };
 
   return (
-    <div ref={containerRef} className="split-container" style={gridStyle}>
+    <div ref={containerRef} className="split-container" style={gridStyle} data-layout={layout}>
       {panes.map((pane, index) => renderPane(pane, index))}
 
       {/* 全局终端池 */}

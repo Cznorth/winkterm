@@ -107,6 +107,44 @@ function saveState(state: SplitState) {
   }
 }
 
+/** 修正 layout 与 pane 数量不一致的持久化状态（如 single 却存了 2 个 pane） */
+function normalizeSplitState(state: SplitState): SplitState {
+  const config = LAYOUT_CONFIG[state.layout];
+  if (state.panes.length === config.paneCount) return state;
+
+  const allTabs: TabState[] = [];
+  const allActiveIds: string[] = [];
+  state.panes.forEach((pane) => {
+    allTabs.push(...pane.tabs);
+    allActiveIds.push(pane.activeTabId);
+  });
+
+  if (allTabs.length === 0) return getDefaultState();
+
+  const newPanes: Pane[] = [];
+  let tabIndex = 0;
+
+  for (let i = 0; i < config.paneCount; i++) {
+    const tabsForThisPane = Math.ceil((allTabs.length - tabIndex) / (config.paneCount - i));
+    const paneTabs = allTabs.slice(tabIndex, tabIndex + Math.max(1, tabsForThisPane));
+    tabIndex += paneTabs.length;
+
+    if (paneTabs.length > 0) {
+      const activeId = paneTabs.find((t) => allActiveIds.includes(t.id))?.id || paneTabs[0].id;
+      paneIdCounter++;
+      newPanes.push({
+        id: `pane-${paneIdCounter}`,
+        tabs: paneTabs,
+        activeTabId: activeId,
+      });
+    } else {
+      newPanes.push(createPane());
+    }
+  }
+
+  return { layout: state.layout, panes: newPanes };
+}
+
 export interface UsePanesReturn {
   layout: LayoutType;
   panes: Pane[];
@@ -129,8 +167,9 @@ export function usePanes(): UsePanesReturn {
   useEffect(() => {
     const savedState = loadStateFromStorage();
     if (savedState) {
-      setState(savedState);
-      syncCountersFromState(savedState);
+      const normalized = normalizeSplitState(savedState);
+      setState(normalized);
+      syncCountersFromState(normalized);
     } else {
       syncCountersFromState(getDefaultState());
     }

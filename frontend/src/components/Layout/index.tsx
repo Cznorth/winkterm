@@ -3,6 +3,7 @@
 import { ReactNode, useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { usePanes, LAYOUT_CONFIG, type LayoutType } from "@/hooks/usePanes";
 import { useSessionsStream, type SessionInfo } from "@/hooks/useSessionsStream";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { useI18n } from "@/lib/i18n";
 import Terminal from "@/components/Terminal";
 import SettingsPanel from "@/components/SettingsPanel";
@@ -99,6 +100,9 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
   const [aiWidth, setAiWidth] = useState(320);
   const [isDesktop, setIsDesktop] = useState(false);
   const resizingRef = useRef(false);
+  const breakpoint = useBreakpoint();
+  const isCompact = breakpoint === "mobile";
+  const isTablet = breakpoint === "tablet" || isCompact;
 
   useEffect(() => {
     const saved = localStorage.getItem("winkterm-ai-width");
@@ -116,6 +120,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
   }, []);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    if (isCompact) return;
     e.preventDefault();
     resizingRef.current = true;
     const startX = e.clientX;
@@ -144,7 +149,9 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
-  }, [aiWidth]);
+  }, [aiWidth, isCompact]);
+
+  const layoutStyle = { "--ai-panel-width": `${aiWidth}px` } as React.CSSProperties;
 
   const handleToggleAI = useCallback(() => {
     setShowAI((v) => {
@@ -210,12 +217,42 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     setActiveActivity("terminal");
   };
 
+  // 窄屏仅展示单分区（合并标签），不改变持久化的 layout 偏好
+  const { effectiveLayout, effectivePanes } = useMemo(() => {
+    if (!isTablet || layout === "single") {
+      return { effectiveLayout: layout, effectivePanes: panes };
+    }
+    const allTabs = panes.flatMap((p) => p.tabs);
+    const activePane = panes.find((p) => p.tabs.some((t) => t.id === p.activeTabId)) ?? panes[0];
+    const dedupedTabs = allTabs.filter((tab, i, arr) => arr.findIndex((t) => t.id === tab.id) === i);
+    return {
+      effectiveLayout: "single" as LayoutType,
+      effectivePanes: [{
+        ...activePane,
+        tabs: dedupedTabs.length > 0 ? dedupedTabs : activePane.tabs,
+        activeTabId: activePane.activeTabId,
+      }],
+    };
+  }, [isTablet, layout, panes]);
+
   return (
-    <div className="layout-container">
+    <div
+      className={`layout-container${isCompact ? " compact" : ""}${isTablet ? " tablet" : ""}`}
+      style={layoutStyle}
+    >
       <TitleBar onToggleAI={handleToggleAI} aiVisible={showAI} />
-      <div className="main-content">
-        {/* 活动栏 */}
-        <div className="activity-bar">
+      {isCompact && showAI && (
+        <button
+          type="button"
+          className="ai-backdrop"
+          aria-label={t("layout.closeAiPanel")}
+          onClick={handleToggleAI}
+        />
+      )}
+      <div className="layout-workspace">
+        <div className="workspace-main">
+          {/* 活动栏 */}
+          <div className="activity-bar">
           <div className="activity-bar-top">
             <div
               className={`activity-item ${activeActivity === "terminal" ? "active" : ""}`}
@@ -260,8 +297,8 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
         <div className="terminal-section">
           <div className="terminal-layer" style={{ display: activeActivity === "ssh" || activeActivity === "settings" ? "none" : "flex" }}>
             <SplitContainer
-              layout={layout}
-              panes={panes}
+              layout={effectiveLayout}
+              panes={effectivePanes}
               onTabClick={switchTab}
               onTabClose={handleTabClose}
               onTabAdd={addTab}
@@ -274,10 +311,18 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           {activeActivity === "ssh" && <SSHPanel onConnect={handleSSHConnect} onVNCConnect={handleVNCConnect} />}
           {activeActivity === "settings" && <SettingsPanel />}
         </div>
+        </div>
 
-        {/* AI 侧边栏 - 始终挂载，通过 display 隐藏以保留 state 和 WS 连接 */}
-        <div className="ai-resize-handle" onMouseDown={handleResizeStart} style={{ display: showAI ? undefined : "none" }} />
-        <div className="ai-section" style={{ width: aiWidth, display: showAI ? undefined : "none" }}>
+        {/* AI 侧边栏 - 置于 workspace 层，避免被 overflow 裁切 */}
+        <div
+          className="ai-resize-handle"
+          onMouseDown={handleResizeStart}
+          style={{ display: showAI && !isCompact ? undefined : "none" }}
+        />
+        <div
+          className={`ai-section${isCompact && showAI ? " ai-section-overlay" : ""}`}
+          style={{ display: showAI ? undefined : "none" }}
+        >
           {aiPanel}
         </div>
       </div>

@@ -417,3 +417,32 @@
 .settings-inline-group .settings-field {
   flex: 1;
 }
+
+@media (max-width: 768px) {
+  .settings-content {
+    max-width: none;
+  }
+
+  .settings-inline-group {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .settings-add-model {
+    flex-direction: column;
+  }
+
+  .settings-inline-actions {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-group {
+    padding: 12px;
+  }
+
+  .settings-header {
+    padding: 0 12px;
+  }
+}

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import type { TabState } from "@/hooks/useTabs";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 import "./TabBar.css";
 
 interface SSHConnection {
@@ -72,6 +73,12 @@ const SSHIcon = ({ color }: { color?: string }) => (
   </svg>
 );
 
+function TabTypeIcon({ tab }: { tab: TabState }) {
+  if (tab.type === "vnc") return <VNCIcon color={tab.color} />;
+  if (tab.type === "ssh") return <SSHIcon color={tab.color} />;
+  return <TerminalIcon color={tab.color} />;
+}
+
 export default function TabBar({
   tabs,
   activeTabId,
@@ -87,12 +94,22 @@ export default function TabBar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showTabList, setShowTabList] = useState(false);
   const { t } = useI18n();
+  const breakpoint = useBreakpoint();
+  const isMobileTabBar = breakpoint === "mobile";
   const [sshConnections, setSSHConnections] = useState<SSHConnection[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const tabListRef = useRef<HTMLButtonElement>(null);
 
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [tabListPosition, setTabListPosition] = useState({ top: 0, left: 0, width: 0 });
   const dropdownMenuRef = useRef<HTMLDivElement>(null);
+  const tabListMenuRef = useRef<HTMLDivElement>(null);
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const activeTabRef = useRef<HTMLDivElement>(null);
+
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
 
   // 加载 SSH 连接列表
   useEffect(() => {
@@ -102,6 +119,7 @@ export default function TabBar({
   }, []);
 
   const handleDropdownToggle = () => {
+    setShowTabList(false);
     if (!showDropdown) {
       // 每次打开下拉时重新加载 SSH 列表
       axios.get("/api/ssh/connections").then((res) => {
@@ -115,14 +133,34 @@ export default function TabBar({
     setShowDropdown(!showDropdown);
   };
 
+  const handleTabListToggle = () => {
+    setShowDropdown(false);
+    if (!showTabList && tabListRef.current) {
+      const rect = tabListRef.current.getBoundingClientRect();
+      setTabListPosition({ top: rect.bottom, left: rect.left, width: rect.width });
+    }
+    setShowTabList(!showTabList);
+  };
+
+  // 桌面端：活动标签滚入可视区域
+  useEffect(() => {
+    if (isMobileTabBar) return;
+    activeTabRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeTabId, isMobileTabBar]);
+
   // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
-      const clickedInWrapper = dropdownRef.current?.contains(target);
-      const clickedInMenu = dropdownMenuRef.current?.contains(target);
-      if (!clickedInWrapper && !clickedInMenu) {
+      const clickedInAddWrapper = dropdownRef.current?.contains(target);
+      const clickedInAddMenu = dropdownMenuRef.current?.contains(target);
+      const clickedInTabListWrapper = tabListRef.current?.contains(target);
+      const clickedInTabListMenu = tabListMenuRef.current?.contains(target);
+      if (!clickedInAddWrapper && !clickedInAddMenu) {
         setShowDropdown(false);
+      }
+      if (!clickedInTabListWrapper && !clickedInTabListMenu) {
+        setShowTabList(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -168,10 +206,63 @@ export default function TabBar({
 
   return (
     <>
-      <div className="tab-bar">
+      <div
+        ref={tabBarRef}
+        className={`tab-bar${isMobileTabBar ? " tab-bar-mobile" : ""}`}
+      >
+        {isMobileTabBar ? (
+          <>
+            <button
+              ref={tabListRef}
+              type="button"
+              className={`tab-picker${showTabList ? " active" : ""}`}
+              onClick={handleTabListToggle}
+              title={t("tabbar.switchTab")}
+            >
+              {activeTab && (
+                <>
+                  <span className="tab-picker-icon">
+                    <TabTypeIcon tab={activeTab} />
+                  </span>
+                  <span className="tab-picker-title">{activeTab.title}</span>
+                  {tabs.length > 1 && (
+                    <span className="tab-picker-count">{tabs.length}</span>
+                  )}
+                  <span className="tab-picker-chevron">▾</span>
+                </>
+              )}
+            </button>
+            <div className="tab-bar-mobile-actions">
+              <div className="tab-add-wrapper" ref={dropdownRef}>
+                <button
+                  className={`tab-add ${showDropdown ? "active" : ""}`}
+                  onClick={handleDropdownToggle}
+                  title={t("tabbar.newTerminal")}
+                >
+                  +
+                </button>
+              </div>
+              {onToggleAI && (
+                <button
+                  className={`tab-bar-ai-toggle ${aiVisible ? "active" : ""}`}
+                  onClick={onToggleAI}
+                  title={t("layout.aiAssistant")}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
+                    <circle cx="8" cy="14" r="1.5" fill="currentColor" />
+                    <circle cx="16" cy="14" r="1.5" fill="currentColor" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
         {tabs.map((tab) => (
           <div
             key={tab.id}
+            ref={tab.id === activeTabId ? activeTabRef : undefined}
             className={`tab ${tab.id === activeTabId ? "active" : ""}`}
             onClick={() => onTabClick(tab.id)}
             onDoubleClick={() => handleDoubleClick(tab)}
@@ -242,7 +333,53 @@ export default function TabBar({
             </svg>
           </button>
         )}
+          </>
+        )}
       </div>
+
+      {showTabList && isMobileTabBar && (
+        <div
+          ref={tabListMenuRef}
+          className="tab-list-dropdown"
+          style={{
+            position: "fixed",
+            top: tabListPosition.top,
+            left: tabListPosition.left,
+            width: tabListPosition.width,
+            zIndex: 1000,
+          }}
+        >
+          <div className="tab-list-header">{t("tabbar.tabs")}</div>
+          {tabs.map((tab) => (
+            <div
+              key={tab.id}
+              className={`tab-list-item ${tab.id === activeTabId ? "active" : ""}`}
+              onClick={() => {
+                onTabClick(tab.id);
+                setShowTabList(false);
+              }}
+            >
+              <span className="tab-list-icon">
+                <TabTypeIcon tab={tab} />
+              </span>
+              <span className="tab-list-title">{tab.title}</span>
+              {tabs.length > 1 && (
+                <button
+                  type="button"
+                  className="tab-list-close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTabClose(tab.id);
+                  }}
+                  title={t("tabbar.close")}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 下拉菜单 - 使用 fixed 定位避免被裁剪 */}
       {showDropdown && (

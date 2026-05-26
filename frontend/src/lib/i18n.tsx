@@ -14,6 +14,7 @@ const translations = {
   "layout.horizontal": { zh: "左右双列", en: "Side by Side" },
   "layout.vertical": { zh: "上下双行", en: "Top & Bottom" },
   "layout.grid": { zh: "田字格 2x2", en: "Grid 2x2" },
+  "layout.closeAiPanel": { zh: "关闭 AI 面板", en: "Close AI panel" },
 
   // === TitleBar ===
   "titlebar.close": { zh: "关闭", en: "Close" },
@@ -26,6 +27,8 @@ const translations = {
   "tabbar.newTerminal": { zh: "新建终端", en: "New Terminal" },
   "tabbar.localTerminal": { zh: "本地终端", en: "Local Terminal" },
   "tabbar.sshConnection": { zh: "SSH 连接", en: "SSH Connection" },
+  "tabbar.switchTab": { zh: "切换标签页", en: "Switch tab" },
+  "tabbar.tabs": { zh: "标签页", en: "Tabs" },
 
   // === Settings ===
   "settings.title": { zh: "设置", en: "Settings" },

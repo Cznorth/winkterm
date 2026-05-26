@@ -4,6 +4,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
   background: var(--bg-secondary);
   color: var(--fg-primary);
 }
@@ -237,6 +239,7 @@
 /* ========== 消息区域 ========== */
 .ai-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 16px;
   user-select: text;
@@ -1168,5 +1171,38 @@
   background: var(--bg-hover);
   border-color: var(--accent);
   color: var(--fg-primary);
+}
+
+@media (max-width: 768px) {
+  .ctx-popup {
+    min-width: 0;
+    width: min(280px, calc(100vw - 32px));
+    right: auto;
+    left: 0;
+  }
+
+  .ai-tab {
+    min-width: 48px;
+    max-width: 100px;
+  }
+
+  .ai-input-area {
+    margin: 8px 10px 10px;
+  }
+
+  .ai-input-toolbar {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ai-message-content {
+    max-width: 100%;
+  }
+
+  .ai-tabs-scroll-btn {
+    width: 16px;
+  }
 }
 

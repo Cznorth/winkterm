@@ -25,6 +25,7 @@
   font-size: 13px;
   min-width: 100px;
   max-width: 200px;
+  flex-shrink: 0;
   cursor: pointer;
   position: relative;
   border-right: 1px solid var(--border-default);
@@ -271,4 +272,181 @@
 .tab-bar-ai-toggle.active:hover {
   color: var(--accent-primary);
   background: var(--bg-hover);
+}
+
+/* ========== 手机端：当前标签 + 下拉列表 ========== */
+.tab-bar-mobile {
+  overflow: hidden;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.tab-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  height: 35px;
+  padding: 0 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.tab-picker:hover,
+.tab-picker.active {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+.tab-picker-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.tab-picker-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tab-picker-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.tab-picker-count {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--fg-secondary);
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.tab-picker-chevron {
+  flex-shrink: 0;
+  color: var(--fg-muted);
+  font-size: 10px;
+}
+
+.tab-bar-mobile-actions {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.tab-list-dropdown {
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px 0;
+  animation: dropdownIn 0.15s ease-out;
+}
+
+.tab-list-header {
+  padding: 6px 12px 8px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tab-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.tab-list-item:hover {
+  background: var(--bg-hover);
+}
+
+.tab-list-item.active {
+  background: var(--bg-selection);
+}
+
+.tab-list-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.tab-list-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tab-list-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.tab-list-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.tab-list-close:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+@media (max-width: 768px) {
+  .tab-bar:not(.tab-bar-mobile) .tab {
+    min-width: 88px;
+    max-width: 160px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .tab-bar:not(.tab-bar-mobile) .tab-icon {
+    margin-right: 4px;
+  }
+
+  .tab-bar:not(.tab-bar-mobile) .tab-bar-spacer {
+    display: none;
+  }
+
+  .tab-add-dropdown {
+    max-width: calc(100vw - 16px);
+  }
 }

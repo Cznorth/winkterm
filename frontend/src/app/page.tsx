@@ -54,7 +54,7 @@ export default function Home() {
   };
 
   if (!ready) {
-    return <div style={{ width: "100vw", height: "100vh", background: "var(--bg-primary)" }} aria-busy="true" />;
+    return <div style={{ width: "100%", height: "var(--app-height, 100vh)", background: "var(--bg-primary)" }} aria-busy="true" />;
   }
 
   return (
