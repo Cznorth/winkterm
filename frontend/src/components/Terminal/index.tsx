@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import { useTerminal } from "./useTerminal";
+import { useTheme } from "@/lib/theme";
 import "./terminal.css";
 
 interface TerminalPanelProps {
@@ -23,7 +24,8 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerReady, setContainerReady] = useState(false);
-    const { init, term, fit, fitWithSize } = useTerminal(containerRef, sessionId, isActive, type, sshConnectionId);
+    const { resolvedTheme } = useTheme();
+    const { init, term, fit, fitWithSize } = useTerminal(containerRef, sessionId, isActive, type, sshConnectionId, resolvedTheme);
 
     // 暴露 fit 方法给父组件
     useImperativeHandle(ref, () => ({ fit, fitWithSize }), [fit, fitWithSize]);

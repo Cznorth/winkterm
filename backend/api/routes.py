@@ -50,6 +50,7 @@ class SettingsModel(BaseModel):
     models: Optional[list[ModelInfo]] = None
     selected_model: Optional[str] = None
     language: Optional[str] = None
+    theme: Optional[str] = None
     agent_api_token: Optional[str] = None
     web_access_key: Optional[str] = None
 

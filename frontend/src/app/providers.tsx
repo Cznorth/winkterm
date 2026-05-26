@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, ReactNode } from "react";
 import { I18nProvider } from "@/lib/i18n";
+import { ThemeProvider } from "@/lib/theme";
 import AuthGate from "@/components/AuthGate";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -20,9 +21,11 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <I18nProvider>
-        <AuthGate>{children}</AuthGate>
-      </I18nProvider>
+      <ThemeProvider>
+        <I18nProvider>
+          <AuthGate>{children}</AuthGate>
+        </I18nProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

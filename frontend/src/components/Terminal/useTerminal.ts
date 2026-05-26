@@ -3,6 +3,7 @@ import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import { getWebSocket } from "@/lib/websocket";
+import { xtermDarkTheme, xtermLightTheme } from "@/lib/theme";
 import axios from "@/lib/axios";
 
 const DEBUG = process.env.NODE_ENV === "development";
@@ -13,7 +14,8 @@ export function useTerminal(
   sessionId: string = "default",
   isActive: boolean = true,
   terminalType: "local" | "ssh" = "local",
-  sshConnectionId?: string
+  sshConnectionId?: string,
+  resolvedTheme: "dark" | "light" = "dark"
 ) {
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -58,31 +60,8 @@ export function useTerminal(
       return;
     }
 
-    // VS Code 风格终端主题
     const term = new Terminal({
-      theme: {
-        background: "#1e1e1e",
-        foreground: "#d4d4d4",
-        cursor: "#aeafad",
-        cursorAccent: "#1e1e1e",
-        selectionBackground: "#264f78",
-        black: "#1e1e1e",
-        brightBlack: "#6e6e6e",
-        red: "#f14c4c",
-        brightRed: "#f14c4c",
-        green: "#23d18b",
-        brightGreen: "#3fcf8e",
-        yellow: "#e2e084",
-        brightYellow: "#e2e084",
-        blue: "#3794ff",
-        brightBlue: "#3794ff",
-        magenta: "#c586c0",
-        brightMagenta: "#d679d1",
-        cyan: "#4ec9b0",
-        brightCyan: "#4ec9b0",
-        white: "#d4d4d4",
-        brightWhite: "#d4d4d4",
-      },
+      theme: resolvedTheme === "light" ? xtermLightTheme : xtermDarkTheme,
       fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace",
       fontSize: 14,
       lineHeight: 1.4,
@@ -175,6 +154,13 @@ export function useTerminal(
 
     DEBUG && console.log(`[useTerminal] 初始化完成, sessionId=${sessionId}, type=${terminalType}, cols=`, cols, "rows=", rows);
   }, [containerRef, sessionId, terminalType, sshConnectionId]);
+
+  // 主题变化时更新 xterm 主题
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.theme = resolvedTheme === "light" ? xtermLightTheme : xtermDarkTheme;
+    }
+  }, [resolvedTheme]);
 
   // resize 监听 - 用 ResizeObserver 监听容器尺寸变化
   useEffect(() => {

@@ -150,7 +150,7 @@ function Overlay({ children }: { children: ReactNode }) {
 const overlayStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "#1e1e1e",
+  background: "var(--bg-primary)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -160,40 +160,40 @@ const overlayStyle: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   width: 360,
   maxWidth: "90vw",
-  background: "#252526",
-  border: "1px solid #3c3c3c",
+  background: "var(--bg-secondary)",
+  border: "1px solid var(--border-default)",
   borderRadius: 10,
   padding: "28px 28px 24px",
   display: "flex",
   flexDirection: "column",
-  boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+  boxShadow: "var(--shadow-lg)",
 };
 
 const titleStyle: React.CSSProperties = {
   fontSize: 18,
   fontWeight: 600,
-  color: "#ffffff",
+  color: "var(--fg-primary)",
   marginBottom: 8,
 };
 
 const descStyle: React.CSSProperties = {
   fontSize: 13,
-  color: "#9d9d9d",
+  color: "var(--fg-secondary)",
   marginBottom: 20,
   lineHeight: 1.5,
 };
 
 const labelStyle: React.CSSProperties = {
   fontSize: 12,
-  color: "#bbbbbb",
+  color: "var(--fg-secondary)",
   marginBottom: 6,
 };
 
 const inputStyle: React.CSSProperties = {
-  background: "#1e1e1e",
-  border: "1px solid #3c3c3c",
+  background: "var(--bg-primary)",
+  border: "1px solid var(--border-default)",
   borderRadius: 6,
-  color: "#e4e4e4",
+  color: "var(--fg-primary)",
   fontSize: 14,
   padding: "9px 12px",
   marginBottom: 14,
@@ -202,12 +202,12 @@ const inputStyle: React.CSSProperties = {
 
 const errorStyle: React.CSSProperties = {
   fontSize: 12,
-  color: "#f48771",
+  color: "var(--error)",
   marginBottom: 12,
 };
 
 const btnStyle: React.CSSProperties = {
-  background: "#0e639c",
+  background: "var(--accent-primary)",
   border: "none",
   borderRadius: 6,
   color: "#ffffff",

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
+import { useTheme } from "@/lib/theme";
 import { getApiBaseUrl } from "@/lib/config";
 import { getAccessKey } from "@/lib/auth";
 import "./SettingsPanel.css";
@@ -20,6 +21,7 @@ interface Settings {
   selected_model: string;
   agent_api_token: string;
   web_access_key: string;
+  theme: string;
 }
 
 const SettingsIcon = () => (
@@ -88,6 +90,7 @@ const CheckIcon = () => (
 
 export default function SettingsPanel() {
   const { t, locale, setLocale } = useI18n();
+  const { themeMode, setThemeMode } = useTheme();
   const [settings, setSettings] = useState<Settings>({
     api_format: "openai",
     base_url: "",
@@ -96,6 +99,7 @@ export default function SettingsPanel() {
     selected_model: "",
     agent_api_token: "",
     web_access_key: "",
+    theme: "system",
   });
   const [newModelId, setNewModelId] = useState("");
   const [newModelName, setNewModelName] = useState("");
@@ -181,7 +185,11 @@ export default function SettingsPanel() {
         selected_model: data.selected_model || "",
         agent_api_token: data.agent_api_token || "",
         web_access_key: data.web_access_key || "",
+        theme: data.theme || "system",
       });
+      if (data.theme) {
+        setThemeMode(data.theme as "system" | "dark" | "light");
+      }
     });
   }, []);
 
@@ -587,6 +595,34 @@ export default function SettingsPanel() {
             >
               <option value="zh">中文</option>
               <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="settings-group">
+          <div className="settings-group-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20z" />
+              <path d="M12 2v20" />
+            </svg>
+            {t("settings.appearance")}
+          </div>
+          <div className="settings-field">
+            <label className="settings-label">{t("settings.theme")}</label>
+            <select
+              className="settings-select"
+              value={themeMode}
+              onChange={(e) => {
+                const mode = e.target.value as "system" | "dark" | "light";
+                setThemeMode(mode);
+                setSettings((prev) => ({ ...prev, theme: mode }));
+                axios.post("/api/settings", { theme: mode }).catch(() => {});
+              }}
+            >
+              <option value="system">{t("settings.themeSystem")}</option>
+              <option value="dark">{t("settings.themeDark")}</option>
+              <option value="light">{t("settings.themeLight")}</option>
             </select>
           </div>
         </div>

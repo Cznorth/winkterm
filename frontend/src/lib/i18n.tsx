@@ -288,6 +288,11 @@ const translations = {
     zh: "远程浏览器访问所需的密钥。本机桌面客户端始终免鉴权。未设置时，首次远程访问会要求设置密钥。修改后需点击下方「保存设置」。",
     en: "Key required for remote browser access. The local desktop client never needs it. When unset, the first remote visit will prompt to set one. Click \"Save Settings\" below after changes.",
   },
+  "settings.appearance": { zh: "外观", en: "Appearance" },
+  "settings.theme": { zh: "主题", en: "Theme" },
+  "settings.themeSystem": { zh: "跟随系统", en: "System" },
+  "settings.themeDark": { zh: "深色", en: "Dark" },
+  "settings.themeLight": { zh: "浅色", en: "Light" },
   "settings.exportConfig": { zh: "导出配置文件", en: "Export Config" },
   "settings.exportConfigHelp": {
     zh: "下载包含所有配置（含密钥明文）的 JSON 文件，请妥善保管。",

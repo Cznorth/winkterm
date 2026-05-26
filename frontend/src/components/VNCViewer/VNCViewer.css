@@ -1,7 +1,7 @@
 .vnc-container {
   width: 100%;
   height: 100%;
-  background: #1e1e1e;
+  background: var(--terminal-bg);
   overflow: hidden;
   position: relative;
 }

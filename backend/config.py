@@ -98,6 +98,7 @@ class UserConfig:
             "models": [],
             "selected_model": "",
             "language": "",
+            "theme": "system",
             "web_access_key": "",
         }
 

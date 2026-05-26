@@ -6,34 +6,45 @@ import AIPanel from "@/components/AIPanel";
 import LanguageSelector from "@/components/LanguageSelector";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
+import { useTheme } from "@/lib/theme";
 
 export default function Home() {
   const { setLocale } = useI18n();
+  const { setThemeMode } = useTheme();
   const [showLangSelector, setShowLangSelector] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("winkterm-language");
-    if (saved) {
-      setLocale(saved as "zh" | "en");
+    const savedLang = localStorage.getItem("winkterm-language");
+    const savedTheme = localStorage.getItem("winkterm-theme");
+
+    if (savedLang) {
+      setLocale(savedLang as "zh" | "en");
+    }
+
+    if (savedLang && savedTheme) {
       setReady(true);
       return;
     }
-    // Check backend config
+
     axios.get("/api/settings").then((res) => {
-      const lang = res.data.language;
-      if (lang) {
-        setLocale(lang as "zh" | "en");
-        setReady(true);
-      } else {
-        setShowLangSelector(true);
-        setReady(true);
+      if (!savedLang) {
+        const lang = res.data.language;
+        if (lang) {
+          setLocale(lang as "zh" | "en");
+        } else {
+          setShowLangSelector(true);
+        }
       }
+      if (!savedTheme && res.data.theme) {
+        setThemeMode(res.data.theme as "system" | "dark" | "light");
+      }
+      setReady(true);
     }).catch(() => {
-      setShowLangSelector(true);
+      if (!savedLang) setShowLangSelector(true);
       setReady(true);
     });
-  }, [setLocale]);
+  }, [setLocale, setThemeMode]);
 
   const handleLanguageSelect = (language: "zh" | "en") => {
     setLocale(language);
@@ -43,7 +54,7 @@ export default function Home() {
   };
 
   if (!ready) {
-    return <div style={{ width: "100vw", height: "100vh", background: "#1e1e1e" }} aria-busy="true" />;
+    return <div style={{ width: "100vw", height: "100vh", background: "var(--bg-primary)" }} aria-busy="true" />;
   }
 
   return (
