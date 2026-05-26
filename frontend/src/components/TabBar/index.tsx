@@ -6,6 +6,7 @@ import type { TabState } from "@/hooks/useTabs";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
+import FileTransferDialog from "@/components/FileTransferDialog";
 import "./TabBar.css";
 
 interface SSHConnection {
@@ -80,6 +81,22 @@ function TabTypeIcon({ tab }: { tab: TabState }) {
   return <TerminalIcon color={tab.color} />;
 }
 
+const TransferIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M7 7h10" />
+    <path d="M13 3l4 4-4 4" />
+    <path d="M17 17H7" />
+    <path d="M11 21l-4-4 4-4" />
+  </svg>
+);
+
 export default function TabBar({
   tabs,
   activeTabId,
@@ -102,6 +119,7 @@ export default function TabBar({
     () => typeof window !== "undefined" && !!window.pywebview?.api
   );
   const isMobileTabBar = breakpoint === "mobile" && !isDesktopApp;
+  const [fileTransferTarget, setFileTransferTarget] = useState<{ connectionId: string; title: string } | null>(null);
   const [sshConnections, setSSHConnections] = useState<SSHConnection[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const tabListRef = useRef<HTMLButtonElement>(null);
@@ -263,6 +281,20 @@ export default function TabBar({
               )}
             </button>
             <div className="tab-bar-mobile-actions">
+              {activeTab?.type === "ssh" && activeTab.sshConnectionId && (
+                <button
+                  type="button"
+                  className="tab-bar-transfer-toggle"
+                  onClick={() => setFileTransferTarget({
+                    connectionId: activeTab.sshConnectionId!,
+                    title: activeTab.title,
+                  })}
+                  title={t("ssh.fileTransfer")}
+                  aria-label={t("ssh.fileTransfer")}
+                >
+                  <TransferIcon />
+                </button>
+              )}
               <div className="tab-add-wrapper" ref={dropdownRef}>
                 <button
                   className={`tab-add ${showDropdown ? "active" : ""}`}
@@ -452,6 +484,15 @@ export default function TabBar({
           )}
         </div>,
         document.body
+      )}
+
+      {fileTransferTarget && (
+        <FileTransferDialog
+          open={true}
+          connectionId={fileTransferTarget.connectionId}
+          title={fileTransferTarget.title}
+          onClose={() => setFileTransferTarget(null)}
+        />
       )}
 
     </>

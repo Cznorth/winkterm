@@ -100,10 +100,23 @@
 
 /* 终端区域 */
 .terminal-section {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  min-height: 0;
+}
+
+/* 手机端：SSH/设置以 overlay 覆盖，终端层保持布局尺寸供 VNC 使用 */
+.side-panel-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-secondary);
 }
 
 .terminal-layer {
@@ -111,6 +124,21 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+}
+
+/* 手机端：对话 tab 主内容区（与 SSH/设置同级切换，非浮层） */
+.chat-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg-secondary);
+}
+
+.chat-section .ai-panel {
+  flex: 1;
+  min-height: 0;
 }
 
 /* AI 侧边栏拖拽手柄 */
@@ -177,6 +205,10 @@
   height: auto !important;
   box-sizing: border-box;
   bottom: calc(var(--mobile-nav-height) + var(--safe-bottom));
+}
+
+.layout-container.compact {
+  padding-bottom: 0;
 }
 
 .layout-container.tablet:not(.desktop-app) .layout-workspace,

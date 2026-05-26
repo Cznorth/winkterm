@@ -259,6 +259,17 @@
   color: var(--fg-primary);
 }
 
+.ssh-item-btn.edit {
+  color: var(--fg-primary);
+  border-color: var(--border-hover);
+}
+
+.ssh-item-btn.edit:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
 .ssh-item-btn.delete:hover {
   background: var(--error);
   border-color: var(--error);
@@ -403,6 +414,10 @@
     align-items: stretch;
   }
 
+  .ssh-item-info {
+    flex: 0 0 auto;
+  }
+
   .ssh-item-actions {
     margin-left: 0;
     justify-content: flex-start;
@@ -413,15 +428,111 @@
   }
 }
 
+@media (max-width: 768px) {
+  .ssh-header {
+    padding: 0 10px;
+    height: 32px;
+  }
+
+  .ssh-list {
+    padding: 4px 6px;
+  }
+
+  /* 覆盖 900px 的 column 布局，单行卡片更省纵向空间 */
+  .ssh-item {
+    flex-direction: row;
+    align-items: center;
+    padding: 4px 6px;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+
+  .ssh-item-info {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .ssh-item-title {
+    font-size: 12px;
+    margin-bottom: 0;
+    line-height: 1.2;
+  }
+
+  .ssh-item-detail {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .ssh-item-actions {
+    gap: 3px;
+    flex-wrap: nowrap;
+    margin-left: 0;
+    flex-shrink: 0;
+    max-width: 58%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .ssh-item-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ssh-item-btn {
+    padding: 4px 7px;
+    min-height: 32px;
+    min-width: 32px;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+
+  .ssh-item-btn.connect {
+    padding: 4px 8px;
+  }
+
+  .ssh-item-btn.vnc,
+  .ssh-item-btn.transfer {
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
+  }
+}
+
 @media (max-width: 480px) {
   .ssh-header {
-    padding: 0 12px;
+    padding: 0 8px;
     flex-wrap: wrap;
     height: auto;
-    min-height: 35px;
-    gap: 8px;
-    padding-top: 6px;
-    padding-bottom: 6px;
+    min-height: 32px;
+    gap: 6px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  .ssh-list {
+    padding: 3px 4px;
+  }
+
+  .ssh-item {
+    padding: 3px 5px;
+    gap: 4px;
+    margin-bottom: 1px;
+  }
+
+  .ssh-item-actions {
+    gap: 2px;
+    max-width: 62%;
+  }
+
+  .ssh-item-btn {
+    padding: 3px 6px;
+    min-height: 32px;
+    min-width: 32px;
+    font-size: 10px;
+  }
+
+  .ssh-item-btn.connect {
+    padding: 3px 7px;
   }
 
   .ssh-form-row {
@@ -432,5 +543,55 @@
 
   .ssh-form-row label {
     width: auto;
+  }
+}
+
+/* 手机/平板：VNC 连接弹窗 */
+.vnc-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  background: rgba(0, 0, 0, 0.56);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.vnc-dialog-overlay .vnc-dialog {
+  width: min(360px, 100%);
+  max-height: min(420px, calc(100vh - 32px));
+  border-left: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.ssh-form-overlay .ssh-form {
+  width: min(480px, 100%);
+  max-height: min(calc(100vh - 32px), 100%);
+  border-left: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 480px) {
+  .vnc-dialog-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .vnc-dialog-overlay .vnc-dialog {
+    width: 100%;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .ssh-form-overlay .ssh-form {
+    width: 100%;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
   }
 }

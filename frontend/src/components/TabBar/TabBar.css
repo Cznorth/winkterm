@@ -294,6 +294,33 @@
   background: var(--bg-hover);
 }
 
+.tab-bar-transfer-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 35px;
+  height: 35px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab-bar-transfer-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.tab-bar-transfer-toggle:hover,
+.tab-bar-transfer-toggle:active {
+  color: var(--fg-primary);
+  background: var(--bg-hover);
+}
+
 /* ========== 手机端：当前标签 + 下拉列表 ========== */
 .tab-bar-mobile {
   overflow: hidden;

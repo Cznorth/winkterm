@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
 import "./FileTransferDialog.css";
@@ -273,6 +274,11 @@ export default function FileTransferDialog({
   const confirmActionRef = useRef<(() => void) | null>(null);
   const telemetryRef = useRef<TransferTelemetry | null>(null);
   const isDesktop = typeof window !== "undefined" && !!window.pywebview?.api;
+  const [portalReady, setPortalReady] = useState(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   const [directory, setDirectory] = useState<RemoteDirectoryResponse | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
@@ -1557,9 +1563,15 @@ export default function FileTransferDialog({
     return dialogContent;
   }
 
-  return (
+  const overlay = (
     <div className="file-transfer-overlay" onClick={onClose}>
       {dialogContent}
     </div>
   );
+
+  if (portalReady && typeof document !== "undefined") {
+    return createPortal(overlay, document.body);
+  }
+
+  return overlay;
 }

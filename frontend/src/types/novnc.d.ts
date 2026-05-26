@@ -12,6 +12,8 @@ declare module "@novnc/novnc" {
     );
 
     scaleViewport: boolean;
+    clipViewport: boolean;
+    focusOnClick: boolean;
     viewOnly: boolean;
     disconnect(): void;
     requestResize(width: number, height: number): void;

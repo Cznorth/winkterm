@@ -36,6 +36,13 @@ const Icons = {
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   ),
+  chat: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
+      <circle cx="8" cy="14" r="1.5" fill="currentColor" />
+      <circle cx="16" cy="14" r="1.5" fill="currentColor" />
+    </svg>
+  ),
   // 布局图标
   layoutSingle: (
     <svg viewBox="0 0 16 16" fill="currentColor">
@@ -64,7 +71,7 @@ const Icons = {
   ),
 };
 
-type ActivityItem = "terminal" | "ssh" | "settings";
+type ActivityItem = "terminal" | "chat" | "ssh" | "settings";
 
 const LAYOUT_BUTTONS: { layout: LayoutType; icon: ReactNode; titleKey: "layout.single" | "layout.horizontal" | "layout.vertical" | "layout.grid" }[] = [
   { layout: "single", icon: Icons.layoutSingle, titleKey: "layout.single" },
@@ -73,8 +80,15 @@ const LAYOUT_BUTTONS: { layout: LayoutType; icon: ReactNode; titleKey: "layout.s
   { layout: "grid", icon: Icons.layoutGrid, titleKey: "layout.grid" },
 ];
 
-const ACTIVITY_ITEMS: { id: ActivityItem; icon: ReactNode; labelKey: "layout.terminal" | "layout.sshConnections" | "layout.settings"; mobileLabelKey?: "layout.sshShort" }[] = [
+const ACTIVITY_ITEMS: { id: ActivityItem; icon: ReactNode; labelKey: "layout.terminal" | "layout.aiAssistant" | "layout.sshConnections" | "layout.settings"; mobileLabelKey?: "layout.chatShort" | "layout.sshShort" }[] = [
   { id: "terminal", icon: Icons.terminal, labelKey: "layout.terminal" },
+  { id: "ssh", icon: Icons.ssh, labelKey: "layout.sshConnections", mobileLabelKey: "layout.sshShort" },
+  { id: "settings", icon: Icons.settings, labelKey: "layout.settings" },
+];
+
+const MOBILE_NAV_ITEMS: typeof ACTIVITY_ITEMS = [
+  { id: "terminal", icon: Icons.terminal, labelKey: "layout.terminal" },
+  { id: "chat", icon: Icons.chat, labelKey: "layout.aiAssistant", mobileLabelKey: "layout.chatShort" },
   { id: "ssh", icon: Icons.ssh, labelKey: "layout.sshConnections", mobileLabelKey: "layout.sshShort" },
   { id: "settings", icon: Icons.settings, labelKey: "layout.settings" },
 ];
@@ -238,20 +252,17 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     };
   }, [isTablet, layout, panes]);
 
+  const hideTerminalLayer =
+    isCompact && activeActivity === "chat"
+      ? true
+      : !isCompact && (activeActivity === "ssh" || activeActivity === "settings");
+
   return (
     <div
       className={`layout-container${isDesktop ? " desktop-app" : ""}${isCompact ? " compact" : ""}${isTablet ? " tablet" : ""}`}
       style={layoutStyle}
     >
       <TitleBar onToggleAI={handleToggleAI} aiVisible={showAI} />
-      {isCompact && showAI && (
-        <button
-          type="button"
-          className="ai-backdrop"
-          aria-label={t("layout.closeAiPanel")}
-          onClick={handleToggleAI}
-        />
-      )}
       <div className="layout-workspace">
         <div className="workspace-main">
           {/* 桌面：左侧活动栏 */}
@@ -293,23 +304,45 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
             </div>
           )}
 
-        {/* 主内容区域 - 终端始终挂载，SSH/设置覆盖显示 */}
+        {/* 主内容区域 - 终端始终挂载，SSH/设置/对话切换显示 */}
         <div className="terminal-section">
-          <div className="terminal-layer" style={{ display: activeActivity === "ssh" || activeActivity === "settings" ? "none" : "flex" }}>
+          <div
+            className="terminal-layer"
+            style={{ display: hideTerminalLayer ? "none" : "flex" }}
+          >
             <SplitContainer
               layout={effectiveLayout}
               panes={effectivePanes}
+              isCompact={isCompact}
               onTabClick={switchTab}
               onTabClose={handleTabClose}
               onTabAdd={addTab}
               onTabRename={renameTab}
               onTabDrop={moveTab}
-              onToggleAI={handleToggleAI}
-              aiVisible={showAI}
+              {...(!isCompact ? { onToggleAI: handleToggleAI, aiVisible: showAI } : {})}
             />
           </div>
-          {activeActivity === "ssh" && <SSHPanel onConnect={handleSSHConnect} onVNCConnect={handleVNCConnect} />}
-          {activeActivity === "settings" && <SettingsPanel />}
+          {isCompact && (
+            <div className="chat-section" style={{ display: activeActivity === "chat" ? undefined : "none" }}>
+              {isValidElement(aiPanel) ? cloneElement(aiPanel) : aiPanel}
+            </div>
+          )}
+          {activeActivity === "ssh" &&
+            (isCompact ? (
+              <div className="side-panel-overlay">
+                <SSHPanel onConnect={handleSSHConnect} onVNCConnect={handleVNCConnect} />
+              </div>
+            ) : (
+              <SSHPanel onConnect={handleSSHConnect} onVNCConnect={handleVNCConnect} />
+            ))}
+          {activeActivity === "settings" &&
+            (isCompact ? (
+              <div className="side-panel-overlay">
+                <SettingsPanel />
+              </div>
+            ) : (
+              <SettingsPanel />
+            ))}
         </div>
 
         </div>
@@ -321,21 +354,17 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           style={{ display: showAI && !isCompact ? undefined : "none" }}
         />
         <div
-          className={`ai-section${isCompact && showAI ? " ai-section-overlay" : ""}`}
-          style={{ display: showAI ? undefined : "none" }}
+          className="ai-section"
+          style={{ display: showAI && !isCompact ? undefined : "none" }}
         >
-          {isValidElement(aiPanel)
-            ? cloneElement(aiPanel, {
-                onClose: isCompact && showAI ? handleToggleAI : undefined,
-              })
-            : aiPanel}
+          {!isCompact && (isValidElement(aiPanel) ? cloneElement(aiPanel) : aiPanel)}
         </div>
       </div>
 
       {/* 手机/平板：固定底栏，置于 layout 顶层避免被 AI overlay 遮挡 */}
       {useMobileNav && (
         <nav className="mobile-nav-bar" aria-label={t("layout.navigation")}>
-          {ACTIVITY_ITEMS.map((item) => (
+          {(isCompact ? MOBILE_NAV_ITEMS : ACTIVITY_ITEMS).map((item) => (
             <button
               key={item.id}
               type="button"

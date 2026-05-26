@@ -14,6 +14,7 @@ const VNCViewer = dynamic(() => import("@/components/VNCViewer"), { ssr: false }
 interface SplitContainerProps {
   layout: LayoutType;
   panes: Pane[];
+  isCompact?: boolean;
   onTabClick: (paneId: string, tabId: string) => void;
   onTabClose: (paneId: string, tabId: string) => void;
   onTabAdd: (paneId: string, options?: { type?: "local" | "ssh" | "vnc"; sshConnectionId?: string; vncPort?: number; title?: string; color?: string }) => void;
@@ -26,6 +27,7 @@ interface SplitContainerProps {
 export default function SplitContainer({
   layout,
   panes,
+  isCompact = false,
   onTabClick,
   onTabClose,
   onTabAdd,
@@ -35,6 +37,8 @@ export default function SplitContainer({
   aiVisible,
 }: SplitContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const layoutRetryRef = useRef<number | null>(null);
+  const updateAndFitRef = useRef<() => void>(() => {});
   // 存储所有终端实例的 ref
   const terminalRefs = useRef<Map<string, TerminalPanelRef>>(new Map());
 
@@ -89,6 +93,17 @@ export default function SplitContainer({
     const container = containerRef.current;
     if (!container) return;
 
+    if (container.clientWidth === 0 || container.clientHeight === 0) {
+      if (layoutRetryRef.current !== null) {
+        window.clearTimeout(layoutRetryRef.current);
+      }
+      layoutRetryRef.current = window.setTimeout(() => {
+        layoutRetryRef.current = null;
+        updateAndFitRef.current();
+      }, 50);
+      return;
+    }
+
     const panesElements = container.querySelectorAll<HTMLDivElement>("[data-pane-id]");
     const terminalElements = container.querySelectorAll<HTMLDivElement>("[data-terminal-id]");
 
@@ -103,20 +118,36 @@ export default function SplitContainer({
 
     terminalElements.forEach((el) => {
       const tabId = el.dataset.terminalId!;
+      const tab = allTabs.find((t) => t.id === tabId);
       const paneId = tabPaneMap.get(tabId);
       const paneRect = paneId ? paneRects.get(paneId) : null;
 
-      if (paneRect && activeTabSet.has(tabId)) {
+      if (paneRect && paneRect.width > 0 && paneRect.height > 0 && activeTabSet.has(tabId)) {
         el.style.display = "block";
-        el.style.left = `${paneRect.left - containerRect.left}px`;
-        el.style.top = `${paneRect.top - containerRect.top + tabBarHeight}px`;
-        el.style.width = `${paneRect.width}px`;
-        el.style.height = `${paneRect.height - tabBarHeight}px`;
+        if (isCompact && tab?.type === "vnc") {
+          el.style.position = "fixed";
+          el.style.left = "0";
+          el.style.right = "0";
+          el.style.width = "100%";
+          el.style.top = `${paneRect.top + tabBarHeight}px`;
+          el.style.bottom = `calc(var(--mobile-nav-height) + var(--safe-bottom))`;
+          el.style.height = "auto";
+          el.style.zIndex = "40";
+        } else {
+          el.style.position = "absolute";
+          el.style.left = `${paneRect.left - containerRect.left}px`;
+          el.style.top = `${paneRect.top - containerRect.top + tabBarHeight}px`;
+          el.style.width = `${paneRect.width}px`;
+          el.style.height = `${paneRect.height - tabBarHeight}px`;
+          el.style.right = "";
+          el.style.bottom = "";
+          el.style.zIndex = "";
+        }
       } else {
         el.style.display = "none";
       }
     });
-  }, [tabPaneMap, activeTabSet]);
+  }, [tabPaneMap, activeTabSet, allTabs, isCompact]);
 
   // fit 所有终端（同步，调用前需确保 DOM 已更新）
   const fitAllTerminals = useCallback(() => {
@@ -160,6 +191,8 @@ export default function SplitContainer({
     fitAllTerminals();
   }, [updatePositions, fitAllTerminals]);
 
+  updateAndFitRef.current = updateAndFit;
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -168,7 +201,12 @@ export default function SplitContainer({
 
     const ro = new ResizeObserver(() => updateAndFit());
     ro.observe(container);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (layoutRetryRef.current !== null) {
+        window.clearTimeout(layoutRetryRef.current);
+      }
+    };
   }, [panes, updateAndFit]);
 
   // 布局切换

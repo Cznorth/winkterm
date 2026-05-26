@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
 import FileTransferDialog from "@/components/FileTransferDialog";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 import "./SSHPanel.css";
 
 interface SSHConnection {
@@ -59,6 +61,10 @@ const TransferIcon = () => (
 
 export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
   const { t } = useI18n();
+  const breakpoint = useBreakpoint();
+  const useInlineTransfer = breakpoint === "desktop";
+  const useMobileVncDialog = breakpoint !== "desktop";
+  const [portalReady, setPortalReady] = useState(false);
   const [connections, setConnections] = useState<SSHConnection[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -82,6 +88,10 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     loadConnections();
@@ -295,6 +305,184 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
     }
   };
 
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+  };
+
+  const connectionForm = showForm ? (
+    <div className="ssh-form">
+      <div className="ssh-form-header">
+        <h3>{editingId ? t("ssh.editConnection") : t("ssh.newConnectionTitle")}</h3>
+        <button className="ssh-form-close" onClick={handleCloseForm} title={t("ssh.close")}>
+          ✕
+        </button>
+      </div>
+
+      <div className="ssh-form-body">
+        <div className="ssh-form-row">
+          <label>{t("ssh.name")}</label>
+          <input
+            type="text"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            placeholder={t("ssh.namePlaceholder")}
+          />
+        </div>
+
+        <div className="ssh-form-row">
+          <label>{t("ssh.host")}</label>
+          <input
+            type="text"
+            value={form.host}
+            onChange={(e) => setForm({ ...form, host: e.target.value })}
+            placeholder={t("ssh.hostPlaceholder")}
+          />
+        </div>
+
+        <div className="ssh-form-row">
+          <label>{t("ssh.port")}</label>
+          <input
+            type="number"
+            value={form.port}
+            onChange={(e) => setForm({ ...form, port: parseInt(e.target.value) || 22 })}
+          />
+        </div>
+
+        <div className="ssh-form-row">
+          <label>{t("ssh.username")}</label>
+          <input
+            type="text"
+            value={form.username}
+            onChange={(e) => setForm({ ...form, username: e.target.value })}
+            placeholder={t("ssh.usernamePlaceholder")}
+          />
+        </div>
+
+        <div className="ssh-form-row">
+          <label>{t("ssh.authType")}</label>
+          <select
+            value={form.auth_type}
+            onChange={(e) => setForm({ ...form, auth_type: e.target.value as "password" | "key" })}
+          >
+            <option value="password">{t("ssh.password")}</option>
+            <option value="key">{t("ssh.key")}</option>
+          </select>
+        </div>
+
+        {form.auth_type === "password" ? (
+          <div className="ssh-form-row">
+            <label>{t("ssh.password")}</label>
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              placeholder={editingId ? t("ssh.passwordPlaceholderEdit") : t("ssh.password")}
+            />
+          </div>
+        ) : (
+          <div className="ssh-form-row">
+            <label>{t("ssh.privateKeyPath")}</label>
+            <input
+              type="text"
+              value={form.private_key_path}
+              onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
+              placeholder={t("ssh.privateKeyPlaceholder")}
+            />
+          </div>
+        )}
+
+        <div className="ssh-form-row">
+          <label>{t("ssh.color")}</label>
+          <input
+            type="color"
+            value={form.color}
+            onChange={(e) => setForm({ ...form, color: e.target.value })}
+          />
+        </div>
+
+        <div className="ssh-form-section">{t("vnc.settings")}</div>
+
+        <div className="ssh-form-row">
+          <label>{t("vnc.port")}</label>
+          <input
+            type="number"
+            value={form.vnc_port}
+            onChange={(e) => setForm({ ...form, vnc_port: parseInt(e.target.value) || 5901 })}
+            min={1}
+            max={65535}
+          />
+        </div>
+
+        <div className="ssh-form-row">
+          <label>{t("vnc.password")}</label>
+          <input
+            type="password"
+            value={form.vnc_password}
+            onChange={(e) => setForm({ ...form, vnc_password: e.target.value })}
+            placeholder={editingId ? t("vnc.passwordPlaceholderEdit") : t("vnc.passwordPlaceholderNew")}
+          />
+        </div>
+      </div>
+
+      <div className="ssh-form-footer">
+        <button className="ssh-btn primary" onClick={handleSave}>
+          {t("ssh.save")}
+        </button>
+        <button className="ssh-btn" onClick={handleCloseForm}>
+          {t("ssh.cancel")}
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  const vncDialog = vncTarget ? (
+    <div className="ssh-form vnc-dialog">
+      <div className="ssh-form-header">
+        <h3>{t("vnc.connectTo")}{vncTarget.title || vncTarget.host}</h3>
+        <button className="ssh-form-close" onClick={handleCloseVNC} title={t("ssh.close")}>
+          ✕
+        </button>
+      </div>
+      <div className="ssh-form-body">
+        <div className="ssh-form-row">
+          <label>{t("vnc.port")}</label>
+          <input
+            type="number"
+            value={vncPort}
+            onChange={(e) => setVncPort(parseInt(e.target.value) || 5901)}
+            min={1}
+            max={65535}
+          />
+        </div>
+        <div className="ssh-form-row">
+          <label>{t("vnc.password")}</label>
+          <input
+            type="password"
+            value={vncPassword}
+            onChange={(e) => setVncPassword(e.target.value)}
+            placeholder={
+              hasSavedVncPassword(vncTarget)
+                ? t("vnc.passwordPlaceholder")
+                : t("vnc.passwordPlaceholderNew")
+            }
+          />
+        </div>
+      </div>
+      <div className="ssh-form-footer">
+        <button className="ssh-btn primary" onClick={handleVNCConnect}>
+          {t("vnc.connect")}
+        </button>
+        <button className="ssh-btn" onClick={handleVNCSave}>
+          {t("vnc.save")}
+        </button>
+        <button className="ssh-btn" onClick={handleCloseVNC}>
+          {t("ssh.cancel")}
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="ssh-panel">
       <div className="ssh-header">
@@ -383,8 +571,10 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
                     <TransferIcon />
                   </button>
                   <button
-                    className="ssh-item-btn"
+                    type="button"
+                    className="ssh-item-btn edit"
                     onClick={() => handleEdit(conn)}
+                    title={t("ssh.edit")}
                   >
                     {t("ssh.edit")}
                   </button>
@@ -400,187 +590,42 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
           )}
         </div>
 
-        {showForm && (
-          <div className="ssh-form">
-            <div className="ssh-form-header">
-              <h3>{editingId ? t("ssh.editConnection") : t("ssh.newConnectionTitle")}</h3>
-              <button className="ssh-form-close" onClick={() => setShowForm(false)} title={t("ssh.close")}>
-                ✕
-              </button>
-            </div>
-
-            <div className="ssh-form-body">
-              <div className="ssh-form-row">
-                <label>{t("ssh.name")}</label>
-                <input
-                  type="text"
-                  value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder={t("ssh.namePlaceholder")}
-                />
-              </div>
-
-              <div className="ssh-form-row">
-                <label>{t("ssh.host")}</label>
-                <input
-                  type="text"
-                  value={form.host}
-                  onChange={(e) => setForm({ ...form, host: e.target.value })}
-                  placeholder={t("ssh.hostPlaceholder")}
-                />
-              </div>
-
-              <div className="ssh-form-row">
-                <label>{t("ssh.port")}</label>
-                <input
-                  type="number"
-                  value={form.port}
-                  onChange={(e) => setForm({ ...form, port: parseInt(e.target.value) || 22 })}
-                />
-              </div>
-
-              <div className="ssh-form-row">
-                <label>{t("ssh.username")}</label>
-                <input
-                  type="text"
-                  value={form.username}
-                  onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  placeholder={t("ssh.usernamePlaceholder")}
-                />
-              </div>
-
-              <div className="ssh-form-row">
-                <label>{t("ssh.authType")}</label>
-                <select
-                  value={form.auth_type}
-                  onChange={(e) => setForm({ ...form, auth_type: e.target.value as "password" | "key" })}
-                >
-                  <option value="password">{t("ssh.password")}</option>
-                  <option value="key">{t("ssh.key")}</option>
-                </select>
-              </div>
-
-              {form.auth_type === "password" ? (
-                <div className="ssh-form-row">
-                  <label>{t("ssh.password")}</label>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    placeholder={editingId ? t("ssh.passwordPlaceholderEdit") : t("ssh.password")}
-                  />
-                </div>
-              ) : (
-                <div className="ssh-form-row">
-                  <label>{t("ssh.privateKeyPath")}</label>
-                  <input
-                    type="text"
-                    value={form.private_key_path}
-                    onChange={(e) => setForm({ ...form, private_key_path: e.target.value })}
-                    placeholder={t("ssh.privateKeyPlaceholder")}
-                  />
-                </div>
-              )}
-
-              <div className="ssh-form-row">
-                <label>{t("ssh.color")}</label>
-                <input
-                  type="color"
-                  value={form.color}
-                  onChange={(e) => setForm({ ...form, color: e.target.value })}
-                />
-              </div>
-
-              <div className="ssh-form-section">{t("vnc.settings")}</div>
-
-              <div className="ssh-form-row">
-                <label>{t("vnc.port")}</label>
-                <input
-                  type="number"
-                  value={form.vnc_port}
-                  onChange={(e) => setForm({ ...form, vnc_port: parseInt(e.target.value) || 5901 })}
-                  min={1}
-                  max={65535}
-                />
-              </div>
-
-              <div className="ssh-form-row">
-                <label>{t("vnc.password")}</label>
-                <input
-                  type="password"
-                  value={form.vnc_password}
-                  onChange={(e) => setForm({ ...form, vnc_password: e.target.value })}
-                  placeholder={editingId ? t("vnc.passwordPlaceholderEdit") : t("vnc.passwordPlaceholderNew")}
-                />
-              </div>
-            </div>
-
-            <div className="ssh-form-footer">
-              <button className="ssh-btn primary" onClick={handleSave}>
-                {t("ssh.save")}
-              </button>
-              <button className="ssh-btn" onClick={() => setShowForm(false)}>
-                {t("ssh.cancel")}
-              </button>
-            </div>
-          </div>
-        )}
-        {vncTarget && (
-          <div className="ssh-form vnc-dialog">
-            <div className="ssh-form-header">
-              <h3>{t("vnc.connectTo")}{vncTarget.title || vncTarget.host}</h3>
-              <button className="ssh-form-close" onClick={handleCloseVNC} title={t("ssh.close")}>
-                ✕
-              </button>
-            </div>
-            <div className="ssh-form-body">
-              <div className="ssh-form-row">
-                <label>{t("vnc.port")}</label>
-                <input
-                  type="number"
-                  value={vncPort}
-                  onChange={(e) => setVncPort(parseInt(e.target.value) || 5901)}
-                  min={1}
-                  max={65535}
-                />
-              </div>
-              <div className="ssh-form-row">
-                <label>{t("vnc.password")}</label>
-                <input
-                  type="password"
-                  value={vncPassword}
-                  onChange={(e) => setVncPassword(e.target.value)}
-                  placeholder={
-                    vncTarget && hasSavedVncPassword(vncTarget)
-                      ? t("vnc.passwordPlaceholder")
-                      : t("vnc.passwordPlaceholderNew")
-                  }
-                />
-              </div>
-            </div>
-            <div className="ssh-form-footer">
-              <button className="ssh-btn primary" onClick={handleVNCConnect}>
-                {t("vnc.connect")}
-              </button>
-              <button className="ssh-btn" onClick={handleVNCSave}>
-                {t("vnc.save")}
-              </button>
-              <button className="ssh-btn" onClick={handleCloseVNC}>
-                {t("ssh.cancel")}
-              </button>
-            </div>
-          </div>
-        )}
+        {showForm && !useMobileVncDialog && connectionForm}
+        {vncTarget && !useMobileVncDialog && vncDialog}
         {transferTarget && (
           <FileTransferDialog
             open={true}
             connectionId={transferTarget.id}
             title={transferTarget.title || transferTarget.host}
             onClose={handleCloseTransfer}
-            inline
+            inline={useInlineTransfer}
           />
         )}
       </div>
+
+      {portalReady && useMobileVncDialog && vncTarget && createPortal(
+        <div
+          className="vnc-dialog-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseVNC();
+          }}
+        >
+          <div onClick={(e) => e.stopPropagation()}>{vncDialog}</div>
+        </div>,
+        document.body
+      )}
+
+      {portalReady && useMobileVncDialog && showForm && createPortal(
+        <div
+          className="vnc-dialog-overlay ssh-form-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseForm();
+          }}
+        >
+          <div onClick={(e) => e.stopPropagation()}>{connectionForm}</div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

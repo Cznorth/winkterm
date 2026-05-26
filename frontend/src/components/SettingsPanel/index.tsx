@@ -88,6 +88,8 @@ const CheckIcon = () => (
   </svg>
 );
 
+const GITHUB_REPO_URL = "https://github.com/Cznorth/winkterm";
+
 export default function SettingsPanel() {
   const { t, locale, setLocale } = useI18n();
   const { themeMode, setThemeMode } = useTheme();
@@ -762,6 +764,29 @@ export default function SettingsPanel() {
             <div className="settings-help" style={{ marginTop: "6px" }}>
               {t("settings.exportConfigHelp")}
             </div>
+          </div>
+        </div>
+
+        <div className="settings-group">
+          <div className="settings-group-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            {t("settings.about")}
+          </div>
+          <a
+            className="settings-btn settings-btn-secondary settings-btn-full"
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            style={{ textDecoration: "none", textAlign: "center", display: "block" }}
+          >
+            {t("settings.githubProject")}
+          </a>
+          <div className="settings-help" style={{ marginTop: "6px" }}>
+            {t("settings.githubProjectHelp")}
           </div>
         </div>
       </div>

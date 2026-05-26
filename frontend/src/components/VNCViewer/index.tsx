@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { getVncWsBaseUrl } from "@/lib/config";
 import { getAccessKey } from "@/lib/auth";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 import "./VNCViewer.css";
 
 interface VNCViewerProps {
@@ -34,6 +35,8 @@ const VNCViewer = forwardRef<VNCViewerRef, VNCViewerProps>(
     const containerRef = useRef<HTMLDivElement>(null);
     const rfbRef = useRef<InstanceType<RFBClass> | null>(null);
     const mountedRef = useRef(true);
+    const breakpoint = useBreakpoint();
+    const isMobile = breakpoint !== "desktop";
 
     const getVncUrl = useCallback(() => {
       const baseUrl = getVncWsBaseUrl();
@@ -63,6 +66,8 @@ const VNCViewer = forwardRef<VNCViewerRef, VNCViewerProps>(
           });
 
           rfb.scaleViewport = true;
+          rfb.clipViewport = isMobile;
+          rfb.focusOnClick = true;
           rfb.viewOnly = false;
 
           rfb.addEventListener("disconnect", () => {
@@ -82,7 +87,7 @@ const VNCViewer = forwardRef<VNCViewerRef, VNCViewerProps>(
       }).catch((err) => {
         console.error("[VNC] Failed to load noVNC:", err);
       });
-    }, [getVncUrl, isActive, vncPassword]);
+    }, [getVncUrl, isActive, vncPassword, isMobile]);
 
     const disconnect = useCallback(() => {
       if (rfbRef.current) {
@@ -133,7 +138,7 @@ const VNCViewer = forwardRef<VNCViewerRef, VNCViewerProps>(
       return () => ro.disconnect();
     }, [isActive]);
 
-    return <div ref={containerRef} className="vnc-container" />;
+    return <div ref={containerRef} className={`vnc-container${isMobile ? " vnc-container-mobile" : ""}`} />;
   }
 );
 

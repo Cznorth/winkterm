@@ -8,6 +8,7 @@ const translations = {
   // === Layout ===
   "layout.terminal": { zh: "终端", en: "Terminal" },
   "layout.aiAssistant": { zh: "AI 助手", en: "AI Assistant" },
+  "layout.chatShort": { zh: "对话", en: "Chat" },
   "layout.sshConnections": { zh: "SSH 连接 / 文件传输", en: "SSH / File Transfer" },
   "layout.sshShort": { zh: "SSH", en: "SSH" },
   "layout.settings": { zh: "设置", en: "Settings" },
@@ -302,6 +303,12 @@ const translations = {
   "settings.exportConfigHelp": {
     zh: "下载包含所有配置（含密钥明文）的 JSON 文件，请妥善保管。",
     en: "Download a JSON file with all settings including plaintext secrets. Keep it safe.",
+  },
+  "settings.about": { zh: "关于", en: "About" },
+  "settings.githubProject": { zh: "GitHub 项目", en: "GitHub Repository" },
+  "settings.githubProjectHelp": {
+    zh: "查看源码、提交 Issue 或获取最新版本。",
+    en: "View source code, report issues, or get the latest release.",
   },
 } as const;
 
