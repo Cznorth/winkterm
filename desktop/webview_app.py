@@ -590,51 +590,45 @@ def run_desktop_app(host: str, port: int, width: int, height: int):
     webview.start(debug=not IS_FROZEN)
 
 
+def _wait_for_backend(host: str, port: int, attempts: int = 100) -> str:
+    """启动后端并等待 /health 就绪，返回应用根 URL。"""
+    import httpx
+
+    url = f"http://{host}:{port}"
+    logger.info(f"Starting backend server on port {port}...")
+    threading.Thread(target=start_backend, args=(host, port), daemon=True).start()
+
+    logger.info("Waiting for server...")
+    for _ in range(attempts):
+        try:
+            resp = httpx.get(f"{url}/health", timeout=0.5)
+            if resp.status_code == 200:
+                logger.info(f"Server ready at {url}")
+                return f"{url}/"
+        except Exception:
+            pass
+        time.sleep(0.1)
+
+    logger.error("Backend failed to start")
+    sys.exit(1)
+
+
 def run_desktop_app_with_loading(host: str, port: int, width: int, height: int):
-    """启动桌面应用（先显示加载页面，后端就绪后切换）"""
+    """启动桌面应用（先显示加载页，后端就绪后再载入主界面）"""
     import webview
 
     global _window, _backend_started
 
-    def on_loaded():
-        """窗口加载完成后的回调：启动后端并等待就绪"""
-        global _backend_started
+    app_url = _wait_for_backend(host, port)
 
-        # 防止重复启动
+    def on_loaded():
+        """加载页展示后立刻切到主界面（后端已就绪）"""
+        global _backend_started
         if _backend_started:
             return
         _backend_started = True
+        _window.load_url(app_url)
 
-        import httpx
-        url = f"http://{host}:{port}"
-
-        logger.info(f"Starting backend server on port {port}...")
-        backend_thread = threading.Thread(
-            target=start_backend,
-            args=(host, port),
-            daemon=True,
-        )
-        backend_thread.start()
-
-        logger.info("Waiting for server...")
-        for _ in range(100):
-            try:
-                resp = httpx.get(f"{url}/health", timeout=0.5)
-                if resp.status_code == 200:
-                    break
-            except Exception:
-                pass
-            time.sleep(0.1)
-        else:
-            logger.error("Backend failed to start")
-            return
-
-        logger.info(f"Server ready at {url}")
-        # 后端就绪，切换到主页面
-        # 使用 evaluate_js 进行页面跳转，保持 js_api 绑定
-        _window.evaluate_js(f'window.location.href = "{url}";')
-
-    # 创建窗口，先显示加载页面
     _window = webview.create_window(
         title="WinkTerm",
         html=get_loading_html(),

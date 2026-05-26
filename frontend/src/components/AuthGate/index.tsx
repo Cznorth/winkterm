@@ -79,7 +79,9 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   };
 
   if (phase === "ok") return <>{children}</>;
-  if (phase === "loading") return null;
+  if (phase === "loading") {
+    return <div style={overlayStyle} aria-busy="true" />;
+  }
 
   if (phase === "neterror") {
     return (

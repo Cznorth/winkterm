@@ -42,7 +42,9 @@ export default function Home() {
     axios.post("/api/settings", { language }).catch(() => {});
   };
 
-  if (!ready) return null;
+  if (!ready) {
+    return <div style={{ width: "100vw", height: "100vh", background: "#1e1e1e" }} aria-busy="true" />;
+  }
 
   return (
     <>

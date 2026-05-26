@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:desktop": "bash scripts/build-desktop.sh",
     "start": "next start",
     "lint": "next lint",
     "gen:api": "orval"
