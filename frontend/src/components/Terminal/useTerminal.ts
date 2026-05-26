@@ -158,7 +158,9 @@ export function useTerminal(
           resizeOnConnect = null;
         }
       } else {
-        term.write("\r\n\x1b[33m[WinkTerm] 断开，重连中...\x1b[0m\r\n");
+        // 不再往 xterm 写"断开/重连中"提示:后端 ws_handler 重连时会回放
+        // session._raw / screen_content,中间插一行黄字会让 PSReadLine 的
+        // 光标定位错乱(prompt 重画后还在旧的光标坐标上覆盖)。
         resizeOnConnect = () => {
           if (termRef.current) {
             const { cols, rows } = termRef.current;
