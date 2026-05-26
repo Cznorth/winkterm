@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { TabState } from "@/hooks/useTabs";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
@@ -105,8 +106,9 @@ export default function TabBar({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const tabListRef = useRef<HTMLButtonElement>(null);
 
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 220 });
   const [tabListPosition, setTabListPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [portalReady, setPortalReady] = useState(false);
   const dropdownMenuRef = useRef<HTMLDivElement>(null);
   const tabListMenuRef = useRef<HTMLDivElement>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
@@ -116,7 +118,20 @@ export default function TabBar({
 
   useEffect(() => {
     setIsDesktopApp(!!window.pywebview?.api);
+    setPortalReady(true);
   }, []);
+
+  const computeDropdownPosition = (triggerRect: DOMRect, mobile: boolean) => {
+    const pad = 8;
+    const vw = window.innerWidth;
+    const preferredWidth = mobile ? Math.min(320, vw - pad * 2) : 220;
+    const width = Math.max(180, Math.min(preferredWidth, vw - pad * 2));
+    let left = mobile ? Math.max(pad, triggerRect.right - width) : triggerRect.left;
+    if (left + width > vw - pad) {
+      left = Math.max(pad, vw - pad - width);
+    }
+    return { top: triggerRect.bottom, left, width };
+  };
 
   // 加载 SSH 连接列表
   useEffect(() => {
@@ -135,7 +150,7 @@ export default function TabBar({
     }
     if (dropdownRef.current) {
       const rect = dropdownRef.current.getBoundingClientRect();
-      setDropdownPosition({ top: rect.bottom, left: rect.left });
+      setDropdownPosition(computeDropdownPosition(rect, isMobileTabBar));
     }
     setShowDropdown(!showDropdown);
   };
@@ -355,7 +370,7 @@ export default function TabBar({
         )}
       </div>
 
-      {showTabList && isMobileTabBar && (
+      {portalReady && showTabList && isMobileTabBar && createPortal(
         <div
           ref={tabListMenuRef}
           className="tab-list-dropdown"
@@ -396,18 +411,20 @@ export default function TabBar({
               )}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* 下拉菜单 - 使用 fixed 定位避免被裁剪 */}
-      {showDropdown && (
+      {/* 下拉菜单 - Portal 到 body，避免 split-pane overflow 裁切 */}
+      {portalReady && showDropdown && createPortal(
         <div
           ref={dropdownMenuRef}
-          className="tab-add-dropdown"
+          className={`tab-add-dropdown${isMobileTabBar ? " tab-add-dropdown-mobile" : ""}`}
           style={{
             position: "fixed",
             top: dropdownPosition.top,
             left: dropdownPosition.left,
+            width: dropdownPosition.width,
             zIndex: 1000,
           }}
         >
@@ -433,7 +450,8 @@ export default function TabBar({
               ))}
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
     </>

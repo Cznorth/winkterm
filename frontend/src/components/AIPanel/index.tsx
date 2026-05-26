@@ -505,7 +505,6 @@ export default function AIPanel({ onClose }: { onClose?: () => void }) {
         </div>
       </div>
 
-      {!onClose && (
       <ConvTabs
         conversations={conversations}
         activeConvId={activeConvId}
@@ -514,7 +513,6 @@ export default function AIPanel({ onClose }: { onClose?: () => void }) {
         onDelete={deleteConversation}
         onRegenerateTitle={handleRegenerateTitle}
       />
-      )}
 
       <div className="ai-messages">
         {messages.length === 0 && (

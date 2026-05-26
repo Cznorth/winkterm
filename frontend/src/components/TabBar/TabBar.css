@@ -470,3 +470,21 @@
     max-width: calc(100vw - 16px);
   }
 }
+
+/* 手机端新建终端菜单：全宽可读、SSH 名称可换行 */
+.tab-add-dropdown-mobile .dropdown-item {
+  align-items: flex-start;
+}
+
+.tab-add-dropdown-mobile .dropdown-item span {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+.tab-add-dropdown-mobile .dropdown-item svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}

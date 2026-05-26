@@ -60,6 +60,49 @@ def _truncate(data: str, max_len: int = 100) -> str:
     return escaped
 
 
+_ANSI_ESCAPE = re.compile(
+    r"\x1b\[[\?0-9;]*[A-Za-z]"
+    r"|\x1b\].*?(?:\x07|\x1b\\)"
+    r"|\x1b[()][AB012]"
+    r"|\x1b[78]"
+    r"|\x1b[=>]"
+)
+
+
+def _clean_terminal_line(line: str) -> str:
+    clean = _ANSI_ESCAPE.sub("", line)
+    clean = "".join(c for c in clean if c.isprintable() or c in " \t")
+    return clean.strip()
+
+
+def _extract_hash_command_from_screen(screen: str) -> str | None:
+    """从屏幕内容解析 # AI 命令,未命中返回 None。"""
+    if not screen:
+        return None
+
+    last_line = None
+    for line in reversed(screen.split("\n")):
+        stripped = line.strip()
+        if stripped:
+            last_line = stripped
+            break
+    if not last_line:
+        return None
+
+    clean_line = _clean_terminal_line(last_line)
+    if not clean_line:
+        return None
+
+    # 场景1: "# 你好" - # 是第一个字符
+    # 场景2: "root@host:~# # 你好" - bash root prompt (#) 后跟 # 命令
+    # 场景3: "PS D:\path> # 你好" - PowerShell prompt (>) 后跟 # 命令
+    # 场景4: "user@host:~$ # 你好" - bash user prompt ($) 后跟 # 命令
+    if clean_line.startswith("#") or re.search(r"[#\$>%]\s*#", clean_line):
+        command = clean_line[clean_line.rfind("#") + 1 :].strip()
+        return command or None
+    return None
+
+
 class TerminalWSHandler:
     """WebSocket 终端处理：支持多会话。"""
 
@@ -90,12 +133,19 @@ class TerminalWSHandler:
 
         # 检测回车键
         if data in ("\r", "\n", "\r\n"):
-            # SSH 远端回显有网络延迟,前端 serialize 抢在回显前发出 → 屏幕
-            # 还没渲染最后输入的字符。等屏幕同步上来再 parse。
+            # 前端在 Enter 前会先发送 screen 序列化;此处立即快照,避免 Enter
+            # 后 200ms 防抖 screen sync 把含 # 命令的输入行覆盖掉。
+            screen_snapshot = self.pty.get_screen_content()
             if self.terminal_type == "ssh":
+                # SSH 远端回显有延迟:稍等后若最新屏仍含 # 命令则用之(更完整),
+                # 否则回退 Enter 瞬间快照(Enter 后 sync 常已清掉输入行)。
                 await asyncio.sleep(0.4)
+                latest = self.pty.get_screen_content()
+                latest_cmd = _extract_hash_command_from_screen(latest)
+                if latest_cmd:
+                    screen_snapshot = latest
             logger.debug("[COMMAND] 检测到回车，解析屏幕内容中的命令")
-            await self._parse_last_command_from_screen()
+            await self._parse_last_command_from_screen(screen_snapshot)
 
     async def handle(self) -> None:
         await self.ws.accept()
@@ -243,56 +293,20 @@ class TerminalWSHandler:
         self.pty.add_output_callback(self._on_pty_output)
         self.session.ensure_read_loop()
 
-    async def _parse_last_command_from_screen(self) -> None:
+    async def _parse_last_command_from_screen(self, screen: str | None = None) -> None:
         """从屏幕内容解析最后一行命令"""
-        screen = self.pty.get_screen_content()
+        screen = screen if screen is not None else self.pty.get_screen_content()
 
         if not screen:
             logger.debug("[COMMAND] 屏幕内容为空，跳过解析")
             return
 
-        # 解析最后一行非空内容
-        lines = screen.split('\n')
-        last_line = None
-        for line in reversed(lines):
-            stripped = line.strip()
-            if stripped:
-                last_line = stripped
-                break
-
-        if not last_line:
-            logger.debug("[COMMAND] 未找到有效行")
+        command = _extract_hash_command_from_screen(screen)
+        if not command:
             return
 
-        # 清理 ANSI 转义序列和控制字符
-        ansi_escape = re.compile(
-            r"\x1b\[[\?0-9;]*[A-Za-z]"
-            r"|\x1b\].*?(?:\x07|\x1b\\)"
-            r"|\x1b[()][AB012]"
-            r"|\x1b[78]"
-            r"|\x1b[=>]"
-        )
-        clean_line = ansi_escape.sub("", last_line)
-        clean_line = "".join(c for c in clean_line if c.isprintable() or c in " \t")
-        clean_line = clean_line.strip()
-
-        logger.info(f"[COMMAND] 解析到命令: {clean_line}")
-
-        # 检测 # 命令
-        # 场景1: "# 你好" - # 是第一个字符
-        # 场景2: "root@host:~# # 你好" - bash root prompt (#) 后跟 # 命令
-        # 场景3: "PS D:\path> # 你好" - PowerShell prompt (>) 后跟 # 命令
-        # 场景4: "user@host:~$ # 你好" - bash user prompt ($) 后跟 # 命令
-        # 不触发: "root@host:~#" - 只有 prompt
-        # 不触发: "root@host:~# ls" - 普通命令
-
-        # 正则匹配：# 开头，或 prompt 符号 (# $ > %) 后跟 #
-        if clean_line.startswith('#') or re.search(r'[#\$>%]\s*#', clean_line):
-            # 找到最后一个 # 后面的内容
-            last_hash = clean_line.rfind('#')
-            command = clean_line[last_hash + 1:].strip()
-            if command:
-                await self.agent_invoke(command)
+        logger.info(f"[COMMAND] 解析到 AI 命令: {command}")
+        await self.agent_invoke(command)
 
     async def agent_invoke(self, user_input: str) -> None:
         """调用 AI Agent 并流式输出到终端。"""
