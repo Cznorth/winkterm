@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from backend.agent.factory import get_agent
 from backend.agent.core.state import AgentState
 from backend.agent.tools.terminal_legacy import get_terminal_context_raw
+from backend.api import chat_store
 from backend.config import UserConfig, settings
 from backend.utils.token_utils import count_tokens, count_history_tokens, fetch_model_context_length
 
@@ -30,21 +31,24 @@ class ChatWSHandler:
         self.ws = websocket
         self.agents: dict[str, CompiledGraph] = {}
         self.current_mode = "craft"  # 默认 craft 模式
-        # 按 conv_id 隔离会话状态
-        self.histories: dict[str, list[HumanMessage | AIMessage]] = {}
-        self.tokens: dict[str, dict[str, int]] = {}  # conv_id -> {input, output}
         self._stop_requested = False  # 停止生成标志
         self._current_task: asyncio.Task | None = None  # 当前处理任务
 
-    def _get_history(self, conv_id: str) -> list[HumanMessage | AIMessage]:
-        if conv_id not in self.histories:
-            self.histories[conv_id] = []
-        return self.histories[conv_id]
-
-    def _get_tokens(self, conv_id: str) -> dict[str, int]:
-        if conv_id not in self.tokens:
-            self.tokens[conv_id] = {"input": 0, "output": 0}
-        return self.tokens[conv_id]
+    @staticmethod
+    def _history_to_langchain(messages: list[dict]) -> list[HumanMessage | AIMessage]:
+        """store 里的 dict 消息 → langchain Message 列表 (供 agent 用)。
+        contentBlocks/thinking 等 UI 字段忽略,只取 role + content。"""
+        out: list[HumanMessage | AIMessage] = []
+        for m in messages:
+            role = m.get("role")
+            content = m.get("content", "")
+            if not content:
+                continue
+            if role == "user":
+                out.append(HumanMessage(content=content))
+            elif role == "assistant":
+                out.append(AIMessage(content=content))
+        return out
 
     async def handle(self) -> None:
         await self.ws.accept()
@@ -100,8 +104,7 @@ class ChatWSHandler:
                 elif msg_type == "delete_conv":
                     conv_id = msg.get("conv_id", "")
                     if conv_id:
-                        self.histories.pop(conv_id, None)
-                        self.tokens.pop(conv_id, None)
+                        chat_store.delete_conversation(conv_id)
                         logger.info(f"[DELETE] 会话 {conv_id} 已删除")
                 elif msg_type == "get_usage":
                     conv_id = msg.get("conv_id", "")
@@ -139,6 +142,9 @@ class ChatWSHandler:
         if not content.strip():
             return
 
+        # 保存原始用户输入(下方 stream 循环里 content 会被 chunk.content 覆盖)
+        user_input = content
+
         # 重置停止标志
         self._stop_requested = False
 
@@ -147,12 +153,14 @@ class ChatWSHandler:
             await self._send_error(f"Agent 未加载: {self.current_mode}")
             return
 
-        logger.info(f"[CHAT] 用户 ({self.current_mode}, conv={conv_id}): {content[:50]}")
+        logger.info(f"[CHAT] 用户 ({self.current_mode}, conv={conv_id}): {user_input[:50]}")
 
-        history = self._get_history(conv_id)
-        # 添加用户消息到历史
-        user_msg = HumanMessage(content=content)
-        history.append(user_msg)
+        # 写入用户消息到 store
+        user_dict = {"role": "user", "content": user_input, "timestamp": __import__("time").time()}
+        chat_store.append_message(conv_id, user_dict)
+        history = self._history_to_langchain(
+            chat_store.get_conversation(conv_id).get("messages", [])
+        )
 
         # 获取终端上下文
         terminal_output = get_terminal_context_raw(50)
@@ -267,17 +275,25 @@ class ChatWSHandler:
                         "result": tool_result
                     })
 
-            # 正常结束：添加 AI 回复到历史
+            # 正常结束：添加 AI 回复到 store
             if collected_content and not self._stop_requested:
                 history.append(AIMessage(content=collected_content))
+                chat_store.append_message(
+                    conv_id,
+                    {
+                        "role": "assistant",
+                        "content": collected_content,
+                        "timestamp": __import__("time").time(),
+                    },
+                )
 
             # 用 tiktoken 计算 token 用量
-            tok = self._get_tokens(conv_id)
-            tok["input"] = count_history_tokens(history)
-            tok["output"] += count_tokens(collected_content)
+            conv = chat_store.get_conversation(conv_id)
+            new_input = count_history_tokens(history)
+            new_output = conv.get("output_tokens", 0) + count_tokens(collected_content)
+            chat_store.update_tokens(conv_id, new_input, new_output)
             logger.info(
-                f"[CHAT] conv={conv_id} token 用量: 输入={tok['input']}, "
-                f"输出={tok['output']}"
+                f"[CHAT] conv={conv_id} token 用量: 输入={new_input}, 输出={new_output}"
             )
             await self._send_usage(conv_id)
 
@@ -297,9 +313,11 @@ class ChatWSHandler:
             await self._send({"type": "stopped"})
 
         except Exception as e:
-            # 出错时移除已添加的用户消息
-            if history and history[-1] == user_msg:
-                history.pop()
+            # 出错时移除已添加的用户消息(store 里)
+            conv = chat_store.get_conversation(conv_id)
+            msgs = conv.get("messages", [])
+            if msgs and msgs[-1].get("role") == "user" and msgs[-1].get("content") == user_input:
+                chat_store.set_messages(conv_id, msgs[:-1])
             logger.exception(f"[CHAT] 处理失败: {e}")
             await self._send_error(str(e))
 
@@ -326,11 +344,11 @@ class ChatWSHandler:
             ctx = await fetch_model_context_length(current_model)
             if ctx:
                 max_context = ctx
-        tok = self._get_tokens(conv_id)
+        conv = chat_store.get_conversation(conv_id)
         await self._send({
             "type": "usage",
             "conv_id": conv_id,
-            "input_tokens": tok["input"],
-            "output_tokens": tok["output"],
+            "input_tokens": conv.get("input_tokens", 0),
+            "output_tokens": conv.get("output_tokens", 0),
             "max_context": max_context,
         })

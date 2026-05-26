@@ -146,6 +146,32 @@ async def fetch_models(req: ModelsRequest) -> dict:
         return {"models": [], "error": str(e)}
 
 
+# === 对话历史持久化(进程级 + 文件) ===
+@router.get("/chat/conversations")
+async def list_chat_conversations() -> dict:
+    """列出所有保存的对话(供前端 mount 时恢复)。"""
+    from backend.api import chat_store
+    return {"conversations": chat_store.list_conversations()}
+
+
+class TitleUpdate(BaseModel):
+    title: str
+
+
+@router.post("/chat/conversations/{conv_id}/title")
+async def set_chat_title(conv_id: str, body: TitleUpdate) -> dict:
+    from backend.api import chat_store
+    chat_store.update_title(conv_id, body.title)
+    return {"ok": True}
+
+
+@router.delete("/chat/conversations/{conv_id}")
+async def delete_chat_conversation(conv_id: str) -> dict:
+    from backend.api import chat_store
+    ok = chat_store.delete_conversation(conv_id)
+    return {"ok": ok}
+
+
 # === 对话标题生成 ===
 class TitleRequest(BaseModel):
     messages: list[dict]  # [{"role": "user"|"assistant", "content": str}]

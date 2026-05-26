@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getWsBaseUrl } from "./config";
 import { getAccessKey } from "./auth";
+import axios from "./axios";
 
 // 获取 chat WebSocket URL（基于 terminal WS URL 替换路径）
 const getChatWSUrl = () => getWsBaseUrl().replace("/terminal", "/chat");
@@ -528,9 +529,7 @@ export function useChatWs() {
 
   // 更新对话标题
   const updateConvTitle = useCallback((id: string, title: string) => {
-    console.log("[chatWs] updateConvTitle", id, title);
     setState((s) => {
-      console.log("[chatWs] updateConvTitle setState, convs:", s.conversations.map(c => c.id), "target:", id);
       const conversations = s.conversations.map((c) =>
         c.id === id ? { ...c, title } : c
       );
@@ -543,6 +542,9 @@ export function useChatWs() {
         outputTokens: activeConv.outputTokens,
       };
     });
+    // 持久化到后端
+    axios.post(`/api/chat/conversations/${encodeURIComponent(id)}/title`, { title })
+      .catch(() => {});
   }, []);
 
   // 停止生成
@@ -564,6 +566,53 @@ export function useChatWs() {
       wsRef.current?.close();
     };
   }, [connect]);
+
+  // mount 时从后端 chat_store 拉历史会话填回 state(刷新页面后恢复)
+  useEffect(() => {
+    let cancelled = false;
+    axios.get("/api/chat/conversations")
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.data?.conversations as Array<{
+          id: string;
+          title: string;
+          messages: Array<{ role: "user" | "assistant"; content: string; thinking?: string; timestamp?: number }>;
+          input_tokens: number;
+          output_tokens: number;
+        }> | undefined;
+        if (!list || list.length === 0) return;
+        const convs: Conversation[] = list.map((c) => ({
+          id: c.id,
+          title: c.title,
+          messages: (c.messages || []).map((m, i) => ({
+            id: `${c.id}-${i}`,
+            role: m.role,
+            content: m.content,
+            thinking: m.thinking,
+            timestamp: m.timestamp ? Math.round(m.timestamp * 1000) : Date.now(),
+          })),
+          inputTokens: c.input_tokens || 0,
+          outputTokens: c.output_tokens || 0,
+        }));
+        setState((s) => {
+          // 用后端历史替换初始空会话;保留 ws/连接状态
+          const activeConv = convs[0];
+          activeConvIdRef.current = activeConv.id;
+          return {
+            ...s,
+            conversations: convs,
+            activeConvId: activeConv.id,
+            messages: activeConv.messages,
+            inputTokens: activeConv.inputTokens,
+            outputTokens: activeConv.outputTokens,
+          };
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return {
     ...state,
