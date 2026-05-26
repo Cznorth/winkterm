@@ -44,6 +44,20 @@ export function useTerminal(
     const { WebLinksAddon } = await import("@xterm/addon-web-links");
     const { SerializeAddon } = await import("@xterm/addon-serialize");
 
+    // import 期间容器可能已被父组件 (SplitContainer) 切到 display:none
+    // (例如 agent 一次创建多个终端,中间 tab 短暂激活又失活)。
+    // 此时继续 init 会在 0-dim 容器上 open xterm + fit,xterm.cols 被算成
+    // 异常小值。回退,等容器再次可见时 ResizeObserver 重试 init。
+    if (
+      !containerRef.current ||
+      containerRef.current.offsetWidth === 0 ||
+      containerRef.current.offsetHeight === 0
+    ) {
+      DEBUG && console.log(`[useTerminal] import 后容器已不可见,放弃 init, sessionId=${sessionId}`);
+      initRef.current = false;
+      return;
+    }
+
     // VS Code 风格终端主题
     const term = new Terminal({
       theme: {

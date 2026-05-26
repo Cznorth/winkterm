@@ -109,9 +109,16 @@ class TerminalWSHandler:
         self._spawn_dims: tuple[int, int] | None = None
         self._spawn_task: asyncio.Task | None = None
         if not self._pending_spawn:
-            # 重连场景:pty 已存活,首个 resize 后回放屏幕快照
+            # pty 已存活: 重连 / agent 创建的终端用户首次打开。
+            # 首选 frontend 序列化的 screen_content (重连场景);否则回退到
+            # session 累积的 _raw (agent 终端首次打开 → 让用户看到历史输出)。
             screen_replay = self.pty.get_screen_content()
-            self._pending_replay = screen_replay if screen_replay else "__REDRAW__"
+            if screen_replay:
+                self._pending_replay = screen_replay
+            else:
+                snap = self.session.snapshot(strip=False)
+                raw_text = snap.get("output", "") if isinstance(snap, dict) else ""
+                self._pending_replay = raw_text if raw_text else "__REDRAW__"
             # callback 立即挂,后续 pty 输出实时转发
             self.pty.add_output_callback(self._on_pty_output)
             self.session.ensure_read_loop()

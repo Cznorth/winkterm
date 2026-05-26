@@ -28,7 +28,7 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     // 暴露 fit 方法给父组件
     useImperativeHandle(ref, () => ({ fit, fitWithSize }), [fit, fitWithSize]);
 
-    // 使用 ResizeObserver 监听容器尺寸
+    // 使用 ResizeObserver 监听容器尺寸 + 必要时重试 init
     useEffect(() => {
       const container = containerRef.current;
       if (!container) return;
@@ -36,6 +36,13 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       const checkSize = () => {
         if (container.offsetWidth > 0 && container.offsetHeight > 0) {
           setContainerReady(true);
+          // agent 一次创建多个终端时,中间 tab 短暂激活又失活,init 在异步 import
+          // 期间发现容器变 0 直接 bail。后续切回该 tab 时容器恢复可见,但
+          // containerReady 已是 true → init useEffect 不会重跑 → 永远空显示。
+          // 这里检测到容器可见且 term 未建则主动重试 init。
+          if (!term.current) {
+            init();
+          }
           return true;
         }
         return false;
@@ -51,9 +58,9 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
 
       observer.observe(container);
       return () => observer.disconnect();
-    }, [isActive]);
+    }, [isActive, init, term]);
 
-    // 容器准备好后初始化终端
+    // 容器准备好后初始化终端(首次路径)
     useEffect(() => {
       if (containerReady && !term.current) {
         init();
