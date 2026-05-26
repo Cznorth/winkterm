@@ -117,6 +117,20 @@ const translations = {
   "vnc.connecting": { zh: "VNC 连接中...", en: "Connecting VNC..." },
   "vnc.disconnected": { zh: "VNC 已断开", en: "VNC Disconnected" },
   "vnc.reconnect": { zh: "重新连接", en: "Reconnect" },
+  "vnc.authFailed": { zh: "VNC 认证失败", en: "VNC authentication failed" },
+  "vnc.passwordRequired": {
+    zh: "需要 VNC 密码。请在 SSH 连接列表的 VNC 对话框中输入并保存密码后重试。",
+    en: "VNC password required. Enter and save it in the SSH connection VNC dialog, then retry.",
+  },
+  "vnc.connectionFailed": { zh: "VNC 连接失败", en: "VNC connection failed" },
+  "vnc.layoutNotReady": {
+    zh: "VNC 视图尚未就绪，请稍后重试",
+    en: "VNC view is not ready yet. Please retry shortly.",
+  },
+  "vnc.tunnelFailed": {
+    zh: "无法建立 SSH 隧道到 VNC 端口，请检查端口与远程 VNC 服务",
+    en: "Failed to open SSH tunnel to the VNC port. Check the port and remote VNC service.",
+  },
 
   // === SSH ===
   "ssh.title": { zh: "SSH 连接", en: "SSH Connections" },

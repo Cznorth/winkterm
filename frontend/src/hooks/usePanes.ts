@@ -145,6 +145,44 @@ function normalizeSplitState(state: SplitState): SplitState {
   return { layout: state.layout, panes: newPanes };
 }
 
+/** 修正持久化状态中的重复 tab id（会导致终端池/VNC 渲染丢失） */
+function dedupeTabIds(state: SplitState): SplitState {
+  const globalSeen = new Set<string>();
+  let changed = false;
+
+  const panes = state.panes.map((pane) => {
+    const tabs: TabState[] = [];
+    let activeTabId = pane.activeTabId;
+
+    for (const tab of pane.tabs) {
+      if (!globalSeen.has(tab.id)) {
+        globalSeen.add(tab.id);
+        tabs.push(tab);
+        continue;
+      }
+
+      changed = true;
+      let newId = `tab-${++tabIdCounter}`;
+      while (globalSeen.has(newId)) {
+        newId = `tab-${++tabIdCounter}`;
+      }
+      globalSeen.add(newId);
+      tabs.push({ ...tab, id: newId });
+      if (activeTabId === tab.id) {
+        activeTabId = newId;
+      }
+    }
+
+    return { ...pane, tabs, activeTabId };
+  });
+
+  if (changed) {
+    syncCountersFromState({ ...state, panes });
+    return { ...state, panes };
+  }
+  return state;
+}
+
 export interface UsePanesReturn {
   layout: LayoutType;
   panes: Pane[];
@@ -167,7 +205,9 @@ export function usePanes(): UsePanesReturn {
   useEffect(() => {
     const savedState = loadStateFromStorage();
     if (savedState) {
-      const normalized = normalizeSplitState(savedState);
+      const layoutNormalized = normalizeSplitState(savedState);
+      syncCountersFromState(layoutNormalized);
+      const normalized = dedupeTabIds(layoutNormalized);
       setState(normalized);
       syncCountersFromState(normalized);
     } else {
@@ -236,27 +276,34 @@ export function usePanes(): UsePanesReturn {
 
   // 添加标签页
   const addTab = useCallback((paneId: string, options?: { id?: string; type?: "local" | "ssh" | "vnc"; sshConnectionId?: string; vncPort?: number; vncPassword?: string; title?: string; color?: string }) => {
-    const newId = options?.id || `tab-${++tabIdCounter}`;
+    let newId = options?.id || `tab-${++tabIdCounter}`;
     const tabType = options?.type || "local";
 
-    const newTab: TabState = {
-      id: newId,
-      title: options?.title || `Terminal ${tabIdCounter}`,
-      type: tabType,
-      sshConnectionId: options?.sshConnectionId,
-      vncPort: options?.vncPort,
-      vncPassword: options?.vncPassword,
-      color: options?.color,
-    };
+    setState((prev) => {
+      const existingIds = new Set(prev.panes.flatMap((pane) => pane.tabs.map((tab) => tab.id)));
+      while (existingIds.has(newId)) {
+        newId = `tab-${++tabIdCounter}`;
+      }
 
-    setState((prev) => ({
-      ...prev,
-      panes: prev.panes.map((pane) =>
-        pane.id === paneId
-          ? { ...pane, tabs: [...pane.tabs, newTab], activeTabId: newId }
-          : pane
-      ),
-    }));
+      const newTab: TabState = {
+        id: newId,
+        title: options?.title || `Terminal ${tabIdCounter}`,
+        type: tabType,
+        sshConnectionId: options?.sshConnectionId,
+        vncPort: options?.vncPort,
+        vncPassword: options?.vncPassword,
+        color: options?.color,
+      };
+
+      return {
+        ...prev,
+        panes: prev.panes.map((pane) =>
+          pane.id === paneId
+            ? { ...pane, tabs: [...pane.tabs, newTab], activeTabId: newId }
+            : pane
+        ),
+      };
+    });
 
     return newId;
   }, []);

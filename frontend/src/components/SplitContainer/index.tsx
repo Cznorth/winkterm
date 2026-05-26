@@ -55,17 +55,13 @@ export default function SplitContainer({
 
   // 收集所有唯一的 tab
   const allTabs = useMemo(() => {
-    const seen = new Set<string>();
-    const tabs: TabState[] = [];
+    const tabMap = new Map<string, TabState>();
     panes.forEach((pane) => {
       pane.tabs.forEach((tab) => {
-        if (!seen.has(tab.id)) {
-          seen.add(tab.id);
-          tabs.push(tab);
-        }
+        tabMap.set(tab.id, tab);
       });
     });
-    return tabs;
+    return Array.from(tabMap.values());
   }, [panes]);
 
   // 构建 tabId -> 激活状态的映射
@@ -286,6 +282,7 @@ export default function SplitContainer({
                 vncPort={tab.vncPort!}
                 vncPassword={tab.vncPassword}
                 isActive={activeTabSet.has(tab.id)}
+                isCompact={isCompact}
               />
             ) : (
               <Terminal

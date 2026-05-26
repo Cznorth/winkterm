@@ -2,6 +2,8 @@ declare module "@novnc/novnc" {
   interface RFBEventDetail {
     clean?: boolean;
     reason?: string;
+    status?: number;
+    types?: string[];
   }
 
   class RFB {
@@ -17,7 +19,8 @@ declare module "@novnc/novnc" {
     viewOnly: boolean;
     disconnect(): void;
     requestResize(width: number, height: number): void;
-    addEventListener(type: string, listener: () => void): void;
+    sendCredentials(credentials: { password?: string; username?: string; target?: string }): void;
+    addEventListener(type: string, listener: (event: CustomEvent<RFBEventDetail>) => void): void;
   }
 
   export default RFB;

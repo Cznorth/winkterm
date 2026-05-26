@@ -105,6 +105,7 @@ class VNCWSHandler:
             logger.info("VNC WebSocket disconnected")
         except VNCProxyError as e:
             logger.error("VNC proxy error: %s", e)
+            await self._send_error(str(e))
         except Exception as e:
             logger.exception("VNC unexpected error: %s", e)
         finally:

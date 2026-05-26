@@ -18,3 +18,46 @@
   max-width: 100%;
   max-height: 100%;
 }
+
+.vnc-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(12, 12, 12, 0.92);
+  pointer-events: auto;
+}
+
+.vnc-overlay-error {
+  background: rgba(20, 12, 12, 0.94);
+}
+
+.vnc-overlay-text {
+  margin: 0;
+  max-width: 420px;
+  text-align: center;
+  color: var(--text-secondary, #ccc);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.vnc-reconnect-btn {
+  border: 1px solid var(--border-color, #333);
+  background: var(--bg-secondary, #1a1a1a);
+  color: var(--text-primary, #eee);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.vnc-reconnect-btn:hover {
+  border-color: var(--accent-color, #0078d4);
+  color: var(--accent-color, #0078d4);
+}
