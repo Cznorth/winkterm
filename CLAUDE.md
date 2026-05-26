@@ -103,6 +103,104 @@ AI 消息通过 pty output 返回，保证人机合一体验。
 | `NEXT_PUBLIC_API_URL` | 后端 HTTP API 地址 | 否 |
 | `NEXT_PUBLIC_WS_URL` | 后端 WebSocket 地址 | 否 |
 
+## 前端调试方法 (Claude 自验证)
+
+Claude 没有浏览器 MCP,但可用 puppeteer-core + 系统 Chrome 驱动 localhost:3000 验证前端修复。
+
+### 一键测试模板
+
+```bash
+# 1. 临时目录装依赖(只装 puppeteer-core,不下 Chromium)
+mkdir -p /c/Users/$USER/AppData/Local/Temp/winkterm-test
+cd /c/Users/$USER/AppData/Local/Temp/winkterm-test
+npm init -y && npm install puppeteer-core --no-audit --no-fund
+
+# 2. 取 agent token (localhost 免鉴权)
+curl -s http://localhost:8000/api/agent/handshake
+# → {"token": "...", ...}
+```
+
+测试脚本要点:
+
+```js
+const puppeteer = require("puppeteer-core");
+const browser = await puppeteer.launch({
+  executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  headless: false,  // headed 看清楚;CI 改 true
+  defaultViewport: { width: 1400, height: 900 },
+  args: ["--no-sandbox"],
+});
+const page = await browser.newPage();
+
+// 捕获前端 console (调试用)
+page.on("console", (msg) => {
+  const t = msg.text();
+  if (t.includes("useTerminal")) console.log("[browser]", t);
+});
+
+await page.goto("http://localhost:3000", { waitUntil: "networkidle2" });
+```
+
+### 跑场景
+
+后端 agent HTTP API 模拟用户/agent 动作:
+
+```bash
+TOKEN=<from handshake>
+AUTH="Authorization: Bearer $TOKEN"
+BASE=http://localhost:8000
+
+# 建终端
+curl -s -X POST $BASE/api/agent/terminals -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"type":"local","name":"verify-1"}'
+
+# 发命令
+curl -s -X POST $BASE/api/agent/terminals/<id>/input -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"data":"echo MARKER_X","enter":true}'
+
+# 清理
+curl -s -X DELETE $BASE/api/agent/terminals/<id> -H "$AUTH"
+```
+
+### 提取 xterm 内容
+
+`textContent` 会带上 xterm 的 `<style>` 块。读 `.xterm-rows` 拿干净文本:
+
+```js
+const visible = await page.evaluate(() => {
+  return Array.from(document.querySelectorAll("[data-terminal-id]"))
+    .filter((inst) => window.getComputedStyle(inst).display !== "none")
+    .map((inst) => ({
+      terminalId: inst.dataset.terminalId,
+      text: inst.querySelector(".xterm-rows")?.textContent?.trim() || "",
+    }));
+});
+```
+
+切 tab:
+```js
+await page.evaluate((needle) => {
+  document.querySelectorAll(".tab")
+    .forEach((t) => { if (t.textContent.includes(needle)) t.click(); });
+}, "verify-2");
+await new Promise((r) => setTimeout(r, 2500));  // 等 SplitContainer fit + replay
+```
+
+### 常用 debug 思路
+
+| 现象 | 排查路径 |
+|------|---------|
+| tab 空显示 | 看 console 有无 `跳过初始化` / `import 后容器已不可见,放弃 init` |
+| prompt 截断 | 看 backend `[SPAWN] cols=` 是不是异常小;前端 `fit 完成 cols=` |
+| 输出乱码 | 检查 cols 是否 mismatch(backend pty vs frontend xterm) |
+| WS 不重连 | 浏览器 Network → WS frame,看 close code |
+
+### 注意
+
+- 用完删 `/c/Users/$USER/AppData/Local/Temp/winkterm-test` 避免堆积。
+- 前端 dev server 是 Next.js + Turbopack,改文件秒热更新,无需重启。
+- 后端 `--reload` 模式同样热更新,但 pty 子进程不重启。
+
 ## 打包发布
 
 推送 tag 触发 GitHub Actions 自动打包：
