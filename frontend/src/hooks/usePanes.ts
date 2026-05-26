@@ -111,7 +111,7 @@ export interface UsePanesReturn {
   layout: LayoutType;
   panes: Pane[];
   setLayout: (layout: LayoutType) => void;
-  addTab: (paneId: string, options?: { id?: string; type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => string;
+  addTab: (paneId: string, options?: { id?: string; type?: "local" | "ssh" | "vnc"; sshConnectionId?: string; vncPort?: number; vncPassword?: string; title?: string; color?: string }) => string;
   closeTabById: (tabId: string) => void;
   hasTab: (tabId: string) => boolean;
   closeTab: (paneId: string, tabId: string) => void;
@@ -196,7 +196,7 @@ export function usePanes(): UsePanesReturn {
   }, []);
 
   // 添加标签页
-  const addTab = useCallback((paneId: string, options?: { id?: string; type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => {
+  const addTab = useCallback((paneId: string, options?: { id?: string; type?: "local" | "ssh" | "vnc"; sshConnectionId?: string; vncPort?: number; vncPassword?: string; title?: string; color?: string }) => {
     const newId = options?.id || `tab-${++tabIdCounter}`;
     const tabType = options?.type || "local";
 
@@ -205,6 +205,8 @@ export function usePanes(): UsePanesReturn {
       title: options?.title || `Terminal ${tabIdCounter}`,
       type: tabType,
       sshConnectionId: options?.sshConnectionId,
+      vncPort: options?.vncPort,
+      vncPassword: options?.vncPassword,
       color: options?.color,
     };
 

@@ -62,7 +62,24 @@ class SSHConnectionManager:
                 conn["password"] = "********"
             if conn.get("passphrase"):
                 conn["passphrase"] = "********"
+            if conn.get("vnc_password"):
+                conn["vnc_password"] = "********"
         return {"connections": connections}
+
+    @classmethod
+    def get_connection_dict(cls, conn_id: str, *, include_secrets: bool = False) -> Optional[dict]:
+        """获取连接字典；include_secrets=True 时返回明文密钥。"""
+        config = cls._load_config()
+        for conn_data in config.get("ssh_connections", []):
+            if conn_data.get("id") == conn_id:
+                if include_secrets:
+                    return dict(conn_data)
+                masked = dict(conn_data)
+                for key in ("password", "passphrase", "vnc_password"):
+                    if masked.get(key):
+                        masked[key] = _MASKED_SECRET
+                return masked
+        return None
 
     @classmethod
     def get_connection(cls, conn_id: str) -> Optional[SSHConnection]:
@@ -97,7 +114,7 @@ class SSHConnectionManager:
         for i, conn in enumerate(connections):
             if conn.get("id") == conn_id:
                 updates = dict(data)
-                for secret_key in ("password", "passphrase"):
+                for secret_key in ("password", "passphrase", "vnc_password"):
                     if secret_key in updates and _secret_unchanged(updates[secret_key]):
                         updates.pop(secret_key)
                 for key, value in updates.items():

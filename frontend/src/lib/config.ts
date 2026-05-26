@@ -73,6 +73,23 @@ export function getApiBaseUrl(): string {
   return "";
 }
 
+/** 获取 VNC WebSocket 基础 URL */
+export function getVncWsBaseUrl(): string {
+  const baked = process.env.NEXT_PUBLIC_WS_URL;
+  if (useSameOriginApi(baked)) {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/ws/vnc`;
+  }
+  if (baked) {
+    return baked.replace(/\/ws\/terminal$/, "/ws/vnc");
+  }
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/ws/vnc`;
+  }
+  return "";
+}
+
 /** 获取 WebSocket 基础 URL */
 export function getWsBaseUrl(): string {
   const baked = process.env.NEXT_PUBLIC_WS_URL;

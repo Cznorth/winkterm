@@ -7,6 +7,7 @@ from fastapi import APIRouter, WebSocket, Query
 from backend.terminal.ws_handler import TerminalWSHandler
 from backend.api.ws_chat import ChatWSHandler
 from backend.api.auth_routes import ws_authorized
+from backend.vnc.handler import VNCWSHandler
 
 router = APIRouter()
 
@@ -56,4 +57,37 @@ async def chat_ws(
         return
 
     handler = ChatWSHandler(websocket)
+    await handler.handle()
+
+
+@router.websocket("/vnc/{session_id}")
+async def vnc_ws(
+    websocket: WebSocket,
+    session_id: str,
+    connection_id: str = Query(...),
+    port: int = Query(default=5901),
+    password: Optional[str] = Query(default=None),
+    key: Optional[str] = Query(default=None),
+) -> None:
+    """WebSocket VNC over SSH tunnel.
+
+    Args:
+        session_id: client-assigned session identifier
+        connection_id: SSH connection ID (stored in config.json)
+        port: VNC server port on the remote host (default 5901)
+        password: optional VNC password, forwarded to the frontend/noVNC
+                  client as JSON metadata before binary proxy starts
+        key: Web access key (remote auth, localhost exempt)
+    """
+    if not ws_authorized(websocket, key):
+        await websocket.accept()
+        await websocket.close(code=_WS_AUTH_FAILED)
+        return
+
+    handler = VNCWSHandler(
+        websocket,
+        connection_id=connection_id,
+        port=port,
+        password=password,
+    )
     await handler.handle()

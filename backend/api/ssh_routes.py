@@ -36,6 +36,8 @@ class SSHConnectionCreate(BaseModel):
     password: Optional[str] = None
     private_key_path: Optional[str] = None
     passphrase: Optional[str] = None
+    vnc_port: int = 5901
+    vnc_password: Optional[str] = None
     color: Optional[str] = None
     group: Optional[str] = None
 
@@ -50,6 +52,8 @@ class SSHConnectionUpdate(BaseModel):
     password: Optional[str] = None
     private_key_path: Optional[str] = None
     passphrase: Optional[str] = None
+    vnc_port: Optional[int] = None
+    vnc_password: Optional[str] = None
     color: Optional[str] = None
     group: Optional[str] = None
 
@@ -113,6 +117,15 @@ async def create_connection(conn: SSHConnectionCreate) -> dict:
         raise HTTPException(status_code=400, detail="用户名不能为空")
 
     return SSHConnectionManager.create_connection(conn.model_dump())
+
+
+@router.get("/connections/{conn_id}")
+async def get_connection(conn_id: str, secrets: bool = Query(default=False)) -> dict:
+    """获取单个连接；secrets=true 时返回明文密钥（用于 VNC 连接等）。"""
+    data = SSHConnectionManager.get_connection_dict(conn_id, include_secrets=secrets)
+    if not data:
+        raise HTTPException(status_code=404, detail="连接不存在")
+    return {"connection": data}
 
 
 @router.put("/connections/{conn_id}")

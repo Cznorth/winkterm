@@ -235,16 +235,19 @@
   background: var(--accent-hover);
 }
 
+.ssh-item-btn.vnc,
 .ssh-item-btn.transfer {
   width: 28px;
   padding: 0;
 }
 
+.ssh-item-btn.vnc svg,
 .ssh-item-btn.transfer svg {
   width: 13px;
   height: 13px;
 }
 
+.ssh-item-btn.vnc:hover,
 .ssh-item-btn.transfer:hover {
   background: var(--bg-hover);
   color: var(--fg-primary);
@@ -308,6 +311,17 @@
   flex: 1;
   padding: 16px;
   overflow-y: auto;
+}
+
+.ssh-form-section {
+  margin: 16px 0 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .ssh-form-row {

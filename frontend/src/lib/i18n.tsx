@@ -98,6 +98,20 @@ const translations = {
   "settings.agentAccessCopy": { zh: "复制 prompt", en: "Copy prompt" },
   "settings.agentAccessCopied": { zh: "已复制", en: "Copied" },
 
+  // === VNC ===
+  "vnc.connect": { zh: "VNC 连接", en: "VNC Connect" },
+  "vnc.connectTo": { zh: "VNC 连接到 ", en: "VNC Connect to " },
+  "vnc.port": { zh: "VNC 端口", en: "VNC Port" },
+  "vnc.password": { zh: "VNC 密码", en: "VNC Password" },
+  "vnc.passwordPlaceholder": { zh: "留空使用已保存", en: "Leave blank to use saved" },
+  "vnc.passwordPlaceholderNew": { zh: "VNC 密码", en: "VNC password" },
+  "vnc.passwordPlaceholderEdit": { zh: "留空保持不变", en: "Leave blank to keep unchanged" },
+  "vnc.save": { zh: "保存", en: "Save" },
+  "vnc.settings": { zh: "VNC", en: "VNC" },
+  "vnc.connecting": { zh: "VNC 连接中...", en: "Connecting VNC..." },
+  "vnc.disconnected": { zh: "VNC 已断开", en: "VNC Disconnected" },
+  "vnc.reconnect": { zh: "重新连接", en: "Reconnect" },
+
   // === SSH ===
   "ssh.title": { zh: "SSH 连接", en: "SSH Connections" },
   "ssh.subtitle": { zh: "连接支持文件传输", en: "Connections support file transfer" },

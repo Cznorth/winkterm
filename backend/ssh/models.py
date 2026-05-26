@@ -26,6 +26,10 @@ class SSHConnection:
     private_key_path: Optional[str] = None
     passphrase: Optional[str] = None
 
+    # VNC（经 SSH 隧道）
+    vnc_port: int = 5901
+    vnc_password: Optional[str] = None
+
     # 显示选项
     color: Optional[str] = None
     group: Optional[str] = None
@@ -46,6 +50,8 @@ class SSHConnection:
             "password": self.password,
             "private_key_path": self.private_key_path,
             "passphrase": self.passphrase,
+            "vnc_port": self.vnc_port,
+            "vnc_password": self.vnc_password,
             "color": self.color,
             "group": self.group,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -65,6 +71,8 @@ class SSHConnection:
             password=data.get("password"),
             private_key_path=data.get("private_key_path"),
             passphrase=data.get("passphrase"),
+            vnc_port=data.get("vnc_port", 5901),
+            vnc_password=data.get("vnc_password"),
             color=data.get("color"),
             group=data.get("group"),
             created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else datetime.now(),

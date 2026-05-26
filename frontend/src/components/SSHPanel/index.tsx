@@ -15,13 +15,31 @@ interface SSHConnection {
   auth_type: "password" | "key";
   password?: string;
   private_key_path?: string;
+  vnc_port?: number;
+  vnc_password?: string;
   color?: string;
   group?: string;
 }
 
 interface SSHPanelProps {
   onConnect?: (conn: SSHConnection) => void;
+  onVNCConnect?: (conn: SSHConnection, vncPort: number, vncPassword?: string) => void;
 }
+
+const VNCIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+  </svg>
+);
 
 const TransferIcon = () => (
   <svg
@@ -39,12 +57,15 @@ const TransferIcon = () => (
   </svg>
 );
 
-export default function SSHPanel({ onConnect }: SSHPanelProps) {
+export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
   const { t } = useI18n();
   const [connections, setConnections] = useState<SSHConnection[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [transferTarget, setTransferTarget] = useState<SSHConnection | null>(null);
+  const [vncTarget, setVncTarget] = useState<SSHConnection | null>(null);
+  const [vncPort, setVncPort] = useState(5901);
+  const [vncPassword, setVncPassword] = useState("");
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -54,6 +75,8 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
     auth_type: "password" as "password" | "key",
     password: "",
     private_key_path: "",
+    vnc_port: 5901,
+    vnc_password: "",
     color: "#0078d4",
     group: "",
   });
@@ -96,6 +119,68 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
     setTransferTarget(null);
   };
 
+  const hasSavedVncPassword = (conn: SSHConnection) =>
+    !!conn.vnc_password && conn.vnc_password.includes("*");
+
+  const saveVncSettings = async (connId: string, port: number, password: string) => {
+    const payload: { vnc_port: number; vnc_password?: string } = { vnc_port: port };
+    if (password.trim()) {
+      payload.vnc_password = password.trim();
+    }
+    await axios.put(`/api/ssh/connections/${connId}`, payload);
+    await loadConnections();
+  };
+
+  const resolveVncPassword = async (connId: string, entered: string): Promise<string | undefined> => {
+    if (entered.trim()) return entered.trim();
+    const res = await axios.get<{ connection: SSHConnection }>(
+      `/api/ssh/connections/${connId}`,
+      { params: { secrets: true } }
+    );
+    return res.data.connection.vnc_password || undefined;
+  };
+
+  const handleVNCSave = async () => {
+    if (!vncTarget) return;
+    try {
+      await saveVncSettings(vncTarget.id, vncPort, vncPassword);
+      setVncTarget(null);
+      setVncPassword("");
+    } catch (e) {
+      console.error("VNC save failed:", e);
+    }
+  };
+
+  const handleVNCConnect = async () => {
+    if (!vncTarget) return;
+    try {
+      if (vncPassword.trim()) {
+        await saveVncSettings(vncTarget.id, vncPort, vncPassword);
+      } else {
+        await axios.put(`/api/ssh/connections/${vncTarget.id}`, { vnc_port: vncPort });
+      }
+      const password = await resolveVncPassword(vncTarget.id, vncPassword);
+      onVNCConnect?.(vncTarget, vncPort, password);
+      setVncTarget(null);
+      setVncPort(5901);
+      setVncPassword("");
+    } catch (e) {
+      console.error("VNC connect failed:", e);
+    }
+  };
+
+  const handleOpenVNC = (conn: SSHConnection) => {
+    setShowForm(false);
+    setTransferTarget(null);
+    setVncTarget(conn);
+    setVncPort(conn.vnc_port ?? 5901);
+    setVncPassword("");
+  };
+
+  const handleCloseVNC = () => {
+    setVncTarget(null);
+  };
+
   const handleImportElecterm = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -127,6 +212,8 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
       auth_type: conn.auth_type,
       password: "",
       private_key_path: conn.private_key_path || "",
+      vnc_port: conn.vnc_port ?? 5901,
+      vnc_password: "",
       color: conn.color || "#0078d4",
       group: conn.group || "",
     });
@@ -136,9 +223,10 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
   const handleSave = async () => {
     try {
       if (editingId) {
-        // 编辑时密码框默认为空：未填写则不提交，避免覆盖已保存的密码
-        const { password, ...rest } = form;
-        const payload = password?.trim() ? form : rest;
+        const { password, vnc_password, ...rest } = form;
+        const payload: typeof form = { ...rest, password, vnc_password };
+        if (!password?.trim()) delete (payload as { password?: string }).password;
+        if (!vnc_password?.trim()) delete (payload as { vnc_password?: string }).vnc_password;
         await axios.put(`/api/ssh/connections/${editingId}`, payload);
       } else {
         await axios.post("/api/ssh/connections", form);
@@ -153,6 +241,8 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
         auth_type: "password",
         password: "",
         private_key_path: "",
+        vnc_port: 5901,
+        vnc_password: "",
         color: "#0078d4",
         group: "",
       });
@@ -187,6 +277,8 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
       auth_type: "password",
       password: "",
       private_key_path: "",
+      vnc_port: 5901,
+      vnc_password: "",
       color: "#0078d4",
       group: "",
     });
@@ -274,6 +366,14 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
                       {t("ssh.connect")}
                     </button>
                   )}
+                  <button
+                    className="ssh-item-btn vnc"
+                    onClick={() => handleOpenVNC(conn)}
+                    title={t("vnc.connect")}
+                    aria-label={t("vnc.connect")}
+                  >
+                    <VNCIcon />
+                  </button>
                   <button
                     className="ssh-item-btn transfer"
                     onClick={() => handleOpenTransfer(conn)}
@@ -390,6 +490,29 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
                   onChange={(e) => setForm({ ...form, color: e.target.value })}
                 />
               </div>
+
+              <div className="ssh-form-section">{t("vnc.settings")}</div>
+
+              <div className="ssh-form-row">
+                <label>{t("vnc.port")}</label>
+                <input
+                  type="number"
+                  value={form.vnc_port}
+                  onChange={(e) => setForm({ ...form, vnc_port: parseInt(e.target.value) || 5901 })}
+                  min={1}
+                  max={65535}
+                />
+              </div>
+
+              <div className="ssh-form-row">
+                <label>{t("vnc.password")}</label>
+                <input
+                  type="password"
+                  value={form.vnc_password}
+                  onChange={(e) => setForm({ ...form, vnc_password: e.target.value })}
+                  placeholder={editingId ? t("vnc.passwordPlaceholderEdit") : t("vnc.passwordPlaceholderNew")}
+                />
+              </div>
             </div>
 
             <div className="ssh-form-footer">
@@ -397,6 +520,52 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
                 {t("ssh.save")}
               </button>
               <button className="ssh-btn" onClick={() => setShowForm(false)}>
+                {t("ssh.cancel")}
+              </button>
+            </div>
+          </div>
+        )}
+        {vncTarget && (
+          <div className="ssh-form vnc-dialog">
+            <div className="ssh-form-header">
+              <h3>{t("vnc.connectTo")}{vncTarget.title || vncTarget.host}</h3>
+              <button className="ssh-form-close" onClick={handleCloseVNC} title={t("ssh.close")}>
+                ✕
+              </button>
+            </div>
+            <div className="ssh-form-body">
+              <div className="ssh-form-row">
+                <label>{t("vnc.port")}</label>
+                <input
+                  type="number"
+                  value={vncPort}
+                  onChange={(e) => setVncPort(parseInt(e.target.value) || 5901)}
+                  min={1}
+                  max={65535}
+                />
+              </div>
+              <div className="ssh-form-row">
+                <label>{t("vnc.password")}</label>
+                <input
+                  type="password"
+                  value={vncPassword}
+                  onChange={(e) => setVncPassword(e.target.value)}
+                  placeholder={
+                    vncTarget && hasSavedVncPassword(vncTarget)
+                      ? t("vnc.passwordPlaceholder")
+                      : t("vnc.passwordPlaceholderNew")
+                  }
+                />
+              </div>
+            </div>
+            <div className="ssh-form-footer">
+              <button className="ssh-btn primary" onClick={handleVNCConnect}>
+                {t("vnc.connect")}
+              </button>
+              <button className="ssh-btn" onClick={handleVNCSave}>
+                {t("vnc.save")}
+              </button>
+              <button className="ssh-btn" onClick={handleCloseVNC}>
                 {t("ssh.cancel")}
               </button>
             </div>

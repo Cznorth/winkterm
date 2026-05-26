@@ -196,6 +196,20 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     setActiveActivity("terminal");
   };
 
+  // 处理 VNC 连接 - 添加到第一个分区
+  const handleVNCConnect = (conn: { id: string; title: string; host: string; color?: string }, vncPort: number, vncPassword?: string) => {
+    const firstPaneId = panes[0].id;
+    addTab(firstPaneId, {
+      type: "vnc",
+      sshConnectionId: conn.id,
+      vncPort,
+      vncPassword,
+      title: `${conn.title || conn.host} (VNC:${vncPort})`,
+      color: conn.color,
+    });
+    setActiveActivity("terminal");
+  };
+
   return (
     <div className="layout-container">
       <TitleBar onToggleAI={handleToggleAI} aiVisible={showAI} />
@@ -257,7 +271,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
               aiVisible={showAI}
             />
           </div>
-          {activeActivity === "ssh" && <SSHPanel onConnect={handleSSHConnect} />}
+          {activeActivity === "ssh" && <SSHPanel onConnect={handleSSHConnect} onVNCConnect={handleVNCConnect} />}
           {activeActivity === "settings" && <SettingsPanel />}
         </div>
 

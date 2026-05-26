@@ -6,15 +6,17 @@ import type { Terminal } from "@xterm/xterm";
 export interface TabState {
   id: string;
   title: string;
-  type: "local" | "ssh";      // 连接类型
-  sshConnectionId?: string;   // SSH 连接 ID
-  color?: string;             // 标签颜色
+  type: "local" | "ssh" | "vnc";      // 连接类型
+  sshConnectionId?: string;           // SSH 连接 ID
+  vncPort?: number;                   // VNC 端口
+  vncPassword?: string;               // VNC 密码
+  color?: string;                     // 标签颜色
 }
 
 export interface UseTabsReturn {
   tabs: TabState[];
   activeTabId: string;
-  addTab: (options?: { type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => string;
+  addTab: (options?: { type?: "local" | "ssh" | "vnc"; sshConnectionId?: string; vncPort?: number; title?: string; color?: string }) => string;
   closeTab: (id: string) => void;
   switchTab: (id: string) => void;
   renameTab: (id: string, title: string) => void;
@@ -28,7 +30,7 @@ export function useTabs(): UseTabsReturn {
   ]);
   const [activeTabId, setActiveTabId] = useState<string>("tab-0");
 
-  const addTab = useCallback((options?: { type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => {
+  const addTab = useCallback((options?: { type?: "local" | "ssh" | "vnc"; sshConnectionId?: string; vncPort?: number; title?: string; color?: string }) => {
     tabIdCounter++;
     const newId = `tab-${tabIdCounter}`;
     const tabType = options?.type || "local";
@@ -38,6 +40,7 @@ export function useTabs(): UseTabsReturn {
       title: options?.title || `Terminal ${tabs.length + 1}`,
       type: tabType,
       sshConnectionId: options?.sshConnectionId,
+      vncPort: options?.vncPort,
       color: options?.color,
     };
 

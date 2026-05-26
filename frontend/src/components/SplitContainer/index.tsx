@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useEffect, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import type { Pane, LayoutType } from "@/hooks/usePanes";
 import type { TabState } from "@/hooks/useTabs";
 import type { TerminalPanelRef } from "@/components/Terminal";
@@ -8,12 +9,14 @@ import Terminal from "@/components/Terminal";
 import TabBar from "@/components/TabBar";
 import "./SplitContainer.css";
 
+const VNCViewer = dynamic(() => import("@/components/VNCViewer"), { ssr: false });
+
 interface SplitContainerProps {
   layout: LayoutType;
   panes: Pane[];
   onTabClick: (paneId: string, tabId: string) => void;
   onTabClose: (paneId: string, tabId: string) => void;
-  onTabAdd: (paneId: string, options?: { type?: "local" | "ssh"; sshConnectionId?: string; title?: string; color?: string }) => void;
+  onTabAdd: (paneId: string, options?: { type?: "local" | "ssh" | "vnc"; sshConnectionId?: string; vncPort?: number; title?: string; color?: string }) => void;
   onTabRename: (paneId: string, tabId: string, title: string) => void;
   onTabDrop: (fromPaneId: string, toPaneId: string, tabId: string) => void;
   onToggleAI?: () => void;
@@ -120,6 +123,8 @@ export default function SplitContainer({
     const paneSizes = new Map<string, { cols: number; rows: number }>();
 
     terminalRefs.current.forEach((ref, tabId) => {
+      const tab = allTabs.find((t) => t.id === tabId);
+      if (tab?.type === "vnc") return;
       const paneId = tabPaneMap.get(tabId);
       if (paneId && activeTabSet.has(tabId)) {
         ref.fit();
@@ -135,6 +140,8 @@ export default function SplitContainer({
     });
 
     terminalRefs.current.forEach((ref, tabId) => {
+      const tab = allTabs.find((t) => t.id === tabId);
+      if (tab?.type === "vnc") return;
       const paneId = tabPaneMap.get(tabId);
       if (paneId && !activeTabSet.has(tabId)) {
         const size = paneSizes.get(paneId);
@@ -143,7 +150,7 @@ export default function SplitContainer({
         }
       }
     });
-  }, [tabPaneMap, activeTabSet]);
+  }, [tabPaneMap, activeTabSet, allTabs]);
 
   // 位置更新 + fit 一体化
   const updateAndFit = useCallback(() => {
@@ -234,13 +241,23 @@ export default function SplitContainer({
             className="terminal-instance"
             style={{ display: "none" }}
           >
-            <Terminal
-              ref={setTerminalRef(tab.id)}
-              sessionId={tab.id}
-              isActive={activeTabSet.has(tab.id)}
-              type={tab.type}
-              sshConnectionId={tab.sshConnectionId}
-            />
+            {tab.type === "vnc" ? (
+              <VNCViewer
+                sessionId={tab.id}
+                sshConnectionId={tab.sshConnectionId!}
+                vncPort={tab.vncPort!}
+                vncPassword={tab.vncPassword}
+                isActive={activeTabSet.has(tab.id)}
+              />
+            ) : (
+              <Terminal
+                ref={setTerminalRef(tab.id)}
+                sessionId={tab.id}
+                isActive={activeTabSet.has(tab.id)}
+                type={tab.type as "local" | "ssh"}
+                sshConnectionId={tab.sshConnectionId}
+              />
+            )}
           </div>
         ))}
       </div>
