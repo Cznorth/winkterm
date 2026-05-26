@@ -211,6 +211,14 @@ export default function TabBar({
     setShowDropdown(false);
   };
 
+  /** 中键关闭（与浏览器标签一致；左键切换、右键不受影响） */
+  const handleTabMouseDown = (e: React.MouseEvent, tabId: string) => {
+    if (e.button !== 1 || tabs.length <= 1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onTabClose(tabId);
+  };
+
   return (
     <>
       <div
@@ -273,6 +281,7 @@ export default function TabBar({
             ref={tab.id === activeTabId ? activeTabRef : undefined}
             className={`tab ${tab.id === activeTabId ? "active" : ""}`}
             onClick={() => onTabClick(tab.id)}
+            onMouseDown={(e) => handleTabMouseDown(e, tab.id)}
             onDoubleClick={() => handleDoubleClick(tab)}
             draggable={!!onDragStart}
             onDragStart={(e) => onDragStart?.(e, tab)}

@@ -24,9 +24,28 @@ logging.basicConfig(
 
 # resize 事件格式: ESC[8;rows;colst
 _RESIZE_PATTERN = re.compile(r"\x1b\[8;(\d+);(\d+)t")
-# 终端查询类 ANSI(DA/DA2/DSR/Window report 等):回放时必须剥掉,
+# 终端查询类 ANSI(DA/DA2/DSR/Window report 等):发往 xterm 前必须剥掉,
 # 否则 xterm 解析后会再次回复 → shell 把回复当输入显示在 prompt。
-_TERM_QUERY_PATTERN = re.compile(r"\x1b\[[\?>=]?[\d;]*[cn]")
+# Windows ConPTY/PSReadLine 还常把 ESC 吃掉,只剩 [?1;2c 之类孤儿片段。
+_ESC = "\x1b"
+_TERM_QUERY_PATTERN = re.compile(re.escape(_ESC) + r"\[[\?>=]?[\d;]*[cn]")
+# PSReadLine 会把 DA 拆成带颜色的 [?1 + … + 2c,需连同中间的 SGR 一并剥掉。
+_ORPHAN_DA_PATTERN = re.compile(
+    r"\[\?(?:(?:" + re.escape(_ESC) + r"\[[0-9;]*m)|[0-9;])+c"
+)
+# xterm 初始化时发出的 DA/模式查询,不应写入 PTY(Windows shell 会误回显为 [?1;2c)。
+_XTERM_TERM_QUERY_INPUT = re.compile(
+    r"^" + re.escape(_ESC) + r"(?:\[[\?>=]?[\d;]*c|O)$"
+)
+
+
+def _sanitize_pty_output(text: str) -> str:
+    """剥离终端能力查询响应，避免在 xterm 中显示为可见文本。"""
+    text = _TERM_QUERY_PATTERN.sub("", text)
+    text = _ORPHAN_DA_PATTERN.sub("", text)
+    return text
+
+
 # 屏幕内容响应格式: ESC[?9999;screen;<encoded_content>h
 _SCREEN_CONTENT_PATTERN = re.compile(r"\x1b\[\?9999;screen;([^\x1b]*)h")
 # 激活会话: ESC[?9999;activateh
@@ -181,6 +200,9 @@ class TerminalWSHandler:
                         logger.warning(f"[INPUT] pty 未启动,丢弃输入 len={len(data)}")
                         continue
                     logger.debug(f"[INPUT] len={len(data)} data={_truncate(data)}")
+                    if _XTERM_TERM_QUERY_INPUT.fullmatch(data):
+                        logger.debug("[INPUT] 忽略 xterm 终端能力查询")
+                        continue
                     self.pty.write(data.encode("utf-8"))
                 await self.hookinput(data) # 自定义操作
 
@@ -363,6 +385,7 @@ class TerminalWSHandler:
         asyncio.create_task(self._send(text))
 
     async def _send(self, text: str) -> None:
+        text = _sanitize_pty_output(text)
         try:
             await self.ws.send_text(text)
         except Exception as e:

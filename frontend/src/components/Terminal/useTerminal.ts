@@ -9,6 +9,24 @@ import axios from "@/lib/axios";
 const DEBUG = process.env.NODE_ENV === "development";
 const SCREEN_SYNC_DELAY = 200; // 防抖延迟（毫秒）
 
+/** 在用户手势（keydown）内同步写入剪贴板；async clipboard API 失败会被 silent catch */
+function syncCopyText(text: string): boolean {
+  const el = document.createElement("textarea");
+  el.value = text;
+  el.setAttribute("readonly", "");
+  el.style.cssText = "position:fixed;left:-9999px;opacity:0";
+  document.body.appendChild(el);
+  el.select();
+  el.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } finally {
+    document.body.removeChild(el);
+  }
+  return ok;
+}
+
 export function useTerminal(
   containerRef: React.RefObject<HTMLDivElement | null>,
   sessionId: string = "default",
@@ -83,6 +101,26 @@ export function useTerminal(
     }));
     term.open(containerRef.current);
     fitAddon.fit();
+
+    // 有选区时 Ctrl/Cmd+C 复制到剪贴板，不发送 SIGINT (\x03)
+    term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      if (event.type !== "keydown") return true;
+      const isCopyKey =
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        (event.key === "c" || event.key === "C" || event.code === "KeyC");
+      if (!isCopyKey) return true;
+
+      const selection = term.getSelection();
+      if (!selection) return true;
+
+      event.preventDefault();
+      if (!syncCopyText(selection) && navigator.clipboard?.writeText) {
+        void navigator.clipboard.writeText(selection).catch(() => {});
+      }
+      return false;
+    });
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
