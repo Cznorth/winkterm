@@ -75,31 +75,41 @@ def _clean_terminal_line(line: str) -> str:
     return clean.strip()
 
 
-def _extract_hash_command_from_screen(screen: str) -> str | None:
-    """从屏幕内容解析 # AI 命令,未命中返回 None。"""
-    if not screen:
-        return None
-
-    last_line = None
-    for line in reversed(screen.split("\n")):
-        stripped = line.strip()
-        if stripped:
-            last_line = stripped
-            break
-    if not last_line:
-        return None
-
-    clean_line = _clean_terminal_line(last_line)
+def _line_to_hash_command(clean_line: str) -> str | None:
     if not clean_line:
         return None
-
     # 场景1: "# 你好" - # 是第一个字符
     # 场景2: "root@host:~# # 你好" - bash root prompt (#) 后跟 # 命令
     # 场景3: "PS D:\path> # 你好" - PowerShell prompt (>) 后跟 # 命令
     # 场景4: "user@host:~$ # 你好" - bash user prompt ($) 后跟 # 命令
-    if clean_line.startswith("#") or re.search(r"[#\$>%]\s*#", clean_line):
+    if clean_line.startswith("#") or re.search(r"[#\$>%]\s*#\s*\S", clean_line):
         command = clean_line[clean_line.rfind("#") + 1 :].strip()
         return command or None
+    return None
+
+
+def _extract_hash_command_from_screen(screen: str, lookback: int = 6) -> str | None:
+    """从屏幕末尾若干行扫描 # AI 命令。
+
+    bash 把 `# xxx` 当注释,Enter 后新 prompt 占据最后一行,# 命令在上一行;
+    SSH 远端回显延迟也会让 # 命令出现在非最末行。所以扫 lookback 行,任一行
+    命中即返回。
+    """
+    if not screen:
+        return None
+
+    scanned = 0
+    for line in reversed(screen.split("\n")):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        clean = _clean_terminal_line(stripped)
+        cmd = _line_to_hash_command(clean)
+        if cmd:
+            return cmd
+        scanned += 1
+        if scanned >= lookback:
+            break
     return None
 
 
@@ -124,6 +134,7 @@ class TerminalWSHandler:
         self._msg_count = 0
         self._bytes_sent = 0
         self._bytes_received = 0
+        self._last_hash_command: str | None = None
         client = websocket.client or "unknown"
         logger.info(f"[INIT] 客户端连接: {client}, session_id: {session_id}, type: {terminal_type}")
 
@@ -304,6 +315,12 @@ class TerminalWSHandler:
         command = _extract_hash_command_from_screen(screen)
         if not command:
             return
+
+        # dedupe: lookback 扫历史行,Enter 后 # 命令仍在屏内 → 防止下一次 Enter 重复触发
+        if command == self._last_hash_command:
+            logger.debug(f"[COMMAND] 命令与上次相同,跳过: {command}")
+            return
+        self._last_hash_command = command
 
         logger.info(f"[COMMAND] 解析到 AI 命令: {command}")
         await self.agent_invoke(command)
