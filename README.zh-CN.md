@@ -1,4 +1,10 @@
 <div align="center">
+
+[English version](README.md)
+
+</div>
+
+<div align="center">
   <img src="assets/logo.svg" alt="WinkTerm Logo" width="120"/>
   <h1>WinkTerm</h1>
   <p><strong>与你共享终端会话的 AI</strong></p>
@@ -60,11 +66,15 @@ AI 直接写入你的终端输入行。你始终掌控一切 — 按回车执行
 - **共享 PTY 会话** — AI 和用户在同一个终端进程中操作。无需复制粘贴，没有脱离上下文的"运行这个命令"。
 - **终端内对话** — 在 shell 提示符处直接输入 `#` 加你的问题，无需切换窗口。
 - **侧边栏 AI 面板** — 完整的对话界面，支持多对话标签、AI 自动生成标题，以及 chat/craft 模式切换。
+- **对话历史持久化** — 会话写入 `~/.winkterm/chat_history.json`，页面加载时自动恢复；WS 重连与后端重启不丢记录。
+- **流式输出可续传** — 回复过程中刷新或重连不会丢已生成内容；服务端跟踪进行中的流并向新 WS 回放。
 - **流式排队与续接建议** — AI 回复过程中可排队后续消息（随时打断或移除队列项），每次回答结束后给出一键续接建议 chips。
 - **外部 Agent 接入** — 带鉴权的 HTTP 接口，外部 agent 可通过可安装的 skill 操作你的终端、SSH 与文件传输（详见下方 Agent API 亮点）。
-- **Agent 实时监控面板** — 内置只读 UI 查看 agent 正在操作的所有终端 + 实时操作事件流，活动栏一键打开。
+- **Agent 终端即主界面标签** — Agent 创建的会话以普通终端 tab 展示（不再有独立监控面板）。`GET /api/sessions/stream` 同步标签栏；WS 断开不再关闭 PTY，刷新后回放缓冲输出。
 - **Web 远程访问鉴权** — 远程网页访问由访问密钥保护，本机桌面客户端免鉴权。
-- **SSH 远程连接** — 连接远程服务器，内置文件传输功能。
+- **SSH 远程连接** — 连接远程服务器，内置文件传输功能。编辑连接时密码留空则保留已保存的凭据。
+- **配置导出与安全保存** — 设置页可导出完整 `config.json`（`GET /api/settings/export`）。保存时密码/API Key 留空不会清空已有密钥。
+- **终端稳定性** — PTY 尺寸防抖修复 PowerShell prompt 截断；Agent 批量建 tab 不再空显示；WS 静默重连（不写断开提示行，避免 PSReadLine 光标错乱）。
 - **国际化** — 内置中英文界面，首次启动时选择语言。
 - **多模型支持** — 自带 LLM。OpenAI、Anthropic、Ollama 或任何兼容 OpenAI 协议的端点。
 - **Docker 与桌面应用** — 通过 `docker compose up` 一键部署，或打包为独立桌面应用（Windows/macOS）。
@@ -85,6 +95,9 @@ WinkTerm 不只是给人用的终端，它的 HTTP Agent API 是为 AI agent（C
 | `GET /api/agent/terminals/{id}/snapshot?pattern=...` | **服务端 grep**：在 256KB 缓冲里按正则匹配，省下载。 |
 | `GET /api/agent/terminals/{id}/stream` | **SSE 实时输出流**：长命令监控 / `tail -f` 杀手锏，断线 `since` 续传。 |
 | `GET /api/agent/events/stream` | **操作事件流**：每个 agent 动作都记录到环形缓冲（无持久化），SSE 实时推送。 |
+| `GET /api/sessions` / `GET /api/sessions/stream` | **会话生命周期**：列出用户可见终端；SSE 推送 `session_created` / `session_closed`，与前端标签栏同步。 |
+| `GET /api/chat/conversations` | **对话持久化**：列出已保存的侧边栏会话（同时落盘 `~/.winkterm/chat_history.json`）。 |
+| `GET /api/settings/export` | **配置备份**：下载完整 `config.json`（本机或有效 `X-Access-Key`）。 |
 | `GET /api/agent/handshake` | **零配置接入**：localhost 或带 web 鉴权 key 的远程客户端直接拿 token，agent 不必每次问用户。 |
 
 ### 关键设计
@@ -104,19 +117,9 @@ curl -s http://<your-winkterm-host>:8000/api/agent/skill.md > SKILL.md
 
 把 SKILL.md 放到 Claude Code / Cursor / 任意 agent 工具的 skills 目录，AI 立即知道如何用本 API。Skill 自带版本号，agent 每次会话自动检查更新。
 
-### 实时监控面板
+### 统一 Session 池
 
-前端活动栏新图标 → 三栏布局：
-
-```
-┌────────────────┬──────────────────┬────────────────┐
-│ Agent 终端列表  │ 选中终端实时输出  │ 操作事件流      │
-│ name/host:port │ (SSE 推流)        │ (按 action 着色)│
-│ cwd/idle/size  │ 自动滚到底        │ create/exec/   │
-└────────────────┴──────────────────┴────────────────┘
-```
-
-只读查看，不影响 agent 正常操作。无持久化，纯实时。
+内部 craft agent 与外部 HTTP API 共用同一终端 session 池和工具集（`list` / `create` / `close` / `snapshot` / `input` / `exec` / `ssh_run`）。Agent 创建的终端对用户可见，直接在主界面以普通 tab 打开。订阅 `/api/sessions/stream` 可实时同步标签；`/api/agent/events/stream` 提供按操作类型着色的审计事件流。
 
 ### 实战案例
 
@@ -161,6 +164,8 @@ cp .env.example .env
 docker compose up -d
 ```
 
+`docker-compose.yml` 将 `winkterm-data` 卷挂载到 `/root/.winkterm`，配置、对话历史、SSH 凭据在容器重建后仍保留；镜像内已打包可安装的 agent skill（拉取 `skill.md` 不会 404）。
+
 然后打开 **http://localhost:3000**
 
 ### 桌面应用
@@ -168,7 +173,7 @@ docker compose up -d
 从 [Releases 页面](https://github.com/Cznorth/winkterm/releases) 下载最新版本。
 
 - **Windows**：`.exe` 安装包
-- **macOS**：`.app` 安装包（Intel 和 Apple Silicon）
+- **macOS**：`.app` 安装包（Intel 和 Apple Silicon）。桌面版先启动内嵌后端再打开 WebView，静态资源不会误带开发环境的 `localhost:8000`。
 
 ---
 
@@ -217,7 +222,7 @@ ws_handler.py
 |-----|------|
 | 后端 | Python + FastAPI + LangGraph + LangChain |
 | 前端 | Next.js 14 + TypeScript + xterm.js |
-| 无数据库 | 配置持久化到 `~/.winkterm/config.json` |
+| 无数据库 | `~/.winkterm/config.json` + `chat_history.json` 落盘 |
 | 部署 | Docker Compose / PyInstaller 桌面应用 |
 
 ---
@@ -249,6 +254,10 @@ npm run dev
 ```
 
 打开 http://localhost:3000
+
+### 前端自测
+
+在 **Cursor** 中优先用内置浏览器 MCP 访问 `http://localhost:3000`（点击 `.xterm-screen`，用 CDP 读 `.xterm-rows`）。其他环境用 `puppeteer-core` + 系统 Chrome，完整冒烟清单与 agent HTTP curl 示例见 [CLAUDE.md](CLAUDE.md)。
 
 ### API 类型（orval）
 

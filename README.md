@@ -66,11 +66,15 @@ The AI writes directly into your terminal's input line. You stay in control — 
 - **Shared PTY Session** — AI and user operate in the same terminal process. No copy-paste, no "run this command" without context.
 - **In-Terminal Chat** — Type `#` followed by your question, right where your shell prompt is. No need to alt-tab.
 - **Sidebar AI Panel** — Full conversational interface with multi-conversation tabs, AI-generated titles, and chat/craft mode switching.
+- **Persistent Chat History** — Conversations are saved to `~/.winkterm/chat_history.json` and restored on page load; survives WebSocket reconnects and backend restarts.
+- **Streaming Resume** — Refresh or reconnect mid-response without losing in-flight tokens; active streams are tracked server-side and replayed to new WebSocket clients.
 - **Streaming Queue & Suggestions** — Queue follow-up messages while the AI is responding (interrupt or drop queued items anytime), and get one-click follow-up suggestion chips after each answer.
 - **External Agent API** — An authenticated HTTP interface lets external agents drive your terminal, SSH, and file transfers via an installable skill (see Agent API highlights below).
-- **Live Agent Monitoring Panel** — Read-only UI showing every terminal the agent is operating on plus a real-time event feed. One click in the activity bar.
+- **Agent Terminals in Your Tabs** — Agent-created sessions appear as normal terminal tabs (no separate monitor panel). `GET /api/sessions/stream` keeps the UI in sync; WebSocket disconnect no longer kills PTY sessions — refresh replays buffered output.
 - **Remote Access Auth** — Web access is protected by an access key; the local desktop client needs no authentication.
-- **SSH Remote Connections** — Connect to remote servers with built-in file transfer.
+- **SSH Remote Connections** — Connect to remote servers with built-in file transfer. Editing a connection without re-entering the password keeps the saved credential.
+- **Settings Export & Secret-safe Saves** — Export `config.json` from Settings (`GET /api/settings/export`). Blank password or API key fields on save do not wipe stored secrets.
+- **Reliable Terminals** — Debounced PTY sizing fixes truncated PowerShell prompts; agent multi-tab creation no longer leaves empty panes; WebSocket reconnect is silent (no disconnect banner that breaks PSReadLine).
 - **Internationalization** — Built-in English / Chinese UI, with language selection on first launch.
 - **Multi-Model Support** — Bring your own LLM. OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint.
 - **Docker & Desktop** — Deploy instantly with `docker compose up` or package as a standalone desktop app (Windows/macOS).
@@ -91,6 +95,9 @@ WinkTerm's HTTP Agent API is designed for AI agents (Claude Code, Cursor, etc.) 
 | `GET /api/agent/terminals/{id}/snapshot?pattern=...` | **Server-side grep**: regex-match within the 256KB rolling buffer. Save bandwidth. |
 | `GET /api/agent/terminals/{id}/stream` | **SSE live output**: killer feature for long-running commands / `tail -f`. Resume with `since` after disconnect. |
 | `GET /api/agent/events/stream` | **Operation event feed**: every agent action is pushed to a ring buffer (no persistence), broadcast via SSE. |
+| `GET /api/sessions` / `GET /api/sessions/stream` | **Session lifecycle**: list user-visible terminals; SSE pushes `session_created` / `session_closed` so the web UI tab bar stays in sync with agent activity. |
+| `GET /api/chat/conversations` | **Chat persistence**: list saved sidebar conversations (also written to `~/.winkterm/chat_history.json`). |
+| `GET /api/settings/export` | **Config backup**: download full `config.json` (localhost or valid `X-Access-Key`). |
 | `GET /api/agent/handshake` | **Zero-config onboarding**: localhost or web-auth'd clients get the token automatically. The agent doesn't need to ask the user every session. |
 
 ### Key Design Choices
@@ -110,19 +117,9 @@ curl -s http://<your-winkterm-host>:8000/api/agent/skill.md > SKILL.md
 
 Drop SKILL.md into Claude Code / Cursor / any agent tool's skills directory and the AI immediately knows how to drive the API. The skill is versioned — agents check for updates each session.
 
-### Live Monitoring Panel
+### Unified Session Pool
 
-A new icon in the activity bar opens a three-column view:
-
-```
-┌────────────────┬──────────────────┬────────────────┐
-│ Agent terminals│ Selected output  │ Event feed     │
-│ name/host:port │ (SSE push)       │ (color-coded   │
-│ cwd/idle/size  │ auto-scrolling   │  by action)    │
-└────────────────┴──────────────────┴────────────────┘
-```
-
-Read-only viewer, doesn't interfere with agent operations. No persistence, pure real-time.
+Internal craft agents and the external HTTP API share the same terminal session pool and tool surface (`list` / `create` / `close` / `snapshot` / `input` / `exec` / `ssh_run`). Agent-created terminals are **user-visible** and open as regular tabs in the main UI. Subscribe to `/api/sessions/stream` for live tab sync, or `/api/agent/events/stream` for a color-coded operation audit log.
 
 ### Case Study
 
@@ -167,6 +164,8 @@ cp .env.example .env
 docker compose up -d
 ```
 
+The compose file mounts a `winkterm-data` volume at `/root/.winkterm`, so config, chat history, and SSH credentials survive container rebuilds. The image also bundles the installable agent skill (no 404 on `skill.md` fetch).
+
 Then open **http://localhost:3000**
 
 ### Desktop App
@@ -174,7 +173,7 @@ Then open **http://localhost:3000**
 Download the latest release for your platform from the [Releases page](https://github.com/Cznorth/winkterm/releases).
 
 - **Windows**: `.exe` installer
-- **macOS**: `.app` bundle (Intel & Apple Silicon)
+- **macOS**: `.app` bundle (Intel & Apple Silicon). The desktop build starts the embedded backend before opening the WebView and avoids baking dev-only `localhost:8000` into static assets.
 
 ---
 
@@ -223,7 +222,7 @@ ws_handler.py
 |-------|-----------|
 | Backend | Python + FastAPI + LangGraph + LangChain |
 | Frontend | Next.js 14 + TypeScript + xterm.js |
-| Database-less | Config persisted to `~/.winkterm/config.json` |
+| Database-less | `~/.winkterm/config.json` + `chat_history.json` on disk |
 | Deployment | Docker Compose / PyInstaller desktop app |
 
 ---
@@ -255,6 +254,10 @@ npm run dev
 ```
 
 Open http://localhost:3000
+
+### Frontend verification
+
+In **Cursor**, use the built-in browser MCP against `http://localhost:3000` (click `.xterm-screen`, read `.xterm-rows` via CDP). Elsewhere, use `puppeteer-core` with system Chrome — see [CLAUDE.md](CLAUDE.md) for the full smoke checklist and agent HTTP curl recipes.
 
 ### API Types (orval)
 
