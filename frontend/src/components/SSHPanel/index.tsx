@@ -135,15 +135,13 @@ export default function SSHPanel({ onConnect }: SSHPanelProps) {
 
   const handleSave = async () => {
     try {
-      const payload = { ...form };
       if (editingId) {
         // 编辑时密码框默认为空：未填写则不提交，避免覆盖已保存的密码
-        if (!payload.password?.trim()) {
-          delete payload.password;
-        }
+        const { password, ...rest } = form;
+        const payload = password?.trim() ? form : rest;
         await axios.put(`/api/ssh/connections/${editingId}`, payload);
       } else {
-        await axios.post("/api/ssh/connections", payload);
+        await axios.post("/api/ssh/connections", form);
       }
       setShowForm(false);
       setEditingId(null);
