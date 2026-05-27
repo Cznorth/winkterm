@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { TERMINAL_SEQUENCES, altChar, ctrlChar } from "./mobileKeys";
 import "./MobileTerminalKeys.css";
 
@@ -16,6 +17,7 @@ const EXTENDED_KEYS = ["-", "_", "/", "\\", "|", "`", "~", "#", "$", "&", "*", "
 
 export default function MobileTerminalKeys({ onSend, visible = true }: MobileTerminalKeysProps) {
   const { t } = useI18n();
+  useKeyboardInset(visible);
   const [modifier, setModifier] = useState<Modifier>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
