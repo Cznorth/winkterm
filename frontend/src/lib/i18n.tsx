@@ -33,6 +33,15 @@ const translations = {
   "tabbar.switchTab": { zh: "切换标签页", en: "Switch tab" },
   "tabbar.tabs": { zh: "标签页", en: "Tabs" },
 
+  // === Terminal (mobile keys) ===
+  "terminal.mobileKeys": { zh: "终端操作键", en: "Terminal keys" },
+  "terminal.moreKeys": { zh: "更多符号", en: "More symbols" },
+  "terminal.keyUp": { zh: "上方向键", en: "Up arrow" },
+  "terminal.keyDown": { zh: "下方向键", en: "Down arrow" },
+  "terminal.keyLeft": { zh: "左方向键", en: "Left arrow" },
+  "terminal.keyRight": { zh: "右方向键", en: "Right arrow" },
+  "terminal.keyTabAlt": { zh: "Tab", en: "Tab" },
+
   // === Settings ===
   "settings.title": { zh: "设置", en: "Settings" },
   "settings.apiConfig": { zh: "API 配置", en: "API Configuration" },

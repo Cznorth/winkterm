@@ -16,6 +16,7 @@ interface TerminalPanelProps {
 export interface TerminalPanelRef {
   fit: () => void;
   fitWithSize: (cols: number, rows: number) => void;
+  sendInput: (data: string) => void;
 }
 
 const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
@@ -26,7 +27,7 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerReady, setContainerReady] = useState(false);
     const { resolvedTheme } = useTheme();
-    const { init, term, fit, fitWithSize } = useTerminal(
+    const { init, term, fit, fitWithSize, sendInput } = useTerminal(
       containerRef,
       sessionId,
       isActive,
@@ -37,7 +38,7 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     );
 
     // 暴露 fit 方法给父组件
-    useImperativeHandle(ref, () => ({ fit, fitWithSize }), [fit, fitWithSize]);
+    useImperativeHandle(ref, () => ({ fit, fitWithSize, sendInput }), [fit, fitWithSize, sendInput]);
 
     // 使用 ResizeObserver 监听容器尺寸 + 必要时重试 init
     useEffect(() => {

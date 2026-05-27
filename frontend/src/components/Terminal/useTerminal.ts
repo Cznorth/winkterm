@@ -331,5 +331,9 @@ export function useTerminal(
     }
   }, [sessionId]);
 
-  return { init, term: termRef, fit, fitWithSize };
+  const sendInput = useCallback((data: string) => {
+    termRef.current?.input(data);
+  }, []);
+
+  return { init, term: termRef, fit, fitWithSize, sendInput };
 }
