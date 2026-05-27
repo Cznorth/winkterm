@@ -46,14 +46,18 @@
 
 ![WinkTerm Demo](assets/demo.gif)
 
+*GIF — real SSH session: a mistaken command (`ipconfig`), then `# what's wrong`; the AI answers in the same PTY and can pre-fill the fix.*
+
 [▶️ Watch Promo Video](assets/promo.mp4)
 
+*Promo — single-column terminal with multiple SSH tabs; Craft orchestrates checks across hosts (`list_ssh_connections`, `terminal_exec`, `ssh_run`).*
+
 ```
-$ # why is nginx returning 502?
-[WinkTerm] Let me check. Looking at nginx error logs...
-[WinkTerm] I can see the upstream is unreachable. Try this:
-$ curl -I http://localhost:3000█   ← AI wrote this. Press Enter to run.
-                                       Backspace to edit. Ctrl+C to cancel.
+$ ipconfig
+Command 'ipconfig' not found, did you mean: ...
+$ # what's wrong
+[WinkTerm] `ipconfig` is a Windows command — on Linux use `ip addr` (or `ifconfig`).
+$ ip addr█   ← AI wrote this. Press Enter to run. Backspace to edit. Ctrl+C to cancel.
 ```
 
 **This is not a ChatGPT wrapper pasted into a terminal.**
@@ -258,6 +262,19 @@ Open http://localhost:3000
 ### Frontend verification
 
 In **Cursor**, use the built-in browser MCP against `http://localhost:3000` (click `.xterm-screen`, read `.xterm-rows` via CDP). Elsewhere, use `puppeteer-core` with system Chrome — see [CLAUDE.md](CLAUDE.md) for the full smoke checklist and agent HTTP curl recipes.
+
+### README media (maintainers)
+
+Requires local frontend/backend, system Chrome, and `ffmpeg`. Uses your `~/.winkterm/config.json` (theme, language, SSH connections).
+
+```bash
+cd scripts && npm install
+node record-readme-normal.mjs   # → assets/demo.gif
+node record-promo-normal.mjs    # → assets/promo.mp4
+node capture-og-image.mjs       # → assets/og-image-social.png (from demo final frame)
+```
+
+Slow down an existing GIF without re-recording: `REBUILD_GIF_ONLY=1 GIF_FRAME_SEC=1.4 node record-readme-normal.mjs`
 
 ### API Types (orval)
 
