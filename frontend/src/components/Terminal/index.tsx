@@ -10,6 +10,7 @@ interface TerminalPanelProps {
   isActive?: boolean;
   type?: "local" | "ssh";
   sshConnectionId?: string;
+  isCompact?: boolean;
 }
 
 export interface TerminalPanelRef {
@@ -19,13 +20,21 @@ export interface TerminalPanelRef {
 
 const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
   function TerminalPanel(
-    { sessionId = "default", isActive = true, type = "local", sshConnectionId },
+    { sessionId = "default", isActive = true, type = "local", sshConnectionId, isCompact = false },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerReady, setContainerReady] = useState(false);
     const { resolvedTheme } = useTheme();
-    const { init, term, fit, fitWithSize } = useTerminal(containerRef, sessionId, isActive, type, sshConnectionId, resolvedTheme);
+    const { init, term, fit, fitWithSize } = useTerminal(
+      containerRef,
+      sessionId,
+      isActive,
+      type,
+      sshConnectionId,
+      resolvedTheme,
+      isCompact
+    );
 
     // 暴露 fit 方法给父组件
     useImperativeHandle(ref, () => ({ fit, fitWithSize }), [fit, fitWithSize]);
@@ -72,7 +81,7 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     return (
       <div
         ref={containerRef}
-        className="terminal-container"
+        className={`terminal-container${isCompact ? " terminal-container-compact" : ""}`}
         style={{ width: "100%", height: "100%" }}
       />
     );

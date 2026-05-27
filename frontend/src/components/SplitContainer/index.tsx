@@ -291,6 +291,7 @@ export default function SplitContainer({
                 isActive={activeTabSet.has(tab.id)}
                 type={tab.type as "local" | "ssh"}
                 sshConnectionId={tab.sshConnectionId}
+                isCompact={isCompact}
               />
             )}
           </div>

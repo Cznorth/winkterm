@@ -9,6 +9,21 @@ import axios from "@/lib/axios";
 const DEBUG = process.env.NODE_ENV === "development";
 const SCREEN_SYNC_DELAY = 200; // 防抖延迟（毫秒）
 
+const DESKTOP_FONT_SIZE = 14;
+const MOBILE_FONT_SIZE = 11;
+const DESKTOP_LINE_HEIGHT = 1.4;
+const MOBILE_LINE_HEIGHT = 1.15;
+
+function getTerminalFontSettings(isCompact: boolean) {
+  const mobile =
+    isCompact ||
+    (typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches);
+  return {
+    fontSize: mobile ? MOBILE_FONT_SIZE : DESKTOP_FONT_SIZE,
+    lineHeight: mobile ? MOBILE_LINE_HEIGHT : DESKTOP_LINE_HEIGHT,
+  };
+}
+
 /** 在用户手势（keydown）内同步写入剪贴板；async clipboard API 失败会被 silent catch */
 function syncCopyText(text: string): boolean {
   const el = document.createElement("textarea");
@@ -33,7 +48,8 @@ export function useTerminal(
   isActive: boolean = true,
   terminalType: "local" | "ssh" = "local",
   sshConnectionId?: string,
-  resolvedTheme: "dark" | "light" = "dark"
+  resolvedTheme: "dark" | "light" = "dark",
+  isCompact: boolean = false
 ) {
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -78,11 +94,12 @@ export function useTerminal(
       return;
     }
 
+    const { fontSize, lineHeight } = getTerminalFontSettings(isCompact);
     const term = new Terminal({
       theme: resolvedTheme === "light" ? xtermLightTheme : xtermDarkTheme,
       fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace",
-      fontSize: 14,
-      lineHeight: 1.4,
+      fontSize,
+      lineHeight,
       cursorBlink: true,
       cursorStyle: "bar",
       allowProposedApi: true,
@@ -191,7 +208,32 @@ export function useTerminal(
     ws.connect();
 
     DEBUG && console.log(`[useTerminal] 初始化完成, sessionId=${sessionId}, type=${terminalType}, cols=`, cols, "rows=", rows);
-  }, [containerRef, sessionId, terminalType, sshConnectionId]);
+  }, [containerRef, sessionId, terminalType, sshConnectionId, isCompact, resolvedTheme]);
+
+  // 手机端/桌面切换时更新字号并 refit
+  useEffect(() => {
+    const term = termRef.current;
+    const fitAddon = fitAddonRef.current;
+    const el = containerRef.current;
+    if (!term || !fitAddon || !el) return;
+
+    const { fontSize, lineHeight } = getTerminalFontSettings(isCompact);
+    if (term.options.fontSize === fontSize && term.options.lineHeight === lineHeight) return;
+
+    term.options.fontSize = fontSize;
+    term.options.lineHeight = lineHeight;
+
+    if (el.clientWidth < 100 || el.clientHeight < 50) return;
+    try {
+      fitAddon.fit();
+      const { cols, rows } = term;
+      if (cols >= 20 && rows >= 5) {
+        wsRef.current.sendResize(cols, rows);
+      }
+    } catch {
+      // ignore fit errors during transitions
+    }
+  }, [isCompact, containerRef]);
 
   // 主题变化时更新 xterm 主题
   useEffect(() => {
