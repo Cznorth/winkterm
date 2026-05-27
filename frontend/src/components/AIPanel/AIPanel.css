@@ -1215,12 +1215,24 @@
   color: var(--fg-primary);
 }
 
+/* 手机/平板：触发器在工具栏右侧，弹层向右对齐并向左展开，避免溢出视口 */
+.layout-container.compact .ctx-popup,
+.layout-container.tablet:not(.desktop-app) .ctx-popup {
+  right: 0;
+  left: auto;
+  min-width: 0;
+  width: min(280px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+}
+
 @media (max-width: 768px) {
   .ctx-popup {
     min-width: 0;
-    width: min(280px, calc(100vw - 32px));
-    right: auto;
-    left: 0;
+    width: min(280px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    right: 0;
+    left: auto;
   }
 
   .ai-tab {
