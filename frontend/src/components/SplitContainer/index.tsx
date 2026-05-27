@@ -6,6 +6,7 @@ import type { Pane, LayoutType } from "@/hooks/usePanes";
 import type { TabState } from "@/hooks/useTabs";
 import type { TerminalPanelRef } from "@/components/Terminal";
 import Terminal from "@/components/Terminal";
+import MobileTerminalKeys from "@/components/Terminal/MobileTerminalKeys";
 import TabBar from "@/components/TabBar";
 import "./SplitContainer.css";
 
@@ -15,6 +16,7 @@ interface SplitContainerProps {
   layout: LayoutType;
   panes: Pane[];
   isCompact?: boolean;
+  showMobileKeys?: boolean;
   onTabClick: (paneId: string, tabId: string) => void;
   onTabClose: (paneId: string, tabId: string) => void;
   onTabAdd: (paneId: string, options?: { type?: "local" | "ssh" | "vnc"; sshConnectionId?: string; vncPort?: number; title?: string; color?: string }) => void;
@@ -28,6 +30,7 @@ export default function SplitContainer({
   layout,
   panes,
   isCompact = false,
+  showMobileKeys = false,
   onTabClick,
   onTabClose,
   onTabAdd,
@@ -63,6 +66,25 @@ export default function SplitContainer({
     });
     return Array.from(tabMap.values());
   }, [panes]);
+
+  // 当前激活的 shell 终端 tab（非 VNC）
+  const activeShellTabId = useMemo(() => {
+    for (const pane of panes) {
+      const tab = pane.tabs.find((t) => t.id === pane.activeTabId);
+      if (tab && (tab.type === "local" || tab.type === "ssh")) {
+        return tab.id;
+      }
+    }
+    return null;
+  }, [panes]);
+
+  const handleMobileKeySend = useCallback(
+    (data: string) => {
+      if (!activeShellTabId) return;
+      terminalRefs.current.get(activeShellTabId)?.sendInput(data);
+    },
+    [activeShellTabId]
+  );
 
   // 构建 tabId -> 激活状态的映射
   const activeTabSet = useMemo(() => {
@@ -120,15 +142,18 @@ export default function SplitContainer({
 
       if (paneRect && paneRect.width > 0 && paneRect.height > 0 && activeTabSet.has(tabId)) {
         el.style.display = "block";
-        if (isCompact && tab?.type === "vnc") {
+        const isVncTab = tab?.type === "vnc";
+        const reserveMobileKeys = isCompact && !isVncTab && showMobileKeys;
+        const mobileBottom = `calc(var(--mobile-nav-height) + var(--safe-bottom)${reserveMobileKeys ? " + var(--mobile-keys-height)" : ""})`;
+        if (isCompact && (isVncTab || showMobileKeys)) {
           el.style.position = "fixed";
           el.style.left = "0";
           el.style.right = "0";
           el.style.width = "100%";
           el.style.top = `${paneRect.top + tabBarHeight}px`;
-          el.style.bottom = `calc(var(--mobile-nav-height) + var(--safe-bottom))`;
+          el.style.bottom = mobileBottom;
           el.style.height = "auto";
-          el.style.zIndex = "40";
+          el.style.zIndex = isVncTab ? "40" : "";
         } else {
           el.style.position = "absolute";
           el.style.left = `${paneRect.left - containerRect.left}px`;
@@ -143,7 +168,7 @@ export default function SplitContainer({
         el.style.display = "none";
       }
     });
-  }, [tabPaneMap, activeTabSet, allTabs, isCompact]);
+  }, [tabPaneMap, activeTabSet, allTabs, isCompact, showMobileKeys]);
 
   // fit 所有终端（同步，调用前需确保 DOM 已更新）
   const fitAllTerminals = useCallback(() => {
@@ -291,11 +316,16 @@ export default function SplitContainer({
                 isActive={activeTabSet.has(tab.id)}
                 type={tab.type as "local" | "ssh"}
                 sshConnectionId={tab.sshConnectionId}
+                isCompact={isCompact}
               />
             )}
           </div>
         ))}
       </div>
+
+      {isCompact && showMobileKeys && activeShellTabId && (
+        <MobileTerminalKeys onSend={handleMobileKeySend} />
+      )}
     </div>
   );
 }

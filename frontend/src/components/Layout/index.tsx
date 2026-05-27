@@ -314,6 +314,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
               layout={effectiveLayout}
               panes={effectivePanes}
               isCompact={isCompact}
+              showMobileKeys={isCompact && activeActivity === "terminal"}
               onTabClick={switchTab}
               onTabClose={handleTabClose}
               onTabAdd={addTab}

@@ -42,3 +42,12 @@
 .terminal-container .xterm-selection div {
   background-color: var(--bg-selection) !important;
 }
+
+/* 手机端：缩小内边距与滚动条，给终端留出更多可视区域 */
+.terminal-container-compact .xterm {
+  padding: 2px 4px;
+}
+
+.terminal-container-compact .xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+}

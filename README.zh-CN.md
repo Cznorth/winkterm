@@ -46,14 +46,18 @@
 
 ![WinkTerm Demo](assets/demo.gif)
 
+*GIF — 真实 SSH：先敲错命令（`ipconfig`），再 `# what's wrong`，AI 在同一 PTY 里回复并可预填修复命令。*
+
 [▶️ 观看宣传视频](assets/promo.mp4)
 
+*宣传视频 — 单栏多 SSH 标签；Craft 跨主机编排（`list_ssh_connections`、`terminal_exec`、`ssh_run`）。*
+
 ```
-$ # nginx 为什么报 502？
-[WinkTerm] 让我看看。正在检查 nginx 错误日志...
-[WinkTerm] 发现 upstream 不可达。试试这个：
-$ curl -I http://localhost:3000█   ← AI 写入的。按回车执行。
-                                       退格修改。Ctrl+C 取消。
+$ ipconfig
+Command 'ipconfig' not found, did you mean: ...
+$ # what's wrong
+[WinkTerm] `ipconfig` 是 Windows 命令 —— Linux 上请用 `ip addr`（或 `ifconfig`）。
+$ ip addr█   ← AI 写入的。按回车执行。退格修改。Ctrl+C 取消。
 ```
 
 **这不是一个套在终端里的 ChatGPT。**
@@ -258,6 +262,19 @@ npm run dev
 ### 前端自测
 
 在 **Cursor** 中优先用内置浏览器 MCP 访问 `http://localhost:3000`（点击 `.xterm-screen`，用 CDP 读 `.xterm-rows`）。其他环境用 `puppeteer-core` + 系统 Chrome，完整冒烟清单与 agent HTTP curl 示例见 [CLAUDE.md](CLAUDE.md)。
+
+### README 素材录制（维护者）
+
+需本地前后端、系统 Chrome、`ffmpeg`，并读取 `~/.winkterm/config.json`（主题、语言、SSH 连接）。
+
+```bash
+cd scripts && npm install
+node record-readme-normal.mjs   # → assets/demo.gif
+node record-promo-normal.mjs    # → assets/promo.mp4
+node capture-og-image.mjs       # → assets/og-image-social.png（来自 demo 终帧）
+```
+
+已有帧只想放慢 GIF：`REBUILD_GIF_ONLY=1 GIF_FRAME_SEC=1.4 node record-readme-normal.mjs`
 
 ### API 类型（orval）
 
