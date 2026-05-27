@@ -9,159 +9,570 @@
   <meta property="og:description" content="AI that shares your terminal session. Open source, self-hosted, BYO LLM.">
   <meta property="og:image" content="https://raw.githubusercontent.com/Cznorth/winkterm/master/assets/demo.gif">
   <meta property="og:url" content="https://cznorth.github.io/winkterm">
+  <link rel="icon" href="https://raw.githubusercontent.com/Cznorth/winkterm/master/assets/logo.svg" type="image/svg+xml">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0a0a;
+      --bg-elevated: #111111;
+      --bg-subtle: #161616;
+      --fg: #f5f5f5;
+      --fg-muted: #888888;
+      --fg-subtle: #555555;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --accent: #4488ff;
+      --accent-hover: #5a96ff;
+      --max-w: 1080px;
+      --section-gap: clamp(5rem, 12vw, 8rem);
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+    }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'JetBrains Mono', monospace;
-      background: #0d1117;
-      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.65;
+      font-size: 16px;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .wrap {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 clamp(1.25rem, 4vw, 2.5rem);
+    }
+
+    /* ── Nav ── */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 10, 10, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-brand img { width: 28px; height: 28px; }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: clamp(1rem, 3vw, 2rem);
+      font-size: 0.875rem;
+      color: var(--fg-muted);
+    }
+
+    .nav-links a:hover { color: var(--fg); }
+
+    .lang-toggle {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--fg-muted);
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .lang-toggle:hover {
+      color: var(--fg);
+      border-color: var(--border-strong);
+    }
+
+    /* ── Hero ── */
+    .hero {
+      padding: clamp(4rem, 10vw, 7rem) 0 clamp(3rem, 8vw, 5rem);
+      text-align: center;
+    }
+
+    .hero-logo {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 2rem;
+      opacity: 0.95;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 500;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 1.25rem;
+    }
+
+    .hero-tagline {
+      font-size: clamp(1.05rem, 2.5vw, 1.25rem);
+      color: var(--fg-muted);
+      max-width: 540px;
+      margin: 0 auto 2.5rem;
+      font-weight: 400;
       line-height: 1.6;
     }
-    .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
-    header {
-      text-align: center;
-      padding: 4rem 0 2rem;
-      border-bottom: 1px solid #30363d;
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
     }
-    header h1 { font-size: 3rem; background: linear-gradient(135deg, #58a6ff, #3fb950); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    header p { font-size: 1.2rem; color: #8b949e; margin-top: 0.5rem; }
-    .subtitle { color: #58a6ff; font-size: 1.1rem; margin-top: 0.25rem; }
-    .demo { margin: 3rem 0; text-align: center; }
-    .demo img { max-width: 100%; border-radius: 8px; border: 1px solid #30363d; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-    .btn-group { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin: 2rem 0; }
+
     .btn {
-      display: inline-flex; align-items: center; gap: 0.5rem;
-      padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: 600;
-      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 11px 24px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-radius: 6px;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      letter-spacing: -0.01em;
     }
-    .btn-primary { background: #238636; color: #fff; }
-    .btn-primary:hover { background: #2ea043; }
-    .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-    .btn-secondary:hover { background: #30363d; }
-    .features {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;
-      margin: 3rem 0;
+
+    .btn-primary {
+      background: var(--fg);
+      color: var(--bg);
     }
-    .feature {
-      background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem;
+
+    .btn-primary:hover { background: #e0e0e0; }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--fg-muted);
+      border: 1px solid var(--border-strong);
     }
-    .feature h3 { color: #58a6ff; margin-bottom: 0.5rem; }
-    .feature p { color: #8b949e; font-size: 0.9rem; }
-    .code-block {
-      background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem;
-      margin: 2rem 0; overflow-x: auto;
+
+    .btn-outline:hover {
+      color: var(--fg);
+      border-color: rgba(255, 255, 255, 0.25);
     }
-    .code-block code { color: #7ee787; }
-    .comparison { margin: 3rem 0; }
-    .comparison table { width: 100%; border-collapse: collapse; }
-    .comparison th, .comparison td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #30363d; }
-    .comparison th { color: #8b949e; font-weight: 600; }
-    .comparison td { color: #c9d1d9; }
-    .check { color: #3fb950; }
-    .cross { color: #f85149; }
-    footer { text-align: center; padding: 3rem 0; color: #8b949e; border-top: 1px solid #30363d; margin-top: 3rem; }
-    footer a { color: #58a6ff; }
+
+    /* ── Demo ── */
+    .demo-section {
+      padding-bottom: var(--section-gap);
+    }
+
+    .demo-frame {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg-elevated);
+    }
+
+    .demo-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .demo-caption {
+      margin-top: 1rem;
+      text-align: center;
+      font-size: 0.8125rem;
+      color: var(--fg-subtle);
+    }
+
+    /* ── Section header ── */
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--fg-subtle);
+      margin-bottom: 2.5rem;
+    }
+
+    /* ── Features ── */
+    .features-section {
+      padding-bottom: var(--section-gap);
+      border-top: 1px solid var(--border);
+      padding-top: var(--section-gap);
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .feature-item {
+      background: var(--bg);
+      padding: 2rem;
+    }
+
+    .feature-item h3 {
+      font-size: 0.9375rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      margin-bottom: 0.625rem;
+    }
+
+    .feature-item p {
+      font-size: 0.875rem;
+      color: var(--fg-muted);
+      line-height: 1.65;
+    }
+
+    /* ── Terminal snippet ── */
+    .snippet-section {
+      padding-bottom: var(--section-gap);
+    }
+
+    .terminal {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.75rem 2rem;
+      font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+      font-size: 0.8125rem;
+      line-height: 1.8;
+      overflow-x: auto;
+      color: var(--fg-muted);
+    }
+
+    .terminal .prompt { color: var(--fg-subtle); user-select: none; }
+    .terminal .cmd { color: var(--fg); }
+    .terminal .comment { color: var(--fg-subtle); }
+    .terminal .ai { color: var(--accent); }
+
+    .snippet-note {
+      margin-top: 1rem;
+      font-size: 0.875rem;
+      color: var(--fg-muted);
+    }
+
+    /* ── Install ── */
+    .install-section {
+      padding-bottom: var(--section-gap);
+      border-top: 1px solid var(--border);
+      padding-top: var(--section-gap);
+    }
+
+    .install-block {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.75rem 2rem;
+      font-family: "SF Mono", "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.8125rem;
+      line-height: 1.8;
+      color: var(--fg-muted);
+      overflow-x: auto;
+    }
+
+    .install-block .hl { color: var(--fg); }
+
+    /* ── Compare ── */
+    .compare-section {
+      padding-bottom: var(--section-gap);
+    }
+
+    .compare-table-wrap {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    thead { background: var(--bg-elevated); }
+
+    th, td {
+      padding: 14px 20px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      font-weight: 500;
+      color: var(--fg-muted);
+      font-size: 0.8125rem;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    td:first-child { color: var(--fg-muted); }
+    td:not(:first-child) { text-align: center; }
+
+    .yes { color: var(--fg); }
+    .no { color: var(--fg-subtle); }
+
+    th:first-child, td:first-child { text-align: left; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 0;
+    }
+
+    .footer-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      font-size: 0.875rem;
+      color: var(--fg-muted);
+    }
+
+    .footer-links a:hover { color: var(--fg); }
+
+    .footer-copy {
+      font-size: 0.8125rem;
+      color: var(--fg-subtle);
+    }
+
+    /* ── i18n visibility ── */
+    [data-lang="zh"] { display: none; }
+    html[lang="zh"] [data-lang="en"] { display: none; }
+    html[lang="zh"] [data-lang="zh"] { display: inline; }
+    html[lang="zh"] p[data-lang="zh"],
+    html[lang="zh"] h3[data-lang="zh"],
+    html[lang="zh"] .hero-tagline[data-lang="zh"],
+    html[lang="zh"] .section-label[data-lang="zh"],
+    html[lang="zh"] .demo-caption[data-lang="zh"],
+    html[lang="zh"] .snippet-note[data-lang="zh"] { display: block; }
+    html[lang="zh"] .nav-links a[data-lang="zh"],
+    html[lang="zh"] .footer-links a[data-lang="zh"] { display: inline; }
+
+    @media (max-width: 640px) {
+      .nav-links a:not(.nav-cta) { display: none; }
+      .compare-table-wrap { overflow-x: auto; }
+      table { min-width: 520px; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
+  <nav class="nav">
+    <div class="wrap nav-inner">
+      <a class="nav-brand" href="#">
+        <img src="https://raw.githubusercontent.com/Cznorth/winkterm/master/assets/logo.svg" alt="">
+        WinkTerm
+      </a>
+      <div class="nav-links">
+        <a href="#features" data-lang="en">Features</a>
+        <a href="#features" data-lang="zh">特性</a>
+        <a href="#install" data-lang="en">Install</a>
+        <a href="#install" data-lang="zh">安装</a>
+        <a href="https://github.com/Cznorth/winkterm/blob/master/docs/architecture.md" data-lang="en">Docs</a>
+        <a href="https://github.com/Cznorth/winkterm/blob/master/docs/architecture.md" data-lang="zh">文档</a>
+        <a class="nav-cta" href="https://github.com/Cznorth/winkterm">GitHub</a>
+        <button class="lang-toggle" id="langToggle" aria-label="Switch language">EN</button>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <section class="hero wrap">
+      <img class="hero-logo" src="https://raw.githubusercontent.com/Cznorth/winkterm/master/assets/logo.svg" alt="WinkTerm">
       <h1>WinkTerm</h1>
-      <p>AI that shares your terminal session.</p>
-      <div class="subtitle">Not a chatbot that suggests commands. A collaborator that types alongside you in the same PTY.</div>
-    </header>
-
-    <div class="btn-group">
-      <a class="btn btn-primary" href="https://github.com/Cznorth/winkterm">
-        ⭐ GitHub
-      </a>
-      <a class="btn btn-primary" href="https://github.com/Cznorth/winkterm#%EF%B8%8F-quick-start">
-        🚀 Quick Start
-      </a>
-      <a class="btn btn-secondary" href="https://dev.to/cznorth/winkterm-ai-that-shares-your-terminal-session-not-just-command-suggestions-8p9">
-        📖 Read the Article
-      </a>
-      <a class="btn btn-secondary" href="https://github.com/Cznorth/winkterm/blob/master/docs/architecture.md">
-        🏗 Architecture
-      </a>
-    </div>
-
-    <div class="demo">
-      <img src="https://raw.githubusercontent.com/Cznorth/winkterm/master/assets/demo.gif" alt="WinkTerm Demo">
-    </div>
-
-    <div class="features">
-      <div class="feature">
-        <h3>🖥 Shared PTY Session</h3>
-        <p>AI and user operate in the same terminal process. No copy-paste, no "run this command" without context.</p>
-      </div>
-      <div class="feature">
-        <h3># In-Terminal Chat</h3>
-        <p>Type # followed by your question right where your shell prompt is. No alt-tab needed.</p>
-      </div>
-      <div class="feature">
-        <h3>🔌 SSH + File Transfer</h3>
-        <p>Connect to remote servers with AI-assisted operations and built-in file transfer.</p>
-      </div>
-      <div class="feature">
-        <h3>🧠 Multi-Model Support</h3>
-        <p>Bring your own LLM. OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint.</p>
-      </div>
-      <div class="feature">
-        <h3>🐳 Docker & Desktop</h3>
-        <p>Deploy instantly with <code>docker compose up</code> or download the desktop app.</p>
-      </div>
-      <div class="feature">
-        <h3>🔓 Open Source</h3>
-        <p>MIT licensed. Self-hosted. No data leaves your infrastructure unless you choose.</p>
-      </div>
-    </div>
-
-    <h2 id="getting-started">🚀 Getting Started</h2>
-    <div class="code-block">
-      <code>
-$ docker run -p 3000:3000 -p 8000:8000 \<br>
-&nbsp;&nbsp;-e ANTHROPIC_API_KEY=your-key-here \<br>
-&nbsp;&nbsp;ghcr.io/cznorth/winkterm:latest
-      </code>
-    </div>
-    <p>Then open <strong>http://localhost:3000</strong></p>
-
-    <div class="comparison">
-      <h2>🔥 Why WinkTerm?</h2>
-      <table>
-        <tr><th>Feature</th><th>WinkTerm</th><th>Warp</th><th>Tabby</th><th>Claude Code</th></tr>
-        <tr><td>Shared PTY</td><td class="check">✅</td><td class="cross">❌</td><td class="cross">❌</td><td class="cross">❌</td></tr>
-        <tr><td>Open source</td><td class="check">✅</td><td class="cross">❌</td><td class="check">✅</td><td class="cross">❌</td></tr>
-        <tr><td>Self-hosted / BYO LLM</td><td class="check">✅</td><td class="cross">❌</td><td class="cross">❌</td><td class="check">✅</td></tr>
-        <tr><td>Web UI</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td><td class="cross">❌</td></tr>
-        <tr><td>SSH + file transfer</td><td class="check">✅</td><td class="cross">❌</td><td class="check">✅</td><td class="cross">❌</td></tr>
-        <tr><td>Desktop app</td><td class="check">✅</td><td class="check">✅</td><td class="check">✅</td><td class="cross">❌</td></tr>
-      </table>
-    </div>
-
-    <div class="code-block">
-      <h3>📦 docker-compose</h3>
-      <code>
-$ git clone https://github.com/Cznorth/winkterm.git<br>
-$ cd winkterm<br>
-$ cp .env.example .env<br>
-$ docker compose up -d
-      </code>
-    </div>
-
-    <footer>
-      <p>MIT License © 2026 <a href="https://github.com/Cznorth">Cznorth</a></p>
-      <p>
-        <a href="https://github.com/Cznorth/winkterm">GitHub</a> •
-        <a href="https://github.com/Cznorth/winkterm/issues">Issues</a> •
-        <a href="https://github.com/Cznorth/winkterm/discussions">Discussions</a> •
-        <a href="https://star-history.com/#Cznorth/winkterm&Date">Star History</a>
+      <p class="hero-tagline" data-lang="en">
+        AI that shares your terminal session — not a chatbot that suggests commands, but a collaborator that types alongside you in the same PTY.
       </p>
-      <p style="margin-top:1rem;font-size:0.85rem">
-        <a href="https://dev.to/cznorth/winkterm-ai-that-shares-your-terminal-session-not-just-command-suggestions-8p9">Read the full article on Dev.to →</a>
+      <p class="hero-tagline" data-lang="zh">
+        与你共享终端会话的 AI —— 不是只会建议命令的聊天机器人，而是在同一个 PTY 中与你并肩操作的协作者。
       </p>
-    </footer>
-  </div>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/Cznorth/winkterm#quick-start" data-lang="en">Get Started</a>
+        <a class="btn btn-primary" href="https://github.com/Cznorth/winkterm#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B" data-lang="zh">快速开始</a>
+        <a class="btn btn-outline" href="https://github.com/Cznorth/winkterm">GitHub</a>
+      </div>
+    </section>
+
+    <section class="demo-section wrap">
+      <div class="demo-frame">
+        <img src="https://raw.githubusercontent.com/Cznorth/winkterm/master/assets/demo.gif" alt="WinkTerm demo" loading="lazy">
+      </div>
+      <p class="demo-caption" data-lang="en">Real SSH session — AI answers in the same terminal and pre-fills the fix.</p>
+      <p class="demo-caption" data-lang="zh">真实 SSH 会话 — AI 在同一终端中回答并预填修复命令。</p>
+    </section>
+
+    <section class="features-section wrap" id="features">
+      <p class="section-label" data-lang="en">Features</p>
+      <p class="section-label" data-lang="zh">特性</p>
+      <div class="features-grid">
+        <div class="feature-item">
+          <h3 data-lang="en">Shared PTY Session</h3>
+          <h3 data-lang="zh">共享 PTY 会话</h3>
+          <p data-lang="en">AI and user operate in the same terminal process. No copy-paste, no detached suggestions.</p>
+          <p data-lang="zh">AI 与用户在同一终端进程中协作，无需复制粘贴，也不会出现脱离上下文的建议。</p>
+        </div>
+        <div class="feature-item">
+          <h3 data-lang="en">In-Terminal Chat</h3>
+          <h3 data-lang="zh">终端内对话</h3>
+          <p data-lang="en">Type # followed by your question right at the shell prompt. No alt-tab needed.</p>
+          <p data-lang="zh">在 shell 提示符处输入 # 加问题即可，无需切换窗口。</p>
+        </div>
+        <div class="feature-item">
+          <h3 data-lang="en">SSH &amp; File Transfer</h3>
+          <h3 data-lang="zh">SSH 与文件传输</h3>
+          <p data-lang="en">Connect to remote servers with AI-assisted operations and built-in file transfer.</p>
+          <p data-lang="zh">连接远程服务器，AI 辅助运维，内置文件传输。</p>
+        </div>
+        <div class="feature-item">
+          <h3 data-lang="en">Bring Your Own LLM</h3>
+          <h3 data-lang="zh">自带 LLM</h3>
+          <p data-lang="en">OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint.</p>
+          <p data-lang="zh">支持 OpenAI、Anthropic、Ollama 及任意 OpenAI 兼容端点。</p>
+        </div>
+        <div class="feature-item">
+          <h3 data-lang="en">Docker &amp; Desktop</h3>
+          <h3 data-lang="zh">Docker 与桌面版</h3>
+          <p data-lang="en">Deploy with docker compose or download the native desktop app for Windows and macOS.</p>
+          <p data-lang="zh">docker compose 一键部署，或下载 Windows / macOS 原生桌面应用。</p>
+        </div>
+        <div class="feature-item">
+          <h3 data-lang="en">Open Source</h3>
+          <h3 data-lang="zh">开源</h3>
+          <p data-lang="en">MIT licensed. Self-hosted. Your data stays on your infrastructure.</p>
+          <p data-lang="zh">MIT 协议，可自托管，数据留在你的基础设施内。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="snippet-section wrap">
+      <p class="section-label" data-lang="en">How it works</p>
+      <p class="section-label" data-lang="zh">工作原理</p>
+      <div class="terminal">
+        <div><span class="prompt">$ </span><span class="cmd">ipconfig</span></div>
+        <div class="comment">Command 'ipconfig' not found, did you mean: ...</div>
+        <div><span class="prompt">$ </span><span class="cmd"># what's wrong</span></div>
+        <div class="ai">[WinkTerm] `ipconfig` is a Windows command — on Linux use `ip addr`.</div>
+        <div><span class="prompt">$ </span><span class="cmd">ip addr</span><span class="comment">█  ← AI wrote this. Enter to run. Backspace to edit.</span></div>
+      </div>
+      <p class="snippet-note" data-lang="en">The AI writes directly into your input line. You stay in control.</p>
+      <p class="snippet-note" data-lang="zh">AI 直接写入输入行，执行权始终在你手中。</p>
+    </section>
+
+    <section class="install-section wrap" id="install">
+      <p class="section-label" data-lang="en">Install</p>
+      <p class="section-label" data-lang="zh">安装</p>
+      <div class="install-block">
+        <div><span class="hl">$</span> docker run -p 3000:3000 -p 8000:8000 \</div>
+        <div>&nbsp;&nbsp;-e ANTHROPIC_API_KEY=your-key-here \</div>
+        <div>&nbsp;&nbsp;ghcr.io/cznorth/winkterm:latest</div>
+        <br>
+        <div><span class="comment"># or with docker compose</span></div>
+        <div><span class="hl">$</span> git clone https://github.com/Cznorth/winkterm.git</div>
+        <div><span class="hl">$</span> cd winkterm && cp .env.example .env</div>
+        <div><span class="hl">$</span> docker compose up -d</div>
+      </div>
+      <p class="snippet-note" data-lang="en">Then open <strong style="color:var(--fg)">http://localhost:3000</strong></p>
+      <p class="snippet-note" data-lang="zh">然后打开 <strong style="color:var(--fg)">http://localhost:3000</strong></p>
+    </section>
+
+    <section class="compare-section wrap">
+      <p class="section-label" data-lang="en">Comparison</p>
+      <p class="section-label" data-lang="zh">对比</p>
+      <div class="compare-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>WinkTerm</th>
+              <th>Warp</th>
+              <th>Tabby</th>
+              <th>Claude Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span data-lang="en">Shared PTY</span><span data-lang="zh">共享 PTY</span></td>
+              <td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td>
+            </tr>
+            <tr>
+              <td><span data-lang="en">Open source</span><span data-lang="zh">开源</span></td>
+              <td class="yes">Yes</td><td class="no">—</td><td class="yes">Yes</td><td class="no">—</td>
+            </tr>
+            <tr>
+              <td><span data-lang="en">Self-hosted / BYO LLM</span><span data-lang="zh">自托管 / 自带 LLM</span></td>
+              <td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="yes">Yes</td>
+            </tr>
+            <tr>
+              <td><span data-lang="en">Web UI</span><span data-lang="zh">Web 界面</span></td>
+              <td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td>
+            </tr>
+            <tr>
+              <td><span data-lang="en">SSH + file transfer</span><span data-lang="zh">SSH + 文件传输</span></td>
+              <td class="yes">Yes</td><td class="no">—</td><td class="yes">Yes</td><td class="no">—</td>
+            </tr>
+            <tr>
+              <td><span data-lang="en">Desktop app</span><span data-lang="zh">桌面应用</span></td>
+              <td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-inner">
+      <div class="footer-links">
+        <a href="https://github.com/Cznorth/winkterm">GitHub</a>
+        <a href="https://github.com/Cznorth/winkterm/issues" data-lang="en">Issues</a>
+        <a href="https://github.com/Cznorth/winkterm/issues" data-lang="zh">问题反馈</a>
+        <a href="https://github.com/Cznorth/winkterm/discussions" data-lang="en">Discussions</a>
+        <a href="https://github.com/Cznorth/winkterm/discussions" data-lang="zh">讨论</a>
+        <a href="https://dev.to/cznorth/winkterm-ai-that-shares-your-terminal-session-not-just-command-suggestions-8p9">Dev.to</a>
+      </div>
+      <p class="footer-copy">MIT License © 2026 <a href="https://github.com/Cznorth" style="color:var(--fg-muted)">Cznorth</a></p>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var html = document.documentElement;
+      var btn = document.getElementById("langToggle");
+      var saved = localStorage.getItem("winkterm-site-lang");
+      if (saved === "zh" || saved === "en") html.lang = saved;
+      function updateBtn() { btn.textContent = html.lang === "zh" ? "中" : "EN"; }
+      updateBtn();
+      btn.addEventListener("click", function () {
+        html.lang = html.lang === "zh" ? "en" : "zh";
+        localStorage.setItem("winkterm-site-lang", html.lang);
+        updateBtn();
+      });
+    })();
+  </script>
 </body>
 </html>
