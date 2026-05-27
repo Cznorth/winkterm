@@ -142,8 +142,10 @@ export default function SplitContainer({
 
       if (paneRect && paneRect.width > 0 && paneRect.height > 0 && activeTabSet.has(tabId)) {
         el.style.display = "block";
-        const mobileBottom = `calc(var(--mobile-nav-height) + var(--safe-bottom)${isCompact && tab?.type !== "vnc" && showMobileKeys ? " + var(--mobile-keys-height)" : ""})`;
-        if (isCompact && (tab?.type === "vnc" || (tab?.type !== "vnc" && showMobileKeys))) {
+        const isVncTab = tab?.type === "vnc";
+        const reserveMobileKeys = isCompact && !isVncTab && showMobileKeys;
+        const mobileBottom = `calc(var(--mobile-nav-height) + var(--safe-bottom)${reserveMobileKeys ? " + var(--mobile-keys-height)" : ""})`;
+        if (isCompact && (isVncTab || showMobileKeys)) {
           el.style.position = "fixed";
           el.style.left = "0";
           el.style.right = "0";
@@ -151,7 +153,7 @@ export default function SplitContainer({
           el.style.top = `${paneRect.top + tabBarHeight}px`;
           el.style.bottom = mobileBottom;
           el.style.height = "auto";
-          el.style.zIndex = tab?.type === "vnc" ? "40" : "";
+          el.style.zIndex = isVncTab ? "40" : "";
         } else {
           el.style.position = "absolute";
           el.style.left = `${paneRect.left - containerRect.left}px`;
