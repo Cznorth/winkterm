@@ -5,12 +5,14 @@ agents:
     tools:
       - write_command
       - get_terminal_context
+      - save_memory
     prompt: terminal.yaml
     model: default
 
   chat:
     description: General-purpose chat assistant
-    tools: []
+    tools:
+      - save_memory
     prompt: chat.yaml
     model: default
 
@@ -18,5 +20,6 @@ agents:
     description: Full terminal toolset agent for cross-terminal orchestration
     tools:
       - terminal
+      - save_memory
     prompt: craft.yaml
     model: default

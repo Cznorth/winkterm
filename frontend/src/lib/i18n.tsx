@@ -44,6 +44,19 @@ const translations = {
 
   // === Settings ===
   "settings.title": { zh: "设置", en: "Settings" },
+  "settings.agentDocs": { zh: "AI 指令与记忆", en: "AI Instructions & Memory" },
+  "settings.agentsMd": { zh: "操作指令 (agents.md)", en: "Instructions (agents.md)" },
+  "settings.agentsMdHelp": {
+    zh: "AI 每轮都会遵循这里的自定义指令。",
+    en: "The AI follows these custom instructions on every turn.",
+  },
+  "settings.memoryMd": { zh: "长期记忆 (memory.md)", en: "Long-term Memory (memory.md)" },
+  "settings.memoryMdHelp": {
+    zh: "AI 自动维护的记忆，你也可以手动编辑。",
+    en: "Maintained automatically by the AI; you can also edit it manually.",
+  },
+  "settings.saveDoc": { zh: "保存", en: "Save" },
+  "settings.docSaved": { zh: "已保存", en: "Saved" },
   "settings.apiConfig": { zh: "API 配置", en: "API Configuration" },
   "settings.apiFormat": { zh: "API 格式", en: "API Format" },
   "settings.baseUrl": { zh: "Base URL", en: "Base URL" },

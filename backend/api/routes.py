@@ -18,7 +18,7 @@ from langchain_anthropic import ChatAnthropic
 
 from backend.agent.graph import get_graph
 from backend.agent.tools.terminal_legacy import get_terminal_context_raw
-from backend.config import UserConfig, settings
+from backend.config import UserConfig, AgentDocs, settings
 
 router = APIRouter()
 
@@ -116,6 +116,36 @@ async def save_settings(payload: SettingsModel) -> dict:
         if "****" in val or (val == "" and original.get(secret)):
             data[secret] = original.get(secret, "")
     UserConfig.merge_save(data)
+    return {"success": True}
+
+
+class DocContent(BaseModel):
+    content: str
+
+
+@router.get("/settings/agents-md")
+async def get_agents_md() -> dict:
+    """读取用户自定义操作指令（agents.md）。"""
+    return {"content": AgentDocs.read_agents()}
+
+
+@router.put("/settings/agents-md")
+async def put_agents_md(payload: DocContent) -> dict:
+    """保存用户自定义操作指令（agents.md）。"""
+    AgentDocs.write_agents(payload.content)
+    return {"success": True}
+
+
+@router.get("/settings/memory-md")
+async def get_memory_md() -> dict:
+    """读取 AI 长期记忆（memory.md）。"""
+    return {"content": AgentDocs.read_memory()}
+
+
+@router.put("/settings/memory-md")
+async def put_memory_md(payload: DocContent) -> dict:
+    """保存 AI 长期记忆（memory.md），写入前自动备份 .bak。"""
+    AgentDocs.write_memory(payload.content)
     return {"success": True}
 
 

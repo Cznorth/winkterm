@@ -8,14 +8,16 @@ from backend.agent.tools.terminal_legacy import (
     get_terminal_context_raw,
 )
 from backend.agent.tools.monitoring import MONITORING_TOOLS
+from backend.agent.tools.memory import MEMORY_TOOLS, MEMORY_TOOLS_BY_NAME
 
 TOOL_MODULES = {
     "terminal": TERMINAL_TOOLS,
     "terminal_legacy": LEGACY_TERMINAL_TOOLS,
     "monitoring": MONITORING_TOOLS,
+    "memory": MEMORY_TOOLS,
 }
 
-ALL_TOOLS_BY_NAME = {**TOOLS_BY_NAME, **LEGACY_TOOLS_BY_NAME}
+ALL_TOOLS_BY_NAME = {**TOOLS_BY_NAME, **LEGACY_TOOLS_BY_NAME, **MEMORY_TOOLS_BY_NAME}
 
 
 def get_tools(tool_specs: list[str]) -> list:

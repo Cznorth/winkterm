@@ -55,6 +55,32 @@ def _render_terminal_block(max_terminals: int = 12) -> str:
     return "\n\n" + "\n".join(lines)
 
 
+def _render_user_docs() -> str:
+    """注入用户自定义指令（agents.md）与 AI 长期记忆（memory.md）。
+
+    每轮重读，改文件即时生效，无需重启或清缓存。
+    """
+    from backend.config import AgentDocs
+
+    out = ""
+    instr = AgentDocs.read_agents().strip()
+    if instr:
+        out += (
+            "\n\n<user_instructions>\n"
+            "以下是用户自定义的操作指令，你必须严格遵循：\n"
+            f"{instr}\n</user_instructions>"
+        )
+    mem = AgentDocs.read_memory().strip()
+    if mem:
+        out += (
+            "\n\n<memory>\n"
+            "以下是你的长期记忆（用户偏好、主机信息、已验证的操作方法等）。"
+            "需要记住或修订时，调用 save_memory 工具传入整篇新内容来覆盖更新：\n"
+            f"{mem}\n</memory>"
+        )
+    return out
+
+
 class AgentBuilder:
     """Agent 构建器,负责组装和编译 StateGraph。"""
 
@@ -101,7 +127,7 @@ class AgentBuilder:
         messages = list(state["messages"])
 
         # 每轮重渲染 system prompt(终端列表实时刷新)
-        system_content = self.prompt + _render_terminal_block()
+        system_content = self.prompt + _render_user_docs() + _render_terminal_block()
 
         # 兼容轻量 agent(terminal):若 state 带活动终端原始上下文则一并注入
         terminal_output = state.get("terminal_output", "")

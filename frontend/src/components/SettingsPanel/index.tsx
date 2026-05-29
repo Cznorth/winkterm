@@ -116,6 +116,12 @@ export default function SettingsPanel() {
   const [streamError, setStreamError] = useState("");
   const [streamSuccess, setStreamSuccess] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const [agentsMd, setAgentsMd] = useState("");
+  const [memoryMd, setMemoryMd] = useState("");
+  const [agentsMdSaved, setAgentsMdSaved] = useState(false);
+  const [memoryMdSaved, setMemoryMdSaved] = useState(false);
+  const [savingAgentsMd, setSavingAgentsMd] = useState(false);
+  const [savingMemoryMd, setSavingMemoryMd] = useState(false);
 
   const copyToClipboard = (text: string) => {
     if (navigator.clipboard?.writeText) {
@@ -193,6 +199,11 @@ export default function SettingsPanel() {
         setThemeMode(data.theme as "system" | "dark" | "light");
       }
     });
+  }, []);
+
+  useEffect(() => {
+    axios.get("/api/settings/agents-md").then((res) => setAgentsMd(res.data.content || "")).catch(() => {});
+    axios.get("/api/settings/memory-md").then((res) => setMemoryMd(res.data.content || "")).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -354,6 +365,28 @@ export default function SettingsPanel() {
       setTimeout(() => setSaved(false), 2000);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveAgentsMd = async () => {
+    setSavingAgentsMd(true);
+    try {
+      await axios.put("/api/settings/agents-md", { content: agentsMd });
+      setAgentsMdSaved(true);
+      setTimeout(() => setAgentsMdSaved(false), 2000);
+    } finally {
+      setSavingAgentsMd(false);
+    }
+  };
+
+  const handleSaveMemoryMd = async () => {
+    setSavingMemoryMd(true);
+    try {
+      await axios.put("/api/settings/memory-md", { content: memoryMd });
+      setMemoryMdSaved(true);
+      setTimeout(() => setMemoryMdSaved(false), 2000);
+    } finally {
+      setSavingMemoryMd(false);
     }
   };
 
@@ -573,6 +606,52 @@ export default function SettingsPanel() {
                 <PlusIcon />
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="settings-group">
+          <div className="settings-group-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="8" y1="13" x2="16" y2="13" />
+              <line x1="8" y1="17" x2="16" y2="17" />
+            </svg>
+            {t("settings.agentDocs")}
+          </div>
+
+          <div className="settings-field">
+            <label className="settings-label">{t("settings.agentsMd")}</label>
+            <textarea
+              className="settings-textarea"
+              value={agentsMd}
+              onChange={(e) => setAgentsMd(e.target.value)}
+            />
+            <div className="settings-help">{t("settings.agentsMdHelp")}</div>
+            <button
+              className="settings-btn settings-btn-secondary settings-btn-full"
+              onClick={handleSaveAgentsMd}
+              disabled={savingAgentsMd}
+            >
+              {agentsMdSaved ? t("settings.docSaved") : t("settings.saveDoc")}
+            </button>
+          </div>
+
+          <div className="settings-field">
+            <label className="settings-label">{t("settings.memoryMd")}</label>
+            <textarea
+              className="settings-textarea"
+              value={memoryMd}
+              onChange={(e) => setMemoryMd(e.target.value)}
+            />
+            <div className="settings-help">{t("settings.memoryMdHelp")}</div>
+            <button
+              className="settings-btn settings-btn-secondary settings-btn-full"
+              onClick={handleSaveMemoryMd}
+              disabled={savingMemoryMd}
+            >
+              {memoryMdSaved ? t("settings.docSaved") : t("settings.saveDoc")}
+            </button>
           </div>
         </div>
 

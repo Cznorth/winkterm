@@ -131,3 +131,35 @@ class UserConfig:
         if config.get("web_access_key"):
             config["web_access_key"] = UserConfig._mask_secret(config["web_access_key"])
         return config
+
+
+# AI 指令与记忆文件路径（与 config.json 同级）
+AGENTS_MD_FILE = _CONFIG_DIR / "agents.md"
+MEMORY_MD_FILE = _CONFIG_DIR / "memory.md"
+
+
+class AgentDocs:
+    """用户指令（agents.md）与 AI 长期记忆（memory.md），持久化到 ~/.winkterm/。"""
+
+    @staticmethod
+    def read_agents() -> str:
+        return AGENTS_MD_FILE.read_text(encoding="utf-8") if AGENTS_MD_FILE.exists() else ""
+
+    @staticmethod
+    def write_agents(content: str) -> None:
+        _ensure_config_dir()
+        AGENTS_MD_FILE.write_text(content, encoding="utf-8")
+
+    @staticmethod
+    def read_memory() -> str:
+        return MEMORY_MD_FILE.read_text(encoding="utf-8") if MEMORY_MD_FILE.exists() else ""
+
+    @staticmethod
+    def write_memory(content: str) -> None:
+        """整篇覆盖记忆，写入前把旧内容备份到 memory.md.bak。"""
+        _ensure_config_dir()
+        if MEMORY_MD_FILE.exists():
+            (_CONFIG_DIR / "memory.md.bak").write_text(
+                MEMORY_MD_FILE.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+        MEMORY_MD_FILE.write_text(content, encoding="utf-8")
