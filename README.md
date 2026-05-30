@@ -138,7 +138,7 @@ A real incident write-up: user said only "the 107.173 server's load is high," an
 | Feature | WinkTerm | Warp | Tabby | Claude Code |
 |---------|----------|------|-------|-------------|
 | Shared PTY (AI types in your terminal) | ✅ | ❌ | ❌ | ❌ |
-| Open source | ✅ | ❌ | ✅ | ❌ |
+| Open source | ✅ | ✅ | ✅ | ❌ |
 | Self-hosted / BYO LLM | ✅ | ❌ | ❌ | ✅ |
 | Web UI | ✅ | ✅ | ✅ | ❌ (CLI only) |
 | SSH + file transfer | ✅ | ❌ | ✅ | ❌ |

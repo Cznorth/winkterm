@@ -138,7 +138,7 @@ curl -s http://<your-winkterm-host>:8000/api/agent/skill.md > SKILL.md
 | 特性 | WinkTerm | Warp | Tabby | Claude Code |
 |------|----------|------|-------|-------------|
 | 共享 PTY（AI 在终端中打字） | ✅ | ❌ | ❌ | ❌ |
-| 开源 | ✅ | ❌ | ✅ | ❌ |
+| 开源 | ✅ | ✅ | ✅ | ❌ |
 | 自托管 / 自带 LLM | ✅ | ❌ | ❌ | ✅ |
 | Web UI | ✅ | ✅ | ✅ | ❌（仅 CLI） |
 | SSH + 文件传输 | ✅ | ❌ | ✅ | ❌ |
