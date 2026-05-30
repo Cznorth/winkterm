@@ -9,6 +9,7 @@ First off, thanks for considering contributing! We welcome all kinds of contribu
 - [Development Setup](#development-setup)
 - [Project Structure](#project-structure)
 - [Making Changes](#making-changes)
+- [Commit Messages](#commit-messages)
 - [Pull Request Guidelines](#pull-request-guidelines)
 - [Ideas for First Contributions](#ideas-for-first-contributions)
 
@@ -108,6 +109,14 @@ winkterm/
 2. **Write tests** for new functionality (backend tests in `backend/test/`, frontend in `frontend/__tests__/`)
 3. **Run lint** before committing
 4. **Update docs** if you change behavior or add features
+
+## Commit Messages
+
+- **Write commit messages in English** so the whole community can read the history.
+- Follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): summary`.
+  - Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
+  - Example: `feat(agent): add kubectl tool` or `fix(ws): handle reconnect on close code 1006`.
+- Keep the subject line under ~72 characters; add a body to explain *why* when it isn't obvious.
 
 ## Pull Request Guidelines
 
