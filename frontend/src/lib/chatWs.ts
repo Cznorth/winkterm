@@ -31,7 +31,13 @@ export interface ChatMessage {
   thinking?: string;  // AI 思考过程
 }
 
-export type ChatMode = "chat" | "craft";
+export type ChatMode = "chat" | "craft" | "ask";
+
+export interface ToolApproval {
+  approvalId: string;
+  tool: string;
+  args: Record<string, unknown>;
+}
 
 export interface Conversation {
   id: string;
@@ -54,6 +60,7 @@ export interface ChatState {
   outputTokens: number;         // derived: active conversation tokens
   maxContext: number;
   messageQueue: string[];       // pending messages queued during streaming
+  pendingApproval: ToolApproval | null;  // ask 模式:等待用户确认的工具调用
 }
 
 function makeConversation(id?: string): Conversation {
@@ -103,6 +110,7 @@ export function useChatWs() {
     outputTokens: 0,
     maxContext: 200000,
     messageQueue: [],
+    pendingApproval: null,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -166,6 +174,7 @@ export function useChatWs() {
     output_tokens?: number;
     max_context?: number;
     conv_id?: string;
+    approval_id?: string;
   }) => {
     switch (data.type) {
       case "start":
@@ -323,6 +332,18 @@ export function useChatWs() {
         }
         break;
 
+      case "tool_approval":
+        // ask mode: backend paused before executing a tool, waiting for the user
+        if (data.approval_id && data.tool) {
+          const approval: ToolApproval = {
+            approvalId: data.approval_id,
+            tool: data.tool,
+            args: data.args || {},
+          };
+          setState((s) => ({ ...s, pendingApproval: approval }));
+        }
+        break;
+
       case "end":
         isStreamingRef.current = false;
         setState((s) => {
@@ -334,22 +355,22 @@ export function useChatWs() {
             }
             return { ...conv, messages };
           });
-          return { ...updated, isStreaming: false };
+          return { ...updated, isStreaming: false, pendingApproval: null };
         });
         break;
 
       case "error":
         isStreamingRef.current = false;
-        setState((s) => ({ ...s, error: data.message || "未知错误", isStreaming: false }));
+        setState((s) => ({ ...s, error: data.message || "Unknown error", isStreaming: false, pendingApproval: null }));
         break;
 
       case "stopped":
         isStreamingRef.current = false;
-        setState((s) => ({ ...s, isStreaming: false }));
+        setState((s) => ({ ...s, isStreaming: false, pendingApproval: null }));
         break;
 
       case "mode_changed":
-        if (data.mode === "chat" || data.mode === "craft") {
+        if (data.mode === "chat" || data.mode === "craft" || data.mode === "ask") {
           setState((s) => ({ ...s, mode: data.mode as ChatMode }));
         }
         break;
@@ -559,6 +580,14 @@ export function useChatWs() {
     }
   }, []);
 
+  // ask mode: approve or deny the pending tool call
+  const sendToolDecision = useCallback((approvalId: string, approved: boolean) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "tool_decision", approval_id: approvalId, approved }));
+    }
+    setState((s) => ({ ...s, pendingApproval: null }));
+  }, []);
+
   // 同步当前激活对话 id 到 ref
   useEffect(() => {
     activeConvIdRef.current = state.activeConvId;
@@ -623,6 +652,7 @@ export function useChatWs() {
     ...state,
     sendMessage,
     stopGeneration,
+    sendToolDecision,
     interruptAndSend,
     removeFromQueue,
     newConversation,

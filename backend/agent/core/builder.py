@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langgraph.graph import END, StateGraph
 
+from backend.agent.core.approval import request_approval
 from backend.agent.core.state import AgentState
 from backend.config import settings, UserConfig
 from backend.terminal.session_manager import get_session_manager
@@ -184,10 +185,39 @@ class AgentBuilder:
         new_messages = []
         waiting_user = False
 
+        ask_mode = bool(state.get("ask_mode"))
+        approval_emit = state.get("approval_emit")
+        denied = False
+
         for tool_call in last.tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call.get("args", {})
             tool_call_id = tool_call.get("id", "")
+
+            # ask mode: get user consent before each tool runs. On a denial,
+            # skip the rest of this batch (each tool_call still needs a matching
+            # ToolMessage) but DON'T halt — feed the denial back so the model can
+            # acknowledge and keep the conversation going.
+            if denied:
+                new_messages.append(ToolMessage(
+                    content="Skipped: the user denied a tool call earlier in this batch.",
+                    tool_call_id=tool_call_id,
+                ))
+                continue
+
+            if ask_mode and approval_emit is not None:
+                approved = await request_approval(approval_emit, tool_name, tool_args)
+                if not approved:
+                    logger.info(f"[{self.name}] user denied tool: {tool_name}")
+                    new_messages.append(ToolMessage(
+                        content=(
+                            "The user denied this tool call. Do not retry it. "
+                            "Acknowledge briefly and ask how they'd like to proceed."
+                        ),
+                        tool_call_id=tool_call_id,
+                    ))
+                    denied = True
+                    continue
 
             logger.info(f"[{self.name}] 工具: {tool_name}, args: {tool_args}")
 

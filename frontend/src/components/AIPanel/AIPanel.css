@@ -652,6 +652,92 @@
   opacity: 0.9;
 }
 
+/* ========== Ask-mode tool approval banner ========== */
+.ai-approval {
+  margin: 8px 12px 0;
+  padding: 12px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--warning, #d29922);
+  border-radius: var(--radius-lg, 10px);
+  flex-shrink: 0;
+}
+
+.ai-approval-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warning, #d29922);
+  margin-bottom: 8px;
+}
+
+.ai-approval-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+}
+
+.ai-approval-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-approval-tool {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-primary);
+  margin-bottom: 6px;
+}
+
+.ai-approval-args {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  max-height: 160px;
+  overflow: auto;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--fg-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ai-approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ai-approval-approve,
+.ai-approval-deny {
+  padding: 6px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.ai-approval-approve {
+  background: var(--success);
+  color: #fff;
+}
+
+.ai-approval-deny {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-default);
+}
+
+.ai-approval-approve:hover,
+.ai-approval-deny:hover {
+  opacity: 0.9;
+}
+
 /* ========== 输入区域（统一容器） ========== */
 .ai-input-area {
   margin: 8px 12px 12px;

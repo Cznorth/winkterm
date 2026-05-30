@@ -201,6 +201,15 @@ const translations = {
   "ai.chatDesc": { zh: "General assistant for questions and advice", en: "General assistant for questions and advice" },
   "ai.craftLabel": { zh: "Craft", en: "Craft" },
   "ai.craftDesc": { zh: "Code writer with terminal access", en: "Code writer with terminal access" },
+  "ai.askMode": { zh: "Ask Mode", en: "Ask Mode" },
+  "ai.askLabel": { zh: "Ask", en: "Ask" },
+  "ai.askDesc": {
+    zh: "Same tools as Craft, but every command needs your approval before it runs",
+    en: "Same tools as Craft, but every command needs your approval before it runs",
+  },
+  "ai.approval.title": { zh: "需要确认：AI 请求执行工具", en: "Approval required: the AI wants to run a tool" },
+  "ai.approval.approve": { zh: "批准", en: "Approve" },
+  "ai.approval.deny": { zh: "拒绝", en: "Deny" },
   "ai.placeholder": {
     zh: "输入消息... (Enter 发送, Shift+Enter 换行)",
     en: "Ask anything... (Enter to send, Shift+Enter for new line)",

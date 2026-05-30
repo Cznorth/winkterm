@@ -14,6 +14,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.agent.factory import get_agent
+from backend.agent.core.approval import cancel_all as cancel_all_approvals, resolve_approval
 from backend.agent.core.state import AgentState
 from backend.agent.tools.terminal_legacy import get_terminal_context_raw
 from backend.api import chat_store
@@ -167,9 +168,20 @@ class ChatWSHandler:
                 elif msg_type == "stop":
                     # 停止生成
                     self._stop_requested = True
+                    cancel_all_approvals()  # release any tool node waiting on approval
                     if self._current_task:
                         self._current_task.cancel()
                     logger.info("[STOP] 用户请求停止")
+                elif msg_type == "tool_decision":
+                    # ask mode: user's approve/deny for a specific tool call
+                    approval_id = msg.get("approval_id", "")
+                    approved = bool(msg.get("approved"))
+                    if approval_id:
+                        hit = resolve_approval(approval_id, approved)
+                        logger.info(
+                            f"[APPROVAL] decision id={approval_id} "
+                            f"approved={approved} hit={hit}"
+                        )
                 elif msg_type == "delete_conv":
                     conv_id = msg.get("conv_id", "")
                     if conv_id:
@@ -181,7 +193,8 @@ class ChatWSHandler:
                         await self._send_usage(conv_id)
                 elif msg_type == "switch_mode":
                     mode = msg.get("mode", "craft")
-                    if mode in self.agents:
+                    # ask mode is not a standalone agent: reuse craft's toolset + confirm before running
+                    if mode in self.agents or mode == "ask":
                         self.current_mode = mode
                         logger.info(f"[MODE] 切换到: {mode}")
                         await self._send({"type": "mode_changed", "mode": mode})
@@ -204,6 +217,8 @@ class ChatWSHandler:
         except Exception as e:
             logger.exception(f"[ERROR] {e}")
         finally:
+            # release any tool node still waiting on approval, so the task doesn't hang
+            cancel_all_approvals()
             logger.info("[CLEANUP] Chat WebSocket 关闭")
 
     async def _resume_active_streams(self) -> None:
@@ -254,9 +269,12 @@ class ChatWSHandler:
         # 重置停止标志
         self._stop_requested = False
 
-        agent = self.agents.get(self.current_mode)
+        # ask mode reuses craft's full toolset, but confirms each tool before running
+        ask_mode = self.current_mode == "ask"
+        agent_key = "craft" if ask_mode else self.current_mode
+        agent = self.agents.get(agent_key)
         if not agent:
-            await self._send_error(f"Agent 未加载: {self.current_mode}")
+            await self._send_error(f"Agent 未加载: {agent_key}")
             return
 
         logger.info(f"[CHAT] 用户 ({self.current_mode}, conv={conv_id}): {user_input[:50]}")
@@ -294,6 +312,10 @@ class ChatWSHandler:
         # 构建消息：历史 + 当前用户消息
         messages = list(history)
 
+        # ask-mode approval broadcast: push tool_approval to all subscribers of this conv
+        async def _approval_emit(msg: dict) -> None:
+            await _broadcast(conv_id, msg)
+
         # 初始状态
         state: AgentState = {
             "messages": messages,
@@ -301,6 +323,8 @@ class ChatWSHandler:
             "analysis_result": "",
             "llm_calls": 0,
             "waiting_user": False,
+            "ask_mode": ask_mode,
+            "approval_emit": _approval_emit if ask_mode else None,
         }
 
         # 发送开始标记(广播给所有订阅者)

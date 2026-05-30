@@ -100,6 +100,12 @@ const MODE_ICONS: Record<ChatMode, JSX.Element> = {
       <path d="M7 3v5" />
     </svg>
   ),
+  ask: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  ),
 };
 
 const ToolIcon = () => (
@@ -212,9 +218,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   );
 }
 
-const MODE_KEYS: Record<ChatMode, { label: "ai.chatLabel" | "ai.craftLabel"; desc: "ai.chatDesc" | "ai.craftDesc" }> = {
+const MODE_KEYS: Record<ChatMode, { label: "ai.chatLabel" | "ai.craftLabel" | "ai.askLabel"; desc: "ai.chatDesc" | "ai.craftDesc" | "ai.askDesc" }> = {
   chat: { label: "ai.chatLabel", desc: "ai.chatDesc" },
   craft: { label: "ai.craftLabel", desc: "ai.craftDesc" },
+  ask: { label: "ai.askLabel", desc: "ai.askDesc" },
 };
 
 function ConvTabs({
@@ -360,7 +367,7 @@ function ConvTabs({
 
 export default function AIPanel({ onClose }: { onClose?: () => void }) {
   const { t } = useI18n();
-  const { conversations, activeConvId, messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, messageQueue, sendMessage, stopGeneration, interruptAndSend, removeFromQueue, newConversation, switchConversation, deleteConversation, updateConvTitle, switchMode, switchModel, reconnect } = useChatWs();
+  const { conversations, activeConvId, messages, isStreaming, isConnected, error, mode, model, inputTokens, outputTokens, maxContext, messageQueue, pendingApproval, sendMessage, stopGeneration, sendToolDecision, interruptAndSend, removeFromQueue, newConversation, switchConversation, deleteConversation, updateConvTitle, switchMode, switchModel, reconnect } = useChatWs();
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
@@ -527,7 +534,7 @@ export default function AIPanel({ onClose }: { onClose?: () => void }) {
         {messages.length === 0 && (
           <div className="ai-empty">
             <div className="ai-empty-icon">{MODE_ICONS[mode]}</div>
-            <div className="ai-empty-title">{mode === "chat" ? t("ai.chatMode") : t("ai.craftMode")}</div>
+            <div className="ai-empty-title">{mode === "chat" ? t("ai.chatMode") : mode === "ask" ? t("ai.askMode") : t("ai.craftMode")}</div>
             <div className="ai-empty-desc">{t(modeKeys.desc)}</div>
           </div>
         )}
@@ -589,6 +596,33 @@ export default function AIPanel({ onClose }: { onClose?: () => void }) {
               {s}
             </button>
           ))}
+        </div>
+      )}
+
+      {pendingApproval && (
+        <div className="ai-approval">
+          <div className="ai-approval-header">
+            <span className="ai-approval-icon"><ToolIcon /></span>
+            <span className="ai-approval-title">{t("ai.approval.title")}</span>
+          </div>
+          <div className="ai-approval-tool">{pendingApproval.tool}</div>
+          {Object.keys(pendingApproval.args).length > 0 && (
+            <pre className="ai-approval-args">{JSON.stringify(pendingApproval.args, null, 2)}</pre>
+          )}
+          <div className="ai-approval-actions">
+            <button
+              className="ai-approval-deny"
+              onClick={() => sendToolDecision(pendingApproval.approvalId, false)}
+            >
+              {t("ai.approval.deny")}
+            </button>
+            <button
+              className="ai-approval-approve"
+              onClick={() => sendToolDecision(pendingApproval.approvalId, true)}
+            >
+              {t("ai.approval.approve")}
+            </button>
+          </div>
         </div>
       )}
 
