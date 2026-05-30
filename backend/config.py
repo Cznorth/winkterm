@@ -15,7 +15,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # LLM (OpenAI 协议兼容)
+    # LLM (OpenAI-compatible protocol)
     # Accept any of these env var names:
     llm_api_key: str = ""
     anthropic_api_key: str = ""
@@ -38,31 +38,31 @@ class Settings(BaseSettings):
     def effective_model(self) -> str:
         return self.llm_model or "claude-sonnet-4-20250514"
 
-    # 外部服务
+    # External services
     prometheus_url: str = "http://localhost:9090"
     loki_url: str = "http://localhost:3100"
 
-    # 服务器
+    # Server
     host: str = "0.0.0.0"
     port: int = 8000
     debug: bool = False
 
-    # CORS（开发模式 + 桌面模式）
+    # CORS (dev mode + desktop mode)
     cors_origins: list[str] = ["*"]
 
-    # Agent 配置
+    # Agent settings
     agent_recursion_limit: int = 100
 
-    # 外部 agent HTTP 接口的鉴权 token（为空时 /api/agent/* 关闭）
+    # Auth token for external agent HTTP API (/api/agent/* disabled when empty)
     agent_api_token: str = ""
 
-    # Web 远程访问密钥（localhost 桌面客户端免鉴权，远程访问需此密钥）
+    # Web remote access key (localhost desktop client exempt; remote access requires this key)
     web_access_key: str = ""
 
     @field_validator("debug", mode="before")
     @classmethod
     def parse_debug(cls, v: Any) -> bool:
-        """宽松解析布尔值，处理无效环境变量"""
+        """Lenient boolean parsing for invalid env var values."""
         if isinstance(v, bool):
             return v
         if isinstance(v, str):
@@ -88,7 +88,7 @@ class UserConfig:
 
     @staticmethod
     def load() -> dict:
-        """加载配置，返回字典"""
+        """Load config and return as a dict."""
         if _CONFIG_FILE.exists():
             return json.loads(_CONFIG_FILE.read_text(encoding="utf-8"))
         return {
@@ -104,25 +104,25 @@ class UserConfig:
 
     @staticmethod
     def save(config: dict) -> None:
-        """保存配置"""
+        """Save config."""
         _ensure_config_dir()
         _CONFIG_FILE.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
 
     @staticmethod
     def merge_save(config: dict) -> None:
-        """合并保存配置，保留未在 config 中的字段（如 ssh_connections）"""
+        """Merge-save config, preserving fields not in the update (e.g. ssh_connections)."""
         original = UserConfig.load()
         original.update(config)
         UserConfig.save(original)
 
     @staticmethod
     def _mask_secret(value: str) -> str:
-        """脱敏密钥：长则保留首尾，短则全隐藏。"""
+        """Mask a secret: keep head/tail when long, fully hide when short."""
         return value[:8] + "****" + value[-4:] if len(value) > 12 else "****"
 
     @staticmethod
     def get_masked() -> dict:
-        """获取脱敏后的配置"""
+        """Return config with secrets masked."""
         config = UserConfig.load()
         if config.get("api_key"):
             config["api_key"] = UserConfig._mask_secret(config["api_key"])
@@ -133,13 +133,13 @@ class UserConfig:
         return config
 
 
-# AI 指令与记忆文件路径（与 config.json 同级）
+# AI instructions and memory file paths (same directory as config.json)
 AGENTS_MD_FILE = _CONFIG_DIR / "agents.md"
 MEMORY_MD_FILE = _CONFIG_DIR / "memory.md"
 
 
 class AgentDocs:
-    """用户指令（agents.md）与 AI 长期记忆（memory.md），持久化到 ~/.winkterm/。"""
+    """User instructions (agents.md) and AI long-term memory (memory.md), persisted under ~/.winkterm/."""
 
     @staticmethod
     def read_agents() -> str:
@@ -156,7 +156,7 @@ class AgentDocs:
 
     @staticmethod
     def write_memory(content: str) -> None:
-        """整篇覆盖记忆，写入前把旧内容备份到 memory.md.bak。"""
+        """Overwrite memory in full; backup previous content to memory.md.bak before write."""
         _ensure_config_dir()
         if MEMORY_MD_FILE.exists():
             (_CONFIG_DIR / "memory.md.bak").write_text(

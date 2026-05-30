@@ -1,6 +1,6 @@
 /**
- * 自动生成的 API hooks（由 orval 从 /openapi.json 生成）
- * 运行 `npm run gen:api` 可重新生成
+ * Auto-generated API hooks (orval from /openapi.json).
+ * Regenerate with `npm run gen:api`.
  */
 
 import { useMutation, useQuery } from "@tanstack/react-query";

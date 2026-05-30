@@ -1,4 +1,4 @@
-"""Agent 构建器。"""
+"""Agent builder."""
 
 from __future__ import annotations
 
@@ -20,17 +20,18 @@ logger = logging.getLogger("agent.builder")
 
 
 def _render_terminal_block(max_terminals: int = 12) -> str:
-    """渲染终端列表 system prompt 块。
+    """Render the terminal-list system prompt block.
 
-    每轮 LLM 调用前注入,让 agent 无需先调 list_terminals 就知道全景。
-    超过 max_terminals 时优先保留 active + 最近活跃的。
+    Injected before every LLM call so the agent sees the full picture without
+    first calling list_terminals. When over max_terminals, keep active and
+    most-recently-active ones first.
     """
     sm = get_session_manager()
     terminals = sm.list_terminals()
     if not terminals:
         return "\n\n<terminals>\n(当前无终端会话)\n</terminals>"
 
-    # 排序: active 优先,其次最近活跃(idle_seconds 小)
+    # Sort: active first, then most recently active (smaller idle_seconds)
     terminals.sort(
         key=lambda t: (not t.get("is_user_active"), t.get("idle_seconds", 9e9))
     )
@@ -57,9 +58,10 @@ def _render_terminal_block(max_terminals: int = 12) -> str:
 
 
 def _render_user_docs() -> str:
-    """注入用户自定义指令（agents.md）与 AI 长期记忆（memory.md）。
+    """Inject user-defined instructions (agents.md) and AI long-term memory (memory.md).
 
-    每轮重读，改文件即时生效，无需重启或清缓存。
+    Re-read every round, so file edits take effect immediately with no restart
+    or cache clearing.
     """
     from backend.config import AgentDocs
 
@@ -83,7 +85,7 @@ def _render_user_docs() -> str:
 
 
 class AgentBuilder:
-    """Agent 构建器,负责组装和编译 StateGraph。"""
+    """Agent builder, responsible for assembling and compiling the StateGraph."""
 
     def __init__(self, name: str, prompt: str, tools: list, model: str = "default"):
         self.name = name
@@ -127,10 +129,10 @@ class AgentBuilder:
         llm = self._build_llm()
         messages = list(state["messages"])
 
-        # 每轮重渲染 system prompt(终端列表实时刷新)
+        # Re-render the system prompt each round (terminal list refreshed live)
         system_content = self.prompt + _render_user_docs() + _render_terminal_block()
 
-        # 兼容轻量 agent(terminal):若 state 带活动终端原始上下文则一并注入
+        # Lightweight agent (terminal) compat: if state carries the active terminal's raw context, inject it too
         terminal_output = state.get("terminal_output", "")
         if terminal_output:
             import re
@@ -238,16 +240,16 @@ class AgentBuilder:
                     result = f"工具执行错误: {e}"
                     logger.exception(f"[{self.name}] 执行失败: {e}")
 
-            # 检测 halt_for_user 标记(替代旧 write_command 检测)
+            # Detect the halt_for_user flag (replaces the old write_command detection)
             if isinstance(result, dict) and result.pop("_halt_for_user", False):
                 waiting_user = True
             elif tool_name == "terminal_input" and tool_args.get("halt_for_user"):
                 waiting_user = True
             elif tool_name == "write_command":
-                # 轻量 terminal agent 的 write_command 始终半途等用户
+                # The lightweight terminal agent's write_command always halts mid-way to wait for the user
                 waiting_user = True
 
-            # ToolMessage content 需要字符串
+            # ToolMessage content must be a string
             if not isinstance(result, str):
                 try:
                     content_str = json.dumps(result, ensure_ascii=False, default=str)

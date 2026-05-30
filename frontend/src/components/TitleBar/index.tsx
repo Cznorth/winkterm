@@ -5,7 +5,7 @@ import { WinkTermLogo } from "@/components/Logo";
 import { useI18n } from "@/lib/i18n";
 import "./TitleBar.css";
 
-// 声明 pywebview API 类型
+// pywebview API types
 declare global {
   interface Window {
     pywebview?: {
@@ -33,7 +33,7 @@ declare global {
   }
 }
 
-// 边缘调整大小钩子
+// Window edge resize hook
 function useWindowResize(isMaximized: boolean) {
   const resizingRef = useRef<{
     edge: string;
@@ -132,7 +132,7 @@ function useWindowResize(isMaximized: boolean) {
   return { startResize };
 }
 
-// 窗口拖拽钩子
+// Window drag hook
 function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
   const draggingRef = useRef<{
     startX: number;
@@ -160,7 +160,7 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
 
     try {
       if (isMaximized) {
-        // 最大化时：先记录起始位置，等用户实际拖动时再还原窗口
+        // When maximized: record start position; restore window only after real drag
         pendingRestoreRef.current = {
           startX: e.screenX,
           startY: e.screenY,
@@ -169,7 +169,7 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
         const handleMove = async (moveEvent: MouseEvent) => {
           if (!pendingRestoreRef.current) return;
 
-          // 检查是否真的在拖动（移动超过阈值）
+          // Check for real drag (movement past threshold)
           const deltaX = Math.abs(moveEvent.screenX - pendingRestoreRef.current.startX);
           const deltaY = Math.abs(moveEvent.screenY - pendingRestoreRef.current.startY);
 
@@ -185,7 +185,7 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
               }
             }
 
-            // 用户确实在拖动，现在还原窗口
+            // User is dragging — restore window now
             const workArea = await api.get_work_area();
             if (!workArea) return;
 
@@ -206,7 +206,7 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
 
             await api.move(newWindowX, newWindowY);
 
-            // 清理 pending 状态，开始正常拖动
+            // Clear pending state and start normal drag
             pendingRestoreRef.current = null;
             document.removeEventListener("mousemove", handleMove);
             document.removeEventListener("mouseup", handleUp);
@@ -218,13 +218,13 @@ function useWindowDrag(isMaximized: boolean, onRestored: () => void) {
               }
             }
 
-            // 启动正常拖动
+            // Start normal drag
             startDragImpl(moveEvent.screenX, moveEvent.screenY, newWindowX, newWindowY);
           }
         };
 
         const handleUp = () => {
-          // 用户只是点击，没有拖动，不还原窗口
+          // Click only, no drag — do not restore window
           pendingRestoreRef.current = null;
           document.removeEventListener("mousemove", handleMove);
           document.removeEventListener("mouseup", handleUp);
@@ -298,7 +298,7 @@ export default function TitleBar({ onToggleAI, aiVisible }: TitleBarProps) {
     const checkDesktop = async () => {
       const hasApi = !!window.pywebview?.api;
       setIsDesktop(hasApi);
-      // 检测是否为 Mac
+      // Detect macOS
       setIsMac(navigator.userAgent.includes("Mac") || navigator.platform.includes("Mac"));
 
       if (hasApi) {
@@ -314,7 +314,7 @@ export default function TitleBar({ onToggleAI, aiVisible }: TitleBarProps) {
     const timer = setTimeout(checkDesktop, 200);
     const interval = setInterval(checkDesktop, 500);
 
-    // 监听窗口焦点变化
+    // Track window focus changes
     const handleFocus = () => setIsWindowFocused(true);
     const handleBlur = () => setIsWindowFocused(false);
     window.addEventListener("focus", handleFocus);
@@ -350,16 +350,16 @@ export default function TitleBar({ onToggleAI, aiVisible }: TitleBarProps) {
 
   const handleClose = async () => {
     try {
-      // 先尝试 pywebview API
+      // Try pywebview API first
       if (window.pywebview?.api?.close) {
         await window.pywebview.api.close();
       } else {
-        // 降级到 HTTP 请求
+        // Fall back to HTTP request
         await fetch("/exit", { method: "POST" });
       }
     } catch (e) {
       console.error("Close failed:", e);
-      // 尝试 HTTP 请求作为备选
+      // Try HTTP request as fallback
       try {
         await fetch("/exit", { method: "POST" });
       } catch (e2) {
@@ -368,14 +368,14 @@ export default function TitleBar({ onToggleAI, aiVisible }: TitleBarProps) {
     }
   };
 
-  // 非桌面模式下不显示标题栏
+  // Hide title bar outside desktop app
   if (!isDesktop) {
     return null;
   }
 
   return (
     <>
-      {/* 边缘调整大小区域 */}
+      {/* Edge resize handles */}
       <div className="resize-edge top" onMouseDown={(e) => startResize("n", e)} />
       <div className="resize-edge bottom" onMouseDown={(e) => startResize("s", e)} />
       <div className="resize-edge left" onMouseDown={(e) => startResize("w", e)} />
@@ -385,10 +385,10 @@ export default function TitleBar({ onToggleAI, aiVisible }: TitleBarProps) {
       <div className="resize-corner sw" onMouseDown={(e) => startResize("sw", e)} />
       <div className="resize-corner se" onMouseDown={(e) => startResize("se", e)} />
 
-      {/* 自定义标题栏 */}
+      {/* Custom title bar */}
       <div className={`title-bar ${isMac ? "mac-style" : "windows-style"}`}>
         {isMac ? (
-          // Mac 风格：红黄绿按钮在左侧
+          // macOS style: traffic lights on the left
           <>
             <div className={`title-bar-traffic-lights ${!isWindowFocused ? "dimmed" : ""}`}>
               <button className="traffic-light close" onClick={handleClose} title={t("titlebar.close")}>
@@ -431,7 +431,7 @@ export default function TitleBar({ onToggleAI, aiVisible }: TitleBarProps) {
             )}
           </>
         ) : (
-          // Windows 风格：按钮在右侧
+          // Windows style: controls on the right
           <>
             <div
               className="title-bar-drag"

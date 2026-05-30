@@ -42,10 +42,10 @@ export default function SplitContainer({
   const containerRef = useRef<HTMLDivElement>(null);
   const layoutRetryRef = useRef<number | null>(null);
   const updateAndFitRef = useRef<() => void>(() => {});
-  // 存储所有终端实例的 ref
+  // Refs for all terminal instances
   const terminalRefs = useRef<Map<string, TerminalPanelRef>>(new Map());
 
-  // 根据布局生成 grid 样式
+  // Grid style from layout type
   const gridStyle = useMemo(() => {
     const configs: Record<LayoutType, string> = {
       single: "1fr / 1fr",
@@ -56,7 +56,7 @@ export default function SplitContainer({
     return { gridTemplate: configs[layout] };
   }, [layout]);
 
-  // 收集所有唯一的 tab
+  // Collect all unique tabs
   const allTabs = useMemo(() => {
     const tabMap = new Map<string, TabState>();
     panes.forEach((pane) => {
@@ -67,7 +67,7 @@ export default function SplitContainer({
     return Array.from(tabMap.values());
   }, [panes]);
 
-  // 当前激活的 shell 终端 tab（非 VNC）
+  // Active shell terminal tab (non-VNC)
   const activeShellTabId = useMemo(() => {
     for (const pane of panes) {
       const tab = pane.tabs.find((t) => t.id === pane.activeTabId);
@@ -86,7 +86,7 @@ export default function SplitContainer({
     [activeShellTabId]
   );
 
-  // 构建 tabId -> 激活状态的映射
+  // Build tabId → active-state set
   const activeTabSet = useMemo(() => {
     const set = new Set<string>();
     panes.forEach((pane) => {
@@ -95,7 +95,7 @@ export default function SplitContainer({
     return set;
   }, [panes]);
 
-  // tabId -> paneId 映射
+  // tabId → paneId map
   const tabPaneMap = useMemo(() => {
     const map = new Map<string, string>();
     panes.forEach((pane) => {
@@ -106,7 +106,7 @@ export default function SplitContainer({
     return map;
   }, [panes]);
 
-  // 更新终端实例的位置
+  // Update terminal instance positions
   const updatePositions = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -170,7 +170,7 @@ export default function SplitContainer({
     });
   }, [tabPaneMap, activeTabSet, allTabs, isCompact, showMobileKeys]);
 
-  // fit 所有终端（同步，调用前需确保 DOM 已更新）
+  // Fit all terminals (sync; ensure DOM is updated before calling)
   const fitAllTerminals = useCallback(() => {
     const paneSizes = new Map<string, { cols: number; rows: number }>();
 
@@ -204,10 +204,10 @@ export default function SplitContainer({
     });
   }, [tabPaneMap, activeTabSet, allTabs]);
 
-  // 位置更新 + fit 一体化
+  // Position update + fit in one step
   const updateAndFit = useCallback(() => {
     updatePositions();
-    // 强制浏览器重排，确保 terminal-container 尺寸已更新
+    // Force reflow so terminal-container dimensions are current
     containerRef.current?.offsetHeight;
     fitAllTerminals();
   }, [updatePositions, fitAllTerminals]);
@@ -230,14 +230,14 @@ export default function SplitContainer({
     };
   }, [panes, updateAndFit]);
 
-  // 布局切换
+  // Layout change
   useEffect(() => {
-    // 等 DOM 更新完成再 fit
+    // Fit after DOM has settled
     const timer = setTimeout(updateAndFit, 50);
     return () => clearTimeout(timer);
   }, [layout, updateAndFit]);
 
-  // 注册终端 ref 的回调
+  // Callback to register terminal refs
   const setTerminalRef = useCallback((tabId: string) => {
     return (ref: TerminalPanelRef | null) => {
       if (ref) {
@@ -248,7 +248,7 @@ export default function SplitContainer({
     };
   }, []);
 
-  // 渲染单个分区
+  // Render a single pane
   const renderPane = (pane: Pane, index: number) => {
     return (
       <div
@@ -291,7 +291,7 @@ export default function SplitContainer({
     <div ref={containerRef} className="split-container" style={gridStyle} data-layout={layout}>
       {panes.map((pane, index) => renderPane(pane, index))}
 
-      {/* 全局终端池 */}
+      {/* Global terminal pool */}
       <div className="terminal-pool">
         {allTabs.map((tab) => (
           <div

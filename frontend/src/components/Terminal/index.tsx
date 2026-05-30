@@ -37,10 +37,10 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       isCompact
     );
 
-    // 暴露 fit 方法给父组件
+    // Expose fit methods to parent component
     useImperativeHandle(ref, () => ({ fit, fitWithSize, sendInput }), [fit, fitWithSize, sendInput]);
 
-    // 使用 ResizeObserver 监听容器尺寸 + 必要时重试 init
+    // Watch container size with ResizeObserver and retry init when needed
     useEffect(() => {
       const container = containerRef.current;
       if (!container) return;
@@ -48,10 +48,11 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       const checkSize = () => {
         if (container.offsetWidth > 0 && container.offsetHeight > 0) {
           setContainerReady(true);
-          // agent 一次创建多个终端时,中间 tab 短暂激活又失活,init 在异步 import
-          // 期间发现容器变 0 直接 bail。后续切回该 tab 时容器恢复可见,但
-          // containerReady 已是 true → init useEffect 不会重跑 → 永远空显示。
-          // 这里检测到容器可见且 term 未建则主动重试 init。
+          // When the agent creates multiple terminals, an intermediate tab may be briefly
+          // activated then deactivated; init bails during async import when the container
+          // becomes zero-sized. Switching back makes the container visible again, but
+          // containerReady is already true so the init useEffect won't rerun → blank display.
+          // Retry init here when the container is visible but term is not yet created.
           if (!term.current) {
             init();
           }
@@ -60,10 +61,10 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
         return false;
       };
 
-      // 立即检查
+      // Check immediately
       if (checkSize()) return;
 
-      // 使用 ResizeObserver 监听
+      // Watch with ResizeObserver
       const observer = new ResizeObserver(() => {
         checkSize();
       });
@@ -72,7 +73,7 @@ const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       return () => observer.disconnect();
     }, [isActive, init, term]);
 
-    // 容器准备好后初始化终端(首次路径)
+    // Initialize terminal once container is ready (first path)
     useEffect(() => {
       if (containerReady && !term.current) {
         init();

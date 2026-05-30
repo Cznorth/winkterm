@@ -3,23 +3,23 @@
 import { useState, useCallback, useEffect } from "react";
 import type { TabState } from "./useTabs";
 
-// 布局类型
+// Layout type
 export type LayoutType = "single" | "horizontal" | "vertical" | "grid";
 
-// 分区数据
+// Pane data
 export interface Pane {
   id: string;
   tabs: TabState[];
   activeTabId: string;
 }
 
-// 全局分区状态
+// Global split-pane state
 export interface SplitState {
   layout: LayoutType;
   panes: Pane[];
 }
 
-// 布局配置
+// Layout configuration
 export const LAYOUT_CONFIG: Record<LayoutType, { paneCount: number; gridCols: number; gridRows: number }> = {
   single: { paneCount: 1, gridCols: 1, gridRows: 1 },
   horizontal: { paneCount: 2, gridCols: 2, gridRows: 1 },
@@ -32,7 +32,7 @@ let paneIdCounter = 0;
 
 const STORAGE_KEY = "winkterm-split-state";
 
-// 默认初始状态（SSR 安全）
+// Default initial state (SSR-safe)
 function getDefaultState(): SplitState {
   return {
     layout: "single",
@@ -71,7 +71,7 @@ function syncCountersFromState(state: SplitState) {
 
 syncCountersFromState(getDefaultState());
 
-// 从 localStorage 加载状态（仅客户端）
+// Load state from localStorage (client only)
 function loadStateFromStorage(): SplitState | null {
   if (typeof window === "undefined") return null;
   try {
@@ -107,7 +107,7 @@ function saveState(state: SplitState) {
   }
 }
 
-/** 修正 layout 与 pane 数量不一致的持久化状态（如 single 却存了 2 个 pane） */
+/** Fix persisted state where layout and pane count disagree (e.g. single layout with 2 panes) */
 function normalizeSplitState(state: SplitState): SplitState {
   const config = LAYOUT_CONFIG[state.layout];
   if (state.panes.length === config.paneCount) return state;
@@ -145,7 +145,7 @@ function normalizeSplitState(state: SplitState): SplitState {
   return { layout: state.layout, panes: newPanes };
 }
 
-/** 修正持久化状态中的重复 tab id（会导致终端池/VNC 渲染丢失） */
+/** Fix duplicate tab ids in persisted state (causes terminal pool / VNC render loss) */
 function dedupeTabIds(state: SplitState): SplitState {
   const globalSeen = new Set<string>();
   let changed = false;
@@ -197,11 +197,11 @@ export interface UsePanesReturn {
 }
 
 export function usePanes(): UsePanesReturn {
-  // 使用默认状态初始化（SSR 安全）
+  // Initialize with default state (SSR-safe)
   const [state, setState] = useState<SplitState>(getDefaultState);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // 客户端 hydration：从 localStorage 加载
+  // Client hydration: load from localStorage
   useEffect(() => {
     const savedState = loadStateFromStorage();
     if (savedState) {
@@ -216,19 +216,19 @@ export function usePanes(): UsePanesReturn {
     setIsHydrated(true);
   }, []);
 
-  // 保存状态（仅在 hydration 完成后）
+  // Persist state (only after hydration completes)
   useEffect(() => {
     if (isHydrated) {
       saveState(state);
     }
   }, [state, isHydrated]);
 
-  // 切换布局
+  // Switch layout
   const setLayout = useCallback((layout: LayoutType) => {
     setState((prev) => {
       const config = LAYOUT_CONFIG[layout];
 
-      // 收集所有现有的标签页
+      // Collect all existing tabs
       const allTabs: TabState[] = [];
       const allActiveIds: string[] = [];
       prev.panes.forEach((pane) => {
@@ -236,7 +236,7 @@ export function usePanes(): UsePanesReturn {
         allActiveIds.push(pane.activeTabId);
       });
 
-      // 如果没有标签页，创建新的
+      // If no tabs exist, create new ones
       if (allTabs.length === 0) {
         const newPanes: Pane[] = [];
         for (let i = 0; i < config.paneCount; i++) {
@@ -245,18 +245,18 @@ export function usePanes(): UsePanesReturn {
         return { layout, panes: newPanes };
       }
 
-      // 将现有标签页分配到各个分区
+      // Distribute existing tabs across panes
       const newPanes: Pane[] = [];
       let tabIndex = 0;
 
       for (let i = 0; i < config.paneCount; i++) {
-        // 计算这个分区应该有多少标签
+        // How many tabs this pane should get
         const tabsForThisPane = Math.ceil((allTabs.length - tabIndex) / (config.paneCount - i));
         const paneTabs = allTabs.slice(tabIndex, tabIndex + Math.max(1, tabsForThisPane));
         tabIndex += paneTabs.length;
 
         if (paneTabs.length > 0) {
-          // 找出这个分区的激活标签（优先使用之前的激活标签）
+          // Active tab for this pane (prefer previously active tab)
           const activeId = paneTabs.find(t => allActiveIds.includes(t.id))?.id || paneTabs[0].id;
           paneIdCounter++;
           newPanes.push({
@@ -265,7 +265,7 @@ export function usePanes(): UsePanesReturn {
             activeTabId: activeId,
           });
         } else {
-          // 没有标签可分配，创建空分区
+          // No tabs to assign; create an empty pane
           newPanes.push(createPane());
         }
       }
@@ -274,7 +274,7 @@ export function usePanes(): UsePanesReturn {
     });
   }, []);
 
-  // 添加标签页
+  // Add tab
   const addTab = useCallback((paneId: string, options?: { id?: string; type?: "local" | "ssh" | "vnc"; sshConnectionId?: string; vncPort?: number; vncPassword?: string; title?: string; color?: string }) => {
     let newId = options?.id || `tab-${++tabIdCounter}`;
     const tabType = options?.type || "local";
@@ -319,7 +319,7 @@ export function usePanes(): UsePanesReturn {
         if (!pane.tabs.some((t) => t.id === tabId)) return pane;
         const newTabs = pane.tabs.filter((t) => t.id !== tabId);
         if (newTabs.length === 0) {
-          // 保底:不让 pane 空,创建占位 local 标签
+          // Fallback: never leave pane empty; create placeholder local tab
           tabIdCounter++;
           const placeholder: TabState = {
             id: `tab-${tabIdCounter}`,
@@ -338,14 +338,14 @@ export function usePanes(): UsePanesReturn {
     }));
   }, []);
 
-  // 关闭标签页
+  // Close tab
   const closeTab = useCallback((paneId: string, tabId: string) => {
     setState((prev) => ({
       ...prev,
       panes: prev.panes.map((pane) => {
         if (pane.id !== paneId) return pane;
 
-        if (pane.tabs.length <= 1) return pane; // 至少保留一个
+        if (pane.tabs.length <= 1) return pane; // Keep at least one tab
 
         const newTabs = pane.tabs.filter((tab) => tab.id !== tabId);
         let newActiveId = pane.activeTabId;
@@ -361,7 +361,7 @@ export function usePanes(): UsePanesReturn {
     }));
   }, []);
 
-  // 切换标签页
+  // Switch tab
   const switchTab = useCallback((paneId: string, tabId: string) => {
     setState((prev) => ({
       ...prev,
@@ -371,7 +371,7 @@ export function usePanes(): UsePanesReturn {
     }));
   }, []);
 
-  // 重命名标签页
+  // Rename tab
   const renameTab = useCallback((paneId: string, tabId: string, title: string) => {
     setState((prev) => ({
       ...prev,
@@ -383,7 +383,7 @@ export function usePanes(): UsePanesReturn {
     }));
   }, []);
 
-  // 跨分区移动标签页
+  // Move tab across panes
   const moveTab = useCallback((fromPaneId: string, toPaneId: string, tabId: string) => {
     setState((prev) => {
       const fromPane = prev.panes.find((p) => p.id === fromPaneId);
@@ -394,7 +394,7 @@ export function usePanes(): UsePanesReturn {
       const movingTab = fromPane.tabs.find((t) => t.id === tabId);
       if (!movingTab) return prev;
 
-      // 源分区至少保留一个标签
+      // Source pane must keep at least one tab
       if (fromPane.tabs.length <= 1) return prev;
 
       return {

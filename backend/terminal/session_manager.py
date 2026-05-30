@@ -1,7 +1,8 @@
-"""统一终端会话管理器。
+"""Unified terminal session manager.
 
-合并原 SessionManager(WebSocket 用户终端) + AgentTerminalPool(外部 agent HTTP 终端):
-所有终端都是 TerminalSession,内外 agent 与用户共享同一份会话池。
+Merges the former SessionManager (WebSocket user terminals) and AgentTerminalPool
+(external agent HTTP terminals): all terminals are TerminalSession instances; internal
+agents, external agents, and users share the same session pool.
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ _JANITOR_INTERVAL = 60.0
 
 @dataclass
 class TerminalSession:
-    """单个终端会话:封装 PtyManager + 输出累积 + 元数据。"""
+    """Single terminal session: wraps PtyManager, output accumulation, and metadata."""
 
     id: str
     type: str = "local"  # "local" | "ssh"
@@ -50,8 +51,8 @@ class TerminalSession:
     cwd: Optional[str] = None
     created_by: str = "user"  # "user" | "agent:<client>"
     user_visible: bool = True
-    transient: bool = False  # 隐藏临时会话,不入用户标签栏
-    ttl_seconds: float = 0.0  # 0/负 = 不过期(用户会话默认),agent 会话默认 DEFAULT_TTL_SECONDS
+    transient: bool = False  # Hidden temporary session; not shown in the user tab bar
+    ttl_seconds: float = 0.0  # 0/negative = no expiry (default for user sessions); agent sessions use DEFAULT_TTL_SECONDS
     created_at: datetime = field(default_factory=datetime.now)
 
     pty: PtyManager = field(default_factory=PtyManager)
@@ -67,7 +68,7 @@ class TerminalSession:
     last_command: str = ""
 
     # ------------------------------------------------------------------
-    # 内部
+    # Internal
     # ------------------------------------------------------------------
 
     def _on_output(self, data: bytes) -> None:
@@ -100,11 +101,11 @@ class TerminalSession:
         return self.pty.is_alive()
 
     # ------------------------------------------------------------------
-    # 生命周期
+    # Lifecycle
     # ------------------------------------------------------------------
 
     def attach_output_capture(self) -> None:
-        """注册输出回调以累积 buffer。允许重复调用(只生效一次)。"""
+        """Register an output callback to accumulate the buffer. Idempotent on repeat calls."""
         if self._capture_attached:
             return
         self.pty.add_output_callback(self._on_output)
@@ -113,16 +114,16 @@ class TerminalSession:
             try:
                 self._wake_event = asyncio.Event()
             except RuntimeError:
-                # 无运行 loop,推迟
+                # No running event loop; defer
                 pass
 
-    # 典型 shell prompt 末尾(行尾): $ / # / > / %  后跟可选空格
+    # Typical shell prompt tail (end of line): $ / # / > / % followed by optional space
     _PROMPT_TAIL_RE = re.compile(rb"[\$#>%]\s?$")
 
     def _looks_like_prompt(self, tail_bytes: int = 16) -> bool:
         with self._lock:
             tail = bytes(self._raw[-tail_bytes:]) if self._raw else b""
-        # 去 ANSI 末尾,看光标停在 prompt 字符
+        # Strip ANSI from the tail and check whether the cursor sits on a prompt character
         try:
             text = strip_ansi(tail.decode("utf-8", errors="replace")).rstrip("\n\r ")
         except Exception:
@@ -135,10 +136,10 @@ class TerminalSession:
         max_wait: float = 15.0,
         require_prompt: bool = True,
     ) -> None:
-        """等待 pty 输出落定。
+        """Wait until PTY output settles.
 
-        优先看 shell prompt(行尾 $/#/>/%) + idle:同时满足才返回。
-        如果只看 idle 容易被 banner 中间停顿骗到,导致命令打在 login 流程里。
+        Prefer shell prompt (trailing $/#/>/%) plus idle: return only when both are satisfied.
+        Idle alone can be fooled by pauses mid-login banner, causing commands to land in the login flow.
         """
         loop = asyncio.get_event_loop()
         deadline = loop.time() + max_wait
@@ -159,9 +160,9 @@ class TerminalSession:
                 return
 
     def ensure_read_loop(self) -> None:
-        """确保 session 持有的读循环任务在跑。幂等。
+        """Ensure the session-owned read loop task is running. Idempotent.
 
-        WS 断开/重连不影响该任务。pty 死亡或 session.close 时才停。
+        WS disconnect/reconnect does not affect this task. It stops only when the pty dies or session.close runs.
         """
         if self._read_task is not None and not self._read_task.done():
             return
@@ -174,7 +175,7 @@ class TerminalSession:
         self._read_task = loop.create_task(self.pty.start_read_loop())
 
     async def start(self, ssh_config: Optional[dict] = None) -> None:
-        """启动 pty + 输出捕获 + 读循环(异步上下文用)。"""
+        """Start the pty, output capture, and read loop (for async contexts)."""
         self.pty.spawn(cols=self.cols, rows=self.rows, ssh_config=ssh_config)
         self.attach_output_capture()
         if self._wake_event is None:
@@ -194,7 +195,7 @@ class TerminalSession:
                 pass
 
     # ------------------------------------------------------------------
-    # 元信息
+    # Metadata
     # ------------------------------------------------------------------
 
     def info(self, is_user_active: bool = False) -> dict:
@@ -226,7 +227,7 @@ class TerminalSession:
         }
 
     # ------------------------------------------------------------------
-    # 快照
+    # Snapshot
     # ------------------------------------------------------------------
 
     def snapshot(
@@ -263,7 +264,7 @@ class TerminalSession:
         return result
 
     # ------------------------------------------------------------------
-    # 输入
+    # Input
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -341,7 +342,7 @@ class TerminalSession:
         }
 
     # ------------------------------------------------------------------
-    # 原子 exec
+    # Atomic exec
     # ------------------------------------------------------------------
 
     async def exec(
@@ -434,7 +435,7 @@ class TerminalSession:
                 }
 
     # ------------------------------------------------------------------
-    # SSE 流
+    # SSE stream
     # ------------------------------------------------------------------
 
     async def stream(self, since: int = 0, strip: bool = True) -> AsyncIterator[dict]:
@@ -467,7 +468,7 @@ class TerminalSession:
 
 
 class SessionManager:
-    """统一终端会话管理器(单例) + TTL janitor。"""
+    """Unified terminal session manager (singleton) with TTL janitor."""
 
     _instance: SessionManager | None = None
     _lock = threading.Lock()
@@ -485,11 +486,11 @@ class SessionManager:
         return cls._instance
 
     # ------------------------------------------------------------------
-    # pubsub (会话生命周期事件广播)
+    # pubsub (session lifecycle event broadcast)
     # ------------------------------------------------------------------
 
     def subscribe(self) -> asyncio.Queue:
-        """订阅 session 事件流。返回新 Queue,使用者负责消费 + unsubscribe。"""
+        """Subscribe to the session event stream. Returns a new Queue; caller must consume and unsubscribe."""
         q: asyncio.Queue = asyncio.Queue(maxsize=256)
         with self._sessions_lock:
             self._subscribers.append(q)
@@ -503,7 +504,7 @@ class SessionManager:
                 pass
 
     def _broadcast(self, event: dict) -> None:
-        """同步把事件投递给所有订阅者(无 loop 也不阻塞)。"""
+        """Synchronously deliver an event to all subscribers (non-blocking even without a loop)."""
         with self._sessions_lock:
             subs = list(self._subscribers)
         for q in subs:
@@ -513,11 +514,11 @@ class SessionManager:
                 logger.warning("[broadcast] 订阅者队列满,丢弃事件")
 
     # ------------------------------------------------------------------
-    # 用户(WebSocket)入口
+    # User (WebSocket) entry
     # ------------------------------------------------------------------
 
     def create_session(self, session_id: str) -> TerminalSession:
-        """旧 API:WebSocket 用户终端入口(裸 session,pty 由调用方 spawn)。"""
+        """Legacy API: WebSocket user terminal entry (bare session; caller spawns the pty)."""
         with self._sessions_lock:
             if session_id in self._sessions:
                 logger.warning(f"[create_session] 会话 {session_id} 已存在,返回现有")
@@ -529,8 +530,8 @@ class SessionManager:
                 user_visible=True,
                 ttl_seconds=0,
             )
-            # 关键:为 agent snapshot/exec/stream 提前挂上输出回调,
-            # 让 pty.spawn 之后的所有输出都进 buffer。
+            # Critical: attach the output callback early for agent snapshot/exec/stream
+            # so all output after pty.spawn goes into the buffer.
             session.attach_output_capture()
             self._sessions[session_id] = session
             self._active_session_id = session_id
@@ -592,7 +593,7 @@ class SessionManager:
             return len(self._sessions)
 
     # ------------------------------------------------------------------
-    # Agent(HTTP / 内部 tool) 入口
+    # Agent (HTTP / internal tool) entry
     # ------------------------------------------------------------------
 
     async def create(
@@ -607,7 +608,7 @@ class SessionManager:
         user_visible: bool = True,
         transient: bool = False,
     ) -> TerminalSession:
-        """Agent 创建终端:自动 spawn pty + 读循环。"""
+        """Agent creates a terminal: automatically spawns the pty and read loop."""
         ssh_config: Optional[dict] = None
         title = ""
         host = port = username = None
@@ -660,7 +661,7 @@ class SessionManager:
         return session
 
     def list_terminals(self) -> list[dict]:
-        """列出所有终端的丰富信息,含 is_user_active 标记。"""
+        """List rich info for all terminals, including the is_user_active flag."""
         with self._sessions_lock:
             active = self._active_session_id
             return [s.info(is_user_active=s.id == active) for s in self._sessions.values()]

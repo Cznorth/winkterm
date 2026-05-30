@@ -1,4 +1,4 @@
-/** xterm / VT100 常用控制序列 */
+/** Common xterm / VT100 control sequences */
 export const TERMINAL_SEQUENCES = {
   esc: "\x1b",
   tab: "\t",
@@ -14,14 +14,14 @@ export const TERMINAL_SEQUENCES = {
   right: "\x1b[C",
 } as const;
 
-/** Ctrl + 单字符（ASCII control code） */
+/** Ctrl + single character (ASCII control code) */
 export function ctrlChar(char: string): string {
   const code = char.toUpperCase().charCodeAt(0);
   if (code < 65 || code > 90) return char;
   return String.fromCharCode(code - 64);
 }
 
-/** Alt + 单字符（ESC 前缀） */
+/** Alt + single character (ESC prefix) */
 export function altChar(char: string): string {
   return `\x1b${char}`;
 }

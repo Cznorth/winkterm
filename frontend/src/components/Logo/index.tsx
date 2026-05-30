@@ -1,6 +1,6 @@
 "use client";
 
-// WinkTerm Logo - 统一图标
+// WinkTerm Logo — shared icon
 export function WinkTermLogo({ size = 24, className = "" }: { size?: number; className?: string }) {
   return (
     <svg
@@ -13,19 +13,19 @@ export function WinkTermLogo({ size = 24, className = "" }: { size?: number; cla
       strokeWidth="3"
       strokeLinecap="round"
     >
-      {/* 外圈 */}
+      {/* Outer ring */}
       <ellipse cx="0" cy="0" rx="38" ry="16" />
-      {/* 上弧 */}
+      {/* Upper arc */}
       <path d="M-38,0 Q-10,-28 0,-28 Q10,-28 38,0" />
-      {/* 眼睛 */}
+      {/* Eye */}
       <circle cx="8" cy="-8" r="7" fill="currentColor" stroke="none" />
-      {/* 高光 */}
+      {/* Highlight */}
       <path d="M-20,-22 Q-14,-32 -6,-30" strokeWidth="2.5" />
     </svg>
   );
 }
 
-// 小尺寸版本（用于标签等）
+// Small size variant (tabs, etc.)
 export function WinkTermIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
   return (
     <svg

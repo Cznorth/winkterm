@@ -1,4 +1,4 @@
-"""共享状态定义。"""
+"""Shared state definitions."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ import operator
 
 
 class AgentState(TypedDict, total=False):
-    """Agent 状态，所有 Agent 共享。"""
+    """Agent state, shared by all agents."""
     messages: Annotated[Sequence[BaseMessage], operator.add]
-    terminal_output: str          # 最近 N 行终端内容
-    analysis_result: str          # 本轮分析结论摘要
-    llm_calls: int                # 本轮 LLM 调用次数
-    waiting_user: bool            # 是否已写入命令等待用户操作
+    terminal_output: str          # Last N lines of terminal content
+    analysis_result: str          # Summary of this round's analysis conclusion
+    llm_calls: int                # Number of LLM calls this round
+    waiting_user: bool            # Whether a command has been written and is awaiting user action
     ask_mode: bool                # ask mode: each tool needs user confirmation before running
     approval_emit: Optional[Callable[[dict], Any]]  # async broadcaster, pushes approval requests to the frontend

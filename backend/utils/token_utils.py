@@ -1,4 +1,4 @@
-"""Token 工具：tiktoken 计数 + OpenRouter context_length 查询。"""
+"""Token utilities: tiktoken counting + OpenRouter context_length lookup."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ _tokenizer = Encoding(**_cl100k_base_constructor())
 
 
 def count_tokens(text: str) -> int:
-    """用 tiktoken 计算 token 数。"""
+    """Count tokens with tiktoken."""
     return len(_tokenizer.encode(text))
 
 
 def count_history_tokens(history: list) -> int:
-    """计算会话历史的总 token 数。"""
+    """Count total tokens in conversation history."""
     total = 0
     for msg in history:
         from langchain_core.messages import AIMessage as _AI, HumanMessage as _Human
@@ -34,18 +34,18 @@ def count_history_tokens(history: list) -> int:
                 for block in content:
                     if isinstance(block, dict):
                         total += count_tokens(block.get("text", "") or "")
-    # 每条消息约 4 token 开销（OpenAI/Anthropic 格式差异）
+    # ~4 tokens overhead per message (OpenAI/Anthropic format differences)
     total += len(history) * 4
     return total
 
 
 async def fetch_model_context_length(model_id: str) -> int | None:
-    """从 OpenRouter API 获取指定模型的 context_length。
+    """Fetch context_length for a model from the OpenRouter API.
 
-    OpenRouter ID 格式为 provider/name，代理使用 name 部分（可能带日期后缀）。
-    匹配策略：
-      1. 精确匹配 name_part
-      2. name_part 去掉尾部日期版本号后匹配
+    OpenRouter IDs use provider/name; proxies often use the name part (possibly with date suffix).
+    Matching strategy:
+      1. Exact match on name_part
+      2. Match after stripping trailing date version from name_part
     """
     try:
         import httpx
@@ -60,14 +60,14 @@ async def fetch_model_context_length(model_id: str) -> int | None:
                 mid = m.get("id", "")
                 name_part = mid.split("/", 1)[-1]
 
-                # 1) 精确匹配
+                # 1) Exact match
                 if model_id == name_part:
                     ctx = m.get("context_length")
                     if ctx:
                         logger.debug(f"[OR] 精确匹配 {mid} -> {model_id} context_length={ctx}")
                         return ctx
 
-                # 2) 去尾部日期版本号后匹配
+                # 2) Match after stripping trailing date version
                 if "-" in name_part:
                     base, suffix = name_part.rsplit("-", 1)
                     if suffix.isdigit() and model_id == base:

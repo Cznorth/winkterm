@@ -9,7 +9,7 @@ module.exports = {
           firefox: '68',
           edge: '79',
         },
-        // 不自动导入 core-js，避免与 Next.js 冲突
+        // Do not auto-import core-js — avoids conflict with Next.js
         useBuiltIns: false,
       },
     ],
@@ -17,7 +17,7 @@ module.exports = {
     '@babel/preset-typescript',
   ],
   plugins: [
-    // 确保类属性正确转译
+    // Ensure class properties transpile correctly
     '@babel/plugin-transform-class-properties',
     '@babel/plugin-transform-private-methods',
     '@babel/plugin-transform-private-property-in-object',

@@ -1,6 +1,7 @@
-"""Agent 图入口（保持向后兼容）。
+"""Agent graph entry point (kept for backward compatibility).
 
-这个文件现在只是一个便捷入口，实际的图构建由 factory.py 完成。
+This file is now just a convenience entry point; the actual graph
+construction is done by factory.py.
 """
 
 from __future__ import annotations
@@ -15,14 +16,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("agent.graph")
 
-# 缓存
+# Cache
 _graph: CompiledGraph | None = None
 
 
 def get_graph() -> CompiledGraph:
-    """获取终端内 Agent 的编译图（向后兼容）。
+    """Get the compiled graph for the in-terminal Agent (backward compatible).
 
-    这个函数保持原有的 API 不变，但内部使用新的工厂模式。
+    This function keeps the original API unchanged, but internally uses
+    the new factory pattern.
     """
     global _graph
     if _graph is None:

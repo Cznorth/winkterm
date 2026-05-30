@@ -1,4 +1,4 @@
-"""SSH 连接 API 路由。"""
+"""SSH connection API routes."""
 
 from __future__ import annotations
 
@@ -23,11 +23,11 @@ router = APIRouter(prefix="/api/ssh", tags=["ssh"])
 
 
 # -----------------------------------------------------------
-# 请求模型
+# Request models
 # -----------------------------------------------------------
 
 class SSHConnectionCreate(BaseModel):
-    """创建 SSH 连接请求。"""
+    """Create SSH connection request."""
     title: str = ""
     host: str
     port: int = 22
@@ -43,7 +43,7 @@ class SSHConnectionCreate(BaseModel):
 
 
 class SSHConnectionUpdate(BaseModel):
-    """更新 SSH 连接请求。"""
+    """Update SSH connection request."""
     title: Optional[str] = None
     host: Optional[str] = None
     port: Optional[int] = None
@@ -59,12 +59,12 @@ class SSHConnectionUpdate(BaseModel):
 
 
 class ElectermImport(BaseModel):
-    """electerm 导入请求。"""
+    """electerm import request."""
     bookmarks: list[dict]
 
 
 class SSHLocalUploadRequest(BaseModel):
-    """桌面模式：本地路径上传请求。"""
+    """Desktop mode: local path upload request."""
 
     local_path: str
     remote_path: str
@@ -72,20 +72,20 @@ class SSHLocalUploadRequest(BaseModel):
 
 
 class SSHLocalDownloadRequest(BaseModel):
-    """桌面模式：下载到本地路径请求。"""
+    """Desktop mode: download to local path request."""
 
     remote_path: str
     local_path: str
 
 
 class SSHDirectoryCreateRequest(BaseModel):
-    """远端目录创建请求。"""
+    """Remote directory creation request."""
 
     path: str
 
 
 class SSHFileContentUpdateRequest(BaseModel):
-    """文本文件内容更新请求。"""
+    """Text file content update request."""
 
     path: str
     content: str
@@ -93,24 +93,24 @@ class SSHFileContentUpdateRequest(BaseModel):
 
 
 class SSHDeletePathsRequest(BaseModel):
-    """批量删除远端路径请求。"""
+    """Batch delete remote paths request."""
 
     paths: list[str]
 
 
 # -----------------------------------------------------------
-# API 端点
+# API endpoints
 # -----------------------------------------------------------
 
 @router.get("/connections")
 async def list_connections() -> dict:
-    """列出所有 SSH 连接（密码脱敏）。"""
+    """List all SSH connections (passwords masked)."""
     return SSHConnectionManager.list_connections()
 
 
 @router.post("/connections")
 async def create_connection(conn: SSHConnectionCreate) -> dict:
-    """创建新的 SSH 连接。"""
+    """Create a new SSH connection."""
     if not conn.host:
         raise HTTPException(status_code=400, detail="主机地址不能为空")
     if not conn.username:
@@ -121,7 +121,7 @@ async def create_connection(conn: SSHConnectionCreate) -> dict:
 
 @router.get("/connections/{conn_id}")
 async def get_connection(conn_id: str, secrets: bool = Query(default=False)) -> dict:
-    """获取单个连接；secrets=true 时返回明文密钥（用于 VNC 连接等）。"""
+    """Get a single connection; when secrets=true return plaintext keys (used for VNC connections, etc.)."""
     data = SSHConnectionManager.get_connection_dict(conn_id, include_secrets=secrets)
     if not data:
         raise HTTPException(status_code=404, detail="连接不存在")
@@ -130,7 +130,7 @@ async def get_connection(conn_id: str, secrets: bool = Query(default=False)) -> 
 
 @router.put("/connections/{conn_id}")
 async def update_connection(conn_id: str, conn: SSHConnectionUpdate) -> dict:
-    """更新 SSH 连接。"""
+    """Update SSH connection."""
     result = SSHConnectionManager.update_connection(conn_id, conn.model_dump(exclude_none=True))
     if not result.get("success"):
         raise HTTPException(status_code=404, detail="连接不存在")
@@ -139,13 +139,13 @@ async def update_connection(conn_id: str, conn: SSHConnectionUpdate) -> dict:
 
 @router.delete("/connections/{conn_id}")
 async def delete_connection(conn_id: str) -> dict:
-    """删除 SSH 连接。"""
+    """Delete SSH connection."""
     return SSHConnectionManager.delete_connection(conn_id)
 
 
 @router.post("/import/electerm")
 async def import_electerm(data: ElectermImport) -> dict:
-    """导入 electerm 配置。"""
+    """Import electerm configuration."""
     if not data.bookmarks:
         raise HTTPException(status_code=400, detail="没有可导入的配置")
 
@@ -178,7 +178,7 @@ def upload_file(
     overwrite: Annotated[bool, Form()] = False,
     file: UploadFile = File(...),
 ) -> dict:
-    """浏览器模式：上传文件到远端。"""
+    """Browser mode: upload a file to the remote host."""
     conn = _get_connection_or_404(conn_id)
 
     if not file.filename:
@@ -208,7 +208,7 @@ def list_remote_files(
     conn_id: str,
     path: Annotated[str | None, Query()] = None,
 ) -> dict:
-    """列出远端目录。"""
+    """List a remote directory."""
     conn = _get_connection_or_404(conn_id)
 
     try:
@@ -222,7 +222,7 @@ def get_file_content(
     conn_id: str,
     path: Annotated[str, Query(...)],
 ) -> dict:
-    """读取文本文件内容。"""
+    """Read text file content."""
     conn = _get_connection_or_404(conn_id)
 
     try:
@@ -233,7 +233,7 @@ def get_file_content(
 
 @router.put("/connections/{conn_id}/files/content")
 def update_file_content(conn_id: str, data: SSHFileContentUpdateRequest) -> dict:
-    """保存文本文件内容。"""
+    """Save text file content."""
     conn = _get_connection_or_404(conn_id)
 
     try:
@@ -244,7 +244,7 @@ def update_file_content(conn_id: str, data: SSHFileContentUpdateRequest) -> dict
 
 @router.post("/connections/{conn_id}/directories")
 def create_remote_directory(conn_id: str, data: SSHDirectoryCreateRequest) -> dict:
-    """创建远端目录。"""
+    """Create a remote directory."""
     conn = _get_connection_or_404(conn_id)
 
     try:
@@ -259,7 +259,7 @@ def create_remote_directory(conn_id: str, data: SSHDirectoryCreateRequest) -> di
 
 @router.delete("/connections/{conn_id}/paths")
 def delete_remote_paths(conn_id: str, data: SSHDeletePathsRequest) -> dict:
-    """批量删除远端文件或目录。"""
+    """Batch delete remote files or directories."""
     conn = _get_connection_or_404(conn_id)
 
     try:
@@ -274,7 +274,7 @@ def delete_remote_paths(conn_id: str, data: SSHDeletePathsRequest) -> dict:
 
 @router.post("/connections/{conn_id}/transfer/jobs/upload-local")
 def upload_local_file_job(conn_id: str, data: SSHLocalUploadRequest) -> dict:
-    """桌面模式：创建本地上传任务。"""
+    """Desktop mode: create a local upload job."""
     conn = _get_connection_or_404(conn_id)
 
     try:
@@ -289,7 +289,7 @@ def upload_local_file_job(conn_id: str, data: SSHLocalUploadRequest) -> dict:
 
 @router.post("/connections/{conn_id}/transfer/upload-local")
 def upload_local_file(conn_id: str, data: SSHLocalUploadRequest) -> dict:
-    """桌面模式：直接从本地路径上传。"""
+    """Desktop mode: upload directly from a local path."""
     conn = _get_connection_or_404(conn_id)
 
     try:
@@ -310,7 +310,7 @@ def upload_local_file(conn_id: str, data: SSHLocalUploadRequest) -> dict:
 
 @router.get("/connections/{conn_id}/transfer/jobs/{job_id}")
 def get_transfer_job(conn_id: str, job_id: str) -> dict:
-    """获取传输任务状态。"""
+    """Get transfer job status."""
     _get_connection_or_404(conn_id)
     job = TransferJobManager.get_job(job_id)
     if not job:
@@ -323,7 +323,7 @@ def download_file(
     conn_id: str,
     remote_path: Annotated[str, Query(...)],
 ):
-    """浏览器模式：下载远端文件。"""
+    """Browser mode: download a remote file."""
     conn = _get_connection_or_404(conn_id)
 
     try:
@@ -346,7 +346,7 @@ def download_file(
 
 @router.post("/connections/{conn_id}/transfer/jobs/download-local")
 def download_local_file_job(conn_id: str, data: SSHLocalDownloadRequest) -> dict:
-    """桌面模式：创建本地下载任务。"""
+    """Desktop mode: create a local download job."""
     conn = _get_connection_or_404(conn_id)
 
     try:
@@ -361,7 +361,7 @@ def download_local_file_job(conn_id: str, data: SSHLocalDownloadRequest) -> dict
 
 @router.post("/connections/{conn_id}/transfer/download-local")
 def download_local_file(conn_id: str, data: SSHLocalDownloadRequest) -> dict:
-    """桌面模式：直接下载到本地路径。"""
+    """Desktop mode: download directly to a local path."""
     conn = _get_connection_or_404(conn_id)
 
     try:

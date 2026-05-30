@@ -10,7 +10,7 @@ const axiosInstance = axios.create({
   },
 });
 
-// 远程访问鉴权：每个请求附带访问密钥（localhost 桌面端密钥为空，后端按 IP 免鉴权）
+// Remote access auth: attach access key on every request (empty key on localhost desktop; backend skips auth by IP)
 axiosInstance.interceptors.request.use((config) => {
   const key = getAccessKey();
   if (key) {

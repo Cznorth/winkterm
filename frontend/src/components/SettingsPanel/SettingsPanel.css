@@ -1,4 +1,4 @@
-/* SettingsPanel - VS Code 风格优化版 */
+/* SettingsPanel — VS Code–style layout */
 
 .settings-panel {
   display: flex;
@@ -8,7 +8,7 @@
   color: var(--fg-primary);
 }
 
-/* 标题栏 */
+/* Header */
 .settings-header {
   display: flex;
   align-items: center;
@@ -34,7 +34,7 @@
   letter-spacing: 0.5px;
 }
 
-/* 内容区域 */
+/* Content area */
 .settings-content {
   flex: 1;
   overflow-y: auto;
@@ -42,7 +42,7 @@
   max-width: 600px;
 }
 
-/* 分组 */
+/* Section groups */
 .settings-group {
   padding: 16px;
   border-bottom: 1px solid var(--border-default);
@@ -70,7 +70,7 @@
   color: var(--fg-muted);
 }
 
-/* 表单项 */
+/* Form fields */
 .settings-field {
   margin-bottom: 16px;
 }
@@ -93,7 +93,7 @@
   font-weight: 400;
 }
 
-/* 输入框 */
+/* Text inputs */
 .settings-input {
   width: 100%;
   padding: 8px 12px;
@@ -119,7 +119,7 @@
   cursor: not-allowed;
 }
 
-/* 多行文本框（agents.md / memory.md） */
+/* Textareas (agents.md / memory.md) */
 .settings-textarea {
   width: 100%;
   min-height: 140px;
@@ -140,7 +140,7 @@
   box-shadow: 0 0 0 1px var(--accent-primary);
 }
 
-/* 下拉框 */
+/* Select dropdowns */
 .settings-select {
   width: 100%;
   padding: 8px 12px;
@@ -158,7 +158,7 @@
   outline: none;
 }
 
-/* 按钮 */
+/* Buttons */
 .settings-btn {
   display: inline-flex;
   align-items: center;
@@ -237,7 +237,7 @@
   overflow-y: auto;
 }
 
-/* 模型列表 */
+/* Model list */
 .settings-models-list {
   max-height: 180px;
   overflow-y: auto;
@@ -302,7 +302,7 @@
   background: rgba(241, 76, 76, 0.1);
 }
 
-/* 手动添加模型 */
+/* Manual model add */
 .settings-add-model {
   display: flex;
   gap: 8px;
@@ -313,7 +313,7 @@
   flex: 1;
 }
 
-/* 空状态 */
+/* Empty state */
 .settings-empty {
   padding: 24px 16px;
   text-align: center;
@@ -329,7 +329,7 @@
   margin: 0 auto 8px;
 }
 
-/* 错误提示 */
+/* Error message */
 .settings-error {
   display: flex;
   align-items: center;
@@ -349,7 +349,7 @@
   flex-shrink: 0;
 }
 
-/* 成功提示 */
+/* Success message */
 .settings-success {
   display: flex;
   align-items: center;
@@ -369,7 +369,7 @@
   flex-shrink: 0;
 }
 
-/* 状态指示器 */
+/* Status indicator */
 .settings-status {
   display: flex;
   align-items: center;
@@ -393,7 +393,7 @@
   background: var(--error);
 }
 
-/* 加载状态 */
+/* Loading state */
 .settings-loading {
   display: flex;
   align-items: center;
@@ -414,14 +414,14 @@
   to { transform: rotate(360deg); }
 }
 
-/* 分隔线 */
+/* Divider */
 .settings-divider {
   height: 1px;
   background: var(--border-default);
   margin: 16px 0;
 }
 
-/* 帮助文本 */
+/* Help text */
 .settings-help {
   font-size: 11px;
   color: var(--fg-muted);
@@ -429,7 +429,7 @@
   line-height: 1.5;
 }
 
-/* 行内表单组 */
+/* Inline form group */
 .settings-inline-group {
   display: flex;
   gap: 12px;

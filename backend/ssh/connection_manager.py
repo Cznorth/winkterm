@@ -1,4 +1,4 @@
-"""SSH 连接配置管理器。"""
+"""SSH connection configuration manager."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ _MASKED_SECRET = "********"
 
 
 def _secret_unchanged(value) -> bool:
-    """空字符串或脱敏占位表示用户未修改该密钥。"""
+    """An empty string or masked placeholder means the user did not change this secret."""
     if value is None:
         return True
     if value == "":
@@ -27,13 +27,13 @@ def _secret_unchanged(value) -> bool:
 
 
 class SSHConnectionManager:
-    """SSH 连接配置管理器。"""
+    """SSH connection configuration manager."""
 
     _CONFIG_FILE = Path.home() / ".winkterm" / "config.json"
 
     @classmethod
     def _load_config(cls) -> dict:
-        """加载配置文件。"""
+        """Load the configuration file."""
         if cls._CONFIG_FILE.exists():
             try:
                 return json.loads(cls._CONFIG_FILE.read_text(encoding="utf-8"))
@@ -44,7 +44,7 @@ class SSHConnectionManager:
 
     @classmethod
     def _save_config(cls, config: dict) -> None:
-        """保存配置文件。"""
+        """Save the configuration file."""
         cls._CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         cls._CONFIG_FILE.write_text(
             json.dumps(config, indent=2, ensure_ascii=False),
@@ -53,10 +53,10 @@ class SSHConnectionManager:
 
     @classmethod
     def list_connections(cls) -> dict:
-        """列出所有连接（密码脱敏）。"""
+        """List all connections (passwords masked)."""
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
-        # 脱敏密码
+        # Mask passwords
         for conn in connections:
             if conn.get("password"):
                 conn["password"] = "********"
@@ -68,7 +68,7 @@ class SSHConnectionManager:
 
     @classmethod
     def get_connection_dict(cls, conn_id: str, *, include_secrets: bool = False) -> Optional[dict]:
-        """获取连接字典；include_secrets=True 时返回明文密钥。"""
+        """Get the connection dict; returns plaintext secrets when include_secrets=True."""
         config = cls._load_config()
         for conn_data in config.get("ssh_connections", []):
             if conn_data.get("id") == conn_id:
@@ -83,7 +83,7 @@ class SSHConnectionManager:
 
     @classmethod
     def get_connection(cls, conn_id: str) -> Optional[SSHConnection]:
-        """获取连接详情。"""
+        """Get connection details."""
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
         for conn_data in connections:
@@ -93,7 +93,7 @@ class SSHConnectionManager:
 
     @classmethod
     def create_connection(cls, data: dict) -> dict:
-        """创建连接。"""
+        """Create a connection."""
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
 
@@ -107,7 +107,7 @@ class SSHConnectionManager:
 
     @classmethod
     def update_connection(cls, conn_id: str, data: dict) -> dict:
-        """更新连接。"""
+        """Update a connection."""
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
 
@@ -129,7 +129,7 @@ class SSHConnectionManager:
 
     @classmethod
     def delete_connection(cls, conn_id: str) -> dict:
-        """删除连接。"""
+        """Delete a connection."""
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
         connections = [c for c in connections if c.get("id") != conn_id]
@@ -140,7 +140,7 @@ class SSHConnectionManager:
 
     @classmethod
     def update_last_connected(cls, conn_id: str) -> None:
-        """更新最后连接时间。"""
+        """Update the last-connected time."""
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
 
@@ -154,17 +154,17 @@ class SSHConnectionManager:
 
     @classmethod
     def import_from_electerm(cls, bookmarks: list[dict]) -> dict:
-        """从 electerm 导入配置。"""
+        """Import configuration from electerm."""
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
         imported = 0
 
         for bm in bookmarks:
-            # 跳过无效项
+            # Skip invalid entries
             if not bm.get("host"):
                 continue
 
-            # 检查是否已存在（按 host+port+username 判断）
+            # Check whether it already exists (by host+port+username)
             existing = any(
                 c.get("host") == bm.get("host")
                 and c.get("port") == bm.get("port", 22)

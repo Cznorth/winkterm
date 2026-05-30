@@ -1,8 +1,8 @@
 /**
- * 动态获取 API/WebSocket 基础 URL
+ * Resolve API/WebSocket base URLs dynamically.
  *
- * 开发环境（Next :3000）：通过环境变量指向后端 :8000
- * 桌面/同源部署：与当前页面同 host:port（桌面端口由 pywebview 动态分配）
+ * Dev (Next on :3000): point at backend :8000 via env vars.
+ * Desktop/same-origin deploy: same host:port as the page (desktop port assigned by pywebview).
  */
 
 function defaultPort(protocol: string): string {
@@ -17,13 +17,13 @@ function isDesktopRuntime(): boolean {
   );
 }
 
-/** 开发模式：Next 跑在 3000，API 在环境变量指定的其他端口 */
+/** Dev mode: Next runs on 3000; API lives on another port from env vars */
 function isNextDevServer(): boolean {
   return typeof window !== "undefined" && window.location.port === "3000";
 }
 
 /**
- * 页面与 NEXT_PUBLIC_* 同机不同端口（典型：桌面 127.0.0.1:8001 + 构建时写死 :8000）
+ * Page and NEXT_PUBLIC_* share host but differ in port (typical: desktop 127.0.0.1:8001 + build-time :8000)
  */
 function bakedApiConflictsWithPageOrigin(baked: string): boolean {
   if (typeof window === "undefined" || isNextDevServer()) {
@@ -61,7 +61,7 @@ function useSameOriginApi(baked: string | undefined): boolean {
   return bakedApiConflictsWithPageOrigin(baked);
 }
 
-/** 获取 HTTP API 基础 URL */
+/** HTTP API base URL */
 export function getApiBaseUrl(): string {
   const baked = process.env.NEXT_PUBLIC_API_URL;
   if (useSameOriginApi(baked)) {
@@ -73,7 +73,7 @@ export function getApiBaseUrl(): string {
   return "";
 }
 
-/** 获取 VNC WebSocket 基础 URL */
+/** VNC WebSocket base URL */
 export function getVncWsBaseUrl(): string {
   const baked = process.env.NEXT_PUBLIC_WS_URL;
   if (useSameOriginApi(baked)) {
@@ -90,7 +90,7 @@ export function getVncWsBaseUrl(): string {
   return "";
 }
 
-/** 获取 WebSocket 基础 URL */
+/** WebSocket base URL */
 export function getWsBaseUrl(): string {
   const baked = process.env.NEXT_PUBLIC_WS_URL;
   if (useSameOriginApi(baked)) {

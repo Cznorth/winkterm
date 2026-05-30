@@ -16,7 +16,7 @@ interface LayoutProps {
   aiPanel: ReactNode;
 }
 
-// SVG 图标
+// SVG icons
 const Icons = {
   terminal: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -43,7 +43,7 @@ const Icons = {
       <circle cx="16" cy="14" r="1.5" fill="currentColor" />
     </svg>
   ),
-  // 布局图标
+  // Layout icons
   layoutSingle: (
     <svg viewBox="0 0 16 16" fill="currentColor">
       <rect x="1" y="1" width="14" height="14" rx="1" />
@@ -177,7 +177,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     });
   }, []);
 
-  // 后端 session 事件 → 自动同步标签栏(agent 创建的可见终端自动加 tab)
+  // Backend session events → sync tab bar (agent-created visible terminals auto-add tab)
   const handleSessionCreated = useCallback((s: SessionInfo) => {
     if (!s.user_visible) return;
     if (hasTab(s.id)) return;
@@ -200,7 +200,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     onClosed: handleSessionClosed,
   });
 
-  // tab X 按钮:先通知后端关 session,再删本地标签(后端 close 也会广播,前端幂等)
+  // Tab close: notify backend to close session first, then remove local tab (backend close also broadcasts; idempotent on frontend)
   const handleTabClose = useCallback((paneId: string, tabId: string) => {
     closeTab(paneId, tabId);
     import("@/lib/axios").then(({ default: axios }) => {
@@ -208,7 +208,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     });
   }, [closeTab]);
 
-  // 处理 SSH 连接 - 添加到第一个分区
+  // Handle SSH connection — add to first pane
   const handleSSHConnect = (conn: { id: string; title: string; host: string; color?: string }) => {
     const firstPaneId = panes[0].id;
     addTab(firstPaneId, {
@@ -220,7 +220,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     setActiveActivity("terminal");
   };
 
-  // 处理 VNC 连接 - 添加到第一个分区
+  // Handle VNC connection — add to first pane
   const handleVNCConnect = (conn: { id: string; title: string; host: string; color?: string }, vncPort: number, vncPassword?: string) => {
     const firstPaneId = panes[0].id;
     addTab(firstPaneId, {
@@ -234,7 +234,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     setActiveActivity("terminal");
   };
 
-  // 窄屏仅展示单分区（合并标签），不改变持久化的 layout 偏好
+  // Narrow viewport: single pane (merged tabs) without changing persisted layout preference
   const { effectiveLayout, effectivePanes } = useMemo(() => {
     if (!isTablet || layout === "single") {
       return { effectiveLayout: layout, effectivePanes: panes };
@@ -265,7 +265,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
       <TitleBar onToggleAI={handleToggleAI} aiVisible={showAI} />
       <div className="layout-workspace">
         <div className="workspace-main">
-          {/* 桌面：左侧活动栏 */}
+          {/* Desktop: left activity bar */}
           {!useMobileNav && (
             <div className="activity-bar">
               <div className="activity-bar-top">
@@ -304,7 +304,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
             </div>
           )}
 
-        {/* 主内容区域 - 终端始终挂载，SSH/设置/对话切换显示 */}
+        {/* Main content — terminal always mounted; SSH/settings/chat toggle visibility */}
         <div className="terminal-section">
           <div
             className="terminal-layer"
@@ -348,7 +348,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
 
         </div>
 
-        {/* AI 侧边栏 - 置于 workspace 层，避免被 overflow 裁切 */}
+        {/* AI sidebar at workspace layer to avoid overflow clipping */}
         <div
           className="ai-resize-handle"
           onMouseDown={handleResizeStart}
@@ -362,7 +362,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
         </div>
       </div>
 
-      {/* 手机/平板：固定底栏，置于 layout 顶层避免被 AI overlay 遮挡 */}
+      {/* Mobile/tablet: fixed bottom nav at layout root to avoid AI overlay overlap */}
       {useMobileNav && (
         <nav className="mobile-nav-bar" aria-label={t("layout.navigation")}>
           {(isCompact ? MOBILE_NAV_ITEMS : ACTIVITY_ITEMS).map((item) => (

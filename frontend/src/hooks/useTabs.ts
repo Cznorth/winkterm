@@ -6,11 +6,11 @@ import type { Terminal } from "@xterm/xterm";
 export interface TabState {
   id: string;
   title: string;
-  type: "local" | "ssh" | "vnc";      // 连接类型
-  sshConnectionId?: string;           // SSH 连接 ID
-  vncPort?: number;                   // VNC 端口
-  vncPassword?: string;               // VNC 密码
-  color?: string;                     // 标签颜色
+  type: "local" | "ssh" | "vnc";      // Connection type
+  sshConnectionId?: string;           // SSH connection ID
+  vncPort?: number;                   // VNC port
+  vncPassword?: string;               // VNC password
+  color?: string;                     // Tab color
 }
 
 export interface UseTabsReturn {
@@ -53,12 +53,12 @@ export function useTabs(): UseTabsReturn {
     (id: string) => {
       setTabs((prev) => {
         if (prev.length <= 1) {
-          // 至少保留一个标签
+          // Keep at least one tab
           return prev;
         }
         const newTabs = prev.filter((tab) => tab.id !== id);
 
-        // 如果关闭的是当前激活的标签，切换到前一个或后一个
+        // If closing the active tab, switch to previous or next
         if (activeTabId === id) {
           const closedIndex = prev.findIndex((tab) => tab.id === id);
           const newActiveIndex = Math.min(closedIndex, newTabs.length - 1);

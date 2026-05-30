@@ -1,4 +1,4 @@
-"""SSH 文件传输服务。"""
+"""SSH file transfer service."""
 
 from __future__ import annotations
 
@@ -18,23 +18,23 @@ logger = logging.getLogger("ssh_file_transfer")
 
 
 class SSHFileTransferError(Exception):
-    """SSH 文件传输异常。"""
+    """SSH file transfer error."""
 
 
 class SSHFileNotFoundError(SSHFileTransferError):
-    """远端文件不存在。"""
+    """The remote file does not exist."""
 
 
 class SSHInvalidPathError(SSHFileTransferError):
-    """路径不合法。"""
+    """Invalid path."""
 
 
 class SSHFileExistsError(SSHFileTransferError):
-    """目标文件已存在。"""
+    """The target file already exists."""
 
 
 class SSHFileTransfer:
-    """SSH 文件传输服务。"""
+    """SSH file transfer service."""
 
     CHUNK_SIZE = 64 * 1024
     TEXT_PREVIEW_LIMIT = 1024 * 1024
@@ -42,7 +42,7 @@ class SSHFileTransfer:
 
     @classmethod
     def _connect(cls, conn: SSHConnection) -> tuple[paramiko.SSHClient, paramiko.SFTPClient]:
-        """建立 SFTP 连接。"""
+        """Establish an SFTP connection."""
         client = paramiko.SSHClient()
         client.load_system_host_keys()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -85,7 +85,7 @@ class SSHFileTransfer:
 
     @classmethod
     def _resolve_remote_path(cls, sftp: paramiko.SFTPClient, path: str) -> str:
-        """解析远端路径。"""
+        """Resolve a remote path."""
         remote_path = cls._clean_remote_path(path)
         current_dir = sftp.normalize(".")
 
@@ -104,7 +104,7 @@ class SSHFileTransfer:
         remote_path: str,
         file_name: str,
     ) -> str:
-        """解析上传目标路径。"""
+        """Resolve the upload target path."""
         candidate = cls._resolve_remote_path(sftp, remote_path)
 
         if candidate.endswith("/"):
@@ -123,14 +123,14 @@ class SSHFileTransfer:
 
     @staticmethod
     def _join_remote_path(base_path: str, name: str) -> str:
-        """拼接远端路径。"""
+        """Join a remote path."""
         if base_path == "/":
             return f"/{name}"
         return posixpath.join(base_path.rstrip("/"), name)
 
     @staticmethod
     def _looks_like_binary(data: bytes) -> bool:
-        """粗略判断是否为二进制内容。"""
+        """Roughly determine whether the content is binary."""
         if not data:
             return False
         if b"\x00" in data:
@@ -149,7 +149,7 @@ class SSHFileTransfer:
         destination: str,
         overwrite: bool,
     ) -> None:
-        """校验上传目标是否允许写入。"""
+        """Verify whether the upload target allows writing."""
         try:
             attr = sftp.stat(destination)
         except FileNotFoundError:
@@ -165,7 +165,7 @@ class SSHFileTransfer:
 
     @classmethod
     def _assert_remote_file(cls, sftp: paramiko.SFTPClient, remote_path: str) -> paramiko.SFTPAttributes:
-        """校验远端路径是文件。"""
+        """Verify that the remote path is a file."""
         try:
             attr = sftp.stat(remote_path)
         except FileNotFoundError as exc:
@@ -179,7 +179,7 @@ class SSHFileTransfer:
 
     @classmethod
     def _assert_remote_directory(cls, sftp: paramiko.SFTPClient, remote_path: str) -> paramiko.SFTPAttributes:
-        """校验远端路径是目录。"""
+        """Verify that the remote path is a directory."""
         try:
             attr = sftp.stat(remote_path)
         except FileNotFoundError as exc:
@@ -193,7 +193,7 @@ class SSHFileTransfer:
 
     @classmethod
     def list_directory(cls, conn: SSHConnection, remote_path: str | None = None) -> dict:
-        """列出远端目录。"""
+        """List a remote directory."""
         client, sftp = cls._connect(conn)
         try:
             target_path = cls._resolve_remote_path(sftp, remote_path or ".")
@@ -237,7 +237,7 @@ class SSHFileTransfer:
 
     @classmethod
     def create_directory(cls, conn: SSHConnection, remote_path: str) -> str:
-        """创建远端目录。"""
+        """Create a remote directory."""
         client, sftp = cls._connect(conn)
         try:
             target_path = cls._resolve_remote_path(sftp, remote_path)
@@ -262,7 +262,7 @@ class SSHFileTransfer:
         progress_callback: Callable[[int, int], None] | None = None,
         overwrite: bool = False,
     ) -> str:
-        """上传类文件对象到远端。"""
+        """Upload a file-like object to the remote host."""
         client, sftp = cls._connect(conn)
         try:
             destination = cls._resolve_remote_upload_path(sftp, remote_path, file_name)
@@ -302,7 +302,7 @@ class SSHFileTransfer:
         progress_callback: Callable[[int, int], None] | None = None,
         overwrite: bool = False,
     ) -> str:
-        """从本地路径上传文件到远端。"""
+        """Upload a file from a local path to the remote host."""
         local_file = Path(local_path).expanduser().resolve()
         if not local_file.exists() or not local_file.is_file():
             raise SSHInvalidPathError(f"本地文件不存在: {local_file}")
@@ -326,7 +326,7 @@ class SSHFileTransfer:
         local_path: str,
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> str:
-        """下载远端文件到本地路径。"""
+        """Download a remote file to a local path."""
         destination = Path(local_path).expanduser()
         destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -347,7 +347,7 @@ class SSHFileTransfer:
 
     @classmethod
     def read_text_file(cls, conn: SSHConnection, remote_path: str) -> dict:
-        """读取文本文件用于预览/编辑。"""
+        """Read a text file for preview/editing."""
         client, sftp = cls._connect(conn)
         try:
             source = cls._resolve_remote_path(sftp, remote_path)
@@ -400,7 +400,7 @@ class SSHFileTransfer:
         content: str,
         encoding: str = "utf-8",
     ) -> dict:
-        """保存文本文件。"""
+        """Save a text file."""
         if encoding not in cls.TEXT_ENCODINGS:
             raise SSHInvalidPathError("当前仅支持 utf-8、utf-8-sig 和 gb18030 编码")
 
@@ -432,7 +432,7 @@ class SSHFileTransfer:
 
     @classmethod
     def delete_paths(cls, conn: SSHConnection, paths: list[str]) -> dict:
-        """删除远端文件或目录。"""
+        """Delete remote files or directories."""
         if not paths:
             raise SSHInvalidPathError("请选择要删除的文件")
 
@@ -478,7 +478,7 @@ class SSHFileTransfer:
         conn: SSHConnection,
         remote_path: str,
     ) -> tuple[Iterator[bytes], str, int | None]:
-        """创建下载流。"""
+        """Create a download stream."""
         client, sftp = cls._connect(conn)
         remote_file = None
 

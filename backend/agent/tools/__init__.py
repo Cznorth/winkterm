@@ -1,4 +1,4 @@
-"""Agent 工具注册。"""
+"""Agent tool registration."""
 
 from backend.agent.tools.terminal import TERMINAL_TOOLS, TOOLS_BY_NAME
 from backend.agent.tools.terminal_legacy import (
@@ -21,7 +21,7 @@ ALL_TOOLS_BY_NAME = {**TOOLS_BY_NAME, **LEGACY_TOOLS_BY_NAME, **MEMORY_TOOLS_BY_
 
 
 def get_tools(tool_specs: list[str]) -> list:
-    """根据规格列表获取工具,支持模块名或单个工具名。"""
+    """Get tools from a spec list; supports module names or individual tool names."""
     tools = []
     for spec in tool_specs:
         if spec in ALL_TOOLS_BY_NAME:

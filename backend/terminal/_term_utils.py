@@ -1,4 +1,4 @@
-"""终端操作共享工具：ANSI 清理、控制键映射、grep、命令回显剥离。"""
+"""Shared terminal utilities: ANSI stripping, control-key mapping, grep, command-echo removal."""
 
 from __future__ import annotations
 
@@ -40,11 +40,11 @@ KEY_MAP: dict[str, str] = {
 
 
 class UnknownKeyError(ValueError):
-    """请求里出现 KEY_MAP 不认识的命名键。"""
+    """A named key in the request is not recognized by KEY_MAP."""
 
 
 def resolve_keys(keys: list[str]) -> str:
-    """把命名键数组翻译成实际控制字节序列。"""
+    """Translate a list of named keys into the actual control-byte sequence."""
     out: list[str] = []
     for raw in keys:
         if not raw:
@@ -58,13 +58,13 @@ def resolve_keys(keys: list[str]) -> str:
 
 
 def strip_ansi(text: str) -> str:
-    """去除 ANSI 转义序列，并把 \\r\\n / \\r 归一为 \\n。"""
+    """Remove ANSI escape sequences and normalize \\r\\n / \\r to \\n."""
     text = _ANSI_RE.sub("", text)
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def strip_command_echo(output: str, command: str) -> str:
-    """从 PTY 输出里剥离命令回显行。"""
+    """Strip the command echo line from PTY output."""
     if not command:
         return output
     first_line = command.splitlines()[0].strip()
@@ -78,7 +78,7 @@ def strip_command_echo(output: str, command: str) -> str:
 
 
 def grep_lines(text: str, pattern: str, context: int = 0, case_insensitive: bool = False) -> dict:
-    """对文本做行级 grep，可选返回上下文。"""
+    """Line-level grep on text, optionally returning surrounding context."""
     flags = re.IGNORECASE if case_insensitive else 0
     try:
         regex = re.compile(pattern, flags)
@@ -118,7 +118,7 @@ def grep_lines(text: str, pattern: str, context: int = 0, case_insensitive: bool
 
 
 def decode_b64(value: str) -> str:
-    """base64 文本解码,带友好错误。"""
+    """Decode base64 text with a friendly error on failure."""
     try:
         return base64.b64decode(value, validate=True).decode("utf-8")
     except (binascii.Error, UnicodeDecodeError) as exc:

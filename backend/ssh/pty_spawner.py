@@ -1,4 +1,4 @@
-"""SSH PTY 启动器。"""
+"""SSH PTY spawner."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ logger = logging.getLogger("ssh_spawner")
 
 
 class SSHPtySpawner:
-    """SSH PTY 启动器。"""
+    """SSH PTY spawner."""
 
-    # 密码提示模式
+    # Password prompt patterns
     PASSWORD_PROMPT_PATTERNS = [
         rb"[Pp]assword:",
         rb"[Pp]assphrase for key",
@@ -24,31 +24,31 @@ class SSHPtySpawner:
 
     @staticmethod
     def build_ssh_command(conn: SSHConnection) -> list[str]:
-        """构建 SSH 命令。
+        """Build the SSH command.
 
         Args:
-            conn: SSH 连接配置
+            conn: SSH connection config
 
         Returns:
-            SSH 命令参数列表
+            List of SSH command arguments
         """
         cmd = ["ssh"]
 
-        # 端口
+        # Port
         cmd.extend(["-p", str(conn.port)])
 
-        # 禁用主机密钥检查（适合内网/首次连接）
+        # Disable host key checking (suitable for intranet/first connection)
         cmd.extend(["-o", "StrictHostKeyChecking=no"])
         cmd.extend(["-o", "UserKnownHostsFile=/dev/null"])
 
-        # 禁用密码缓存提示
+        # Disable password cache prompt
         cmd.extend(["-o", "NumberOfPasswordPrompts=1"])
 
-        # 密钥认证
+        # Key authentication
         if conn.auth_type == "key" and conn.private_key_path:
             cmd.extend(["-i", conn.private_key_path])
 
-        # 用户名@主机
+        # username@host
         cmd.append(f"{conn.username}@{conn.host}")
 
         logger.info(f"构建 SSH 命令: {' '.join(cmd)}")
@@ -56,19 +56,19 @@ class SSHPtySpawner:
 
     @staticmethod
     def build_ssh_command_str(conn: SSHConnection) -> str:
-        """构建 SSH 命令字符串（用于 winpty）。"""
+        """Build the SSH command string (for winpty)."""
         cmd = SSHPtySpawner.build_ssh_command(conn)
         return " ".join(cmd)
 
     @staticmethod
     def is_password_prompt(data: bytes) -> bool:
-        """检测是否是密码提示。
+        """Detect whether this is a password prompt.
 
         Args:
-            data: PTY 输出数据
+            data: PTY output data
 
         Returns:
-            是否是密码提示
+            Whether this is a password prompt
         """
         for pattern in SSHPtySpawner.PASSWORD_PROMPT_PATTERNS:
             if re.search(pattern, data):
@@ -77,14 +77,14 @@ class SSHPtySpawner:
 
 
 class PasswordAutoInput:
-    """密码自动输入处理器（作为回调注册到 PtyManager）。"""
+    """Password auto-input handler (registered as a callback on PtyManager)."""
 
     def __init__(self, password: str, write_func: Callable[[bytes], None]):
-        """初始化密码自动输入处理器。
+        """Initialize the password auto-input handler.
 
         Args:
-            password: SSH 密码
-            write_func: 写入 PTY 的函数（PtyManager.write）
+            password: SSH password
+            write_func: Function to write to the PTY (PtyManager.write)
         """
         self.password = password
         self._write = write_func
@@ -92,40 +92,40 @@ class PasswordAutoInput:
         self._buffer = b""
 
     def __call__(self, data: bytes) -> None:
-        """作为回调被 PtyManager 调用。
+        """Called by PtyManager as a callback.
 
         Args:
-            data: PTY 输出数据
+            data: PTY output data
         """
         if self._password_sent:
             return
 
-        # 累积缓冲区
+        # Accumulate buffer
         self._buffer += data
 
-        # 检测密码提示
+        # Detect password prompt
         if SSHPtySpawner.is_password_prompt(self._buffer):
             logger.info("[SSH] 检测到密码提示，准备自动发送密码")
             self._password_sent = True
             self._buffer = b""
 
-            # 延迟发送密码
+            # Send the password after a delay
             import threading
             import time
 
             def _delayed_send():
-                time.sleep(0.3)  # 延迟让用户看到提示
+                time.sleep(0.3)  # Delay so the user can see the prompt
                 password_input = (self.password + "\n").encode("utf-8")
                 self._write(password_input)
                 logger.info("[SSH] 自动发送密码完成")
 
             threading.Thread(target=_delayed_send, daemon=True).start()
 
-        # 缓冲区过大时清空
+        # Clear the buffer when it grows too large
         if len(self._buffer) > 4096:
             self._buffer = self._buffer[-1024:]
 
     @property
     def password_sent(self) -> bool:
-        """密码是否已发送。"""
+        """Whether the password has been sent."""
         return self._password_sent

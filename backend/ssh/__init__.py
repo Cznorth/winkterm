@@ -1,4 +1,4 @@
-"""SSH 连接模块。"""
+"""SSH connection module."""
 
 from backend.ssh.models import SSHConnection
 from backend.ssh.connection_manager import SSHConnectionManager

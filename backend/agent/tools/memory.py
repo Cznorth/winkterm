@@ -1,4 +1,4 @@
-"""AI 长期记忆工具。"""
+"""AI long-term memory tools."""
 
 from __future__ import annotations
 
@@ -9,10 +9,11 @@ from backend.config import AgentDocs
 
 @tool
 def save_memory(content: str) -> str:
-    """更新你的长期记忆（memory.md），传入整篇新内容（Markdown）会覆盖旧记忆。
+    """Update your long-term memory (memory.md); passing full new Markdown content replaces the old memory.
 
-    用于记住跨会话有用的事实：用户偏好、主机/环境信息、已验证的操作方法等。
-    调用前请基于 <memory> 块里的现有内容做增删改，保留仍然有用的条目，避免丢失。
+    Use this to remember facts useful across sessions: user preferences, host/environment info,
+    verified procedures, etc. Before calling, edit the existing content from the <memory> block:
+    add, remove, or change entries while keeping still-useful ones to avoid losing information.
     """
     AgentDocs.write_memory(content)
     return "记忆已更新"

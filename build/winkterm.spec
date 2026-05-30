@@ -1,9 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec 文件 - WinkTerm 桌面应用打包配置
+PyInstaller spec for WinkTerm desktop app packaging.
 
-使用方法:
-    cd 项目根目录
+Usage:
+    cd project root
     pyinstaller build/winkterm.spec --clean --noconfirm
 """
 import sys
@@ -11,17 +11,17 @@ from pathlib import Path
 
 block_cipher = None
 
-# 项目根目录
+# Project root directory
 ROOT = Path(SPECPATH).parent.resolve()
 
-# site-packages 路径
+# site-packages path
 site_packages = Path(sys.prefix) / "Lib" / "site-packages"
 
-# 判断平台
+# Platform detection
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
 
-# winpty 二进制文件 (Windows)
+# winpty binaries (Windows)
 winpty_dir = site_packages / "winpty"
 winpty_binaries = []
 if IS_WINDOWS and winpty_dir.exists():
@@ -30,7 +30,7 @@ if IS_WINDOWS and winpty_dir.exists():
         if fp.exists():
             winpty_binaries.append((str(fp), "winpty"))
 
-# 图标路径
+# Icon path
 if IS_WINDOWS:
     icon_path = str(ROOT / "assets" / "logo.ico")
 elif IS_MACOS:
@@ -43,15 +43,15 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=winpty_binaries,
     datas=[
-        # 前端静态文件
+        # Frontend static assets
         (str(ROOT / "frontend" / "out"), "frontend_static"),
-        # 配置示例
+        # Example env file
         (str(ROOT / ".env.example"), "."),
-        # Agent 配置文件
+        # Agent registry config
         (str(ROOT / "backend" / "agent" / "registry" / "agents.yaml"), "backend/agent/registry"),
-        # Agent 提示词目录
+        # Agent prompts directory
         (str(ROOT / "backend" / "agent" / "prompts"), "backend/agent/prompts"),
-        # 外部 agent skill 文件
+        # External agent skill files
         (str(ROOT / "agent-skill" / "SKILL.md"), "agent-skill"),
         (str(ROOT / "agent-skill" / "INSTALL.md"), "agent-skill"),
     ],
@@ -175,7 +175,7 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 if IS_WINDOWS:
-    # Windows: 单文件 .exe
+    # Windows: single-file .exe
     exe = EXE(
         pyz,
         a.scripts,
@@ -247,7 +247,7 @@ elif IS_MACOS:
         },
     )
 else:
-    # Linux: 单文件
+    # Linux: single-file binary
     exe = EXE(
         pyz,
         a.scripts,
@@ -269,3 +269,4 @@ else:
         codesign_identity=None,
         entitlements_file=None,
     )
+

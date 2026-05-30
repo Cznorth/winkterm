@@ -22,7 +22,7 @@ from backend.config import UserConfig, AgentDocs, settings
 
 router = APIRouter()
 
-# 内存中保存分析历史（生产应持久化到数据库）
+# In-memory analysis history (should be persisted to a database in production)
 _analysis_history: list[dict[str, Any]] = []
 
 
@@ -36,14 +36,15 @@ class AnalyzeResponse(BaseModel):
     timestamp: str
 
 
-# === 设置相关 ===
+# === Settings ===
 class ModelInfo(BaseModel):
     id: str
     name: str = ""
 
 
 class SettingsModel(BaseModel):
-    # 字段全部可选：仅更新请求中显式提供的字段，避免局部保存（如只改语言）清空其他字段
+    # All fields optional: only update fields explicitly provided in the request,
+    # so partial saves (e.g. language only) do not clear other fields
     api_format: Optional[Literal["openai", "anthropic"]] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
@@ -70,14 +71,14 @@ class StreamTestRequest(BaseModel):
 
 @router.get("/settings")
 async def get_settings() -> dict:
-    """获取配置（API Key 脱敏）"""
+    """Return settings with API keys masked."""
     return UserConfig.get_masked()
 
 
 @router.get("/settings/token/reveal")
 async def reveal_agent_token(request: Request) -> dict:
-    """返回完整 agent_api_token，用于设置页复制。
-    鉴权：本机直接放行；远程需携带有效 X-Access-Key 头。
+    """Return the full agent_api_token for copy on the settings page.
+    Auth: localhost allowed; remote requests require a valid X-Access-Key header.
     """
     from backend.api.auth_routes import is_local_request, verify_web_key
     if not is_local_request(request) and not verify_web_key(request.headers.get("X-Access-Key", "")):
@@ -90,7 +91,7 @@ async def reveal_agent_token(request: Request) -> dict:
 
 @router.get("/settings/export")
 async def export_settings(request: Request) -> Response:
-    """导出完整配置文件（含明文密钥），需本机或有效 X-Access-Key。"""
+    """Export the full config file (including plaintext secrets); requires localhost or valid X-Access-Key."""
     from backend.api.auth_routes import is_local_request, verify_web_key
     if not is_local_request(request) and not verify_web_key(request.headers.get("X-Access-Key", "")):
         raise HTTPException(status_code=403, detail="需本机访问或有效的 X-Access-Key")
@@ -105,10 +106,10 @@ async def export_settings(request: Request) -> Response:
 
 @router.post("/settings")
 async def save_settings(payload: SettingsModel) -> dict:
-    """保存配置：仅更新请求中显式提供的字段。"""
+    """Save settings: only update fields explicitly provided in the request."""
     data = payload.model_dump(exclude_none=True)
     original = UserConfig.load()
-    # 脱敏值（含 ****）或空字符串（编辑时未填写）表示未修改，保留原始值
+    # Masked values (containing ****) or empty strings (left blank when editing) mean unchanged — keep originals
     for secret in ("api_key", "agent_api_token", "web_access_key"):
         if secret not in data:
             continue
@@ -125,34 +126,34 @@ class DocContent(BaseModel):
 
 @router.get("/settings/agents-md")
 async def get_agents_md() -> dict:
-    """读取用户自定义操作指令（agents.md）。"""
+    """Read user-defined operating instructions (agents.md)."""
     return {"content": AgentDocs.read_agents()}
 
 
 @router.put("/settings/agents-md")
 async def put_agents_md(payload: DocContent) -> dict:
-    """保存用户自定义操作指令（agents.md）。"""
+    """Save user-defined operating instructions (agents.md)."""
     AgentDocs.write_agents(payload.content)
     return {"success": True}
 
 
 @router.get("/settings/memory-md")
 async def get_memory_md() -> dict:
-    """读取 AI 长期记忆（memory.md）。"""
+    """Read AI long-term memory (memory.md)."""
     return {"content": AgentDocs.read_memory()}
 
 
 @router.put("/settings/memory-md")
 async def put_memory_md(payload: DocContent) -> dict:
-    """保存 AI 长期记忆（memory.md），写入前自动备份 .bak。"""
+    """Save AI long-term memory (memory.md); auto-backup to .bak before write."""
     AgentDocs.write_memory(payload.content)
     return {"success": True}
 
 
 @router.post("/models/fetch")
 async def fetch_models(req: ModelsRequest) -> dict:
-    """从 API 获取可用模型列表"""
-    # 如果 api_key 包含 ****，使用配置文件中的原始 key
+    """Fetch available model list from the API."""
+    # If api_key contains ****, use the original key from the config file
     api_key = req.api_key
     if "****" in api_key:
         config = UserConfig.load()
@@ -160,7 +161,7 @@ async def fetch_models(req: ModelsRequest) -> dict:
 
     try:
         if req.api_format == "anthropic":
-            # ChatAnthropic SDK 会自动加 /v1，所以先去掉用户填的 /v1 再拼
+            # ChatAnthropic SDK appends /v1 automatically, so strip user-supplied /v1 before building URL
             url = req.base_url.rstrip("/").split("/v1")[0] + "/v1/models"
             headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
         else:
@@ -189,7 +190,7 @@ async def fetch_models(req: ModelsRequest) -> dict:
 
 @router.post("/models/stream-test")
 async def stream_test(req: StreamTestRequest) -> StreamingResponse:
-    """发送简短流式请求，验证 API 配置与模型是否支持 streaming。"""
+    """Send a short streaming request to verify API config and model streaming support."""
     api_key = req.api_key
     if "****" in api_key:
         config = UserConfig.load()
@@ -262,10 +263,10 @@ async def stream_test(req: StreamTestRequest) -> StreamingResponse:
     return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)
 
 
-# === 对话历史持久化(进程级 + 文件) ===
+# === Chat history persistence (process-level + file) ===
 @router.get("/chat/conversations")
 async def list_chat_conversations() -> dict:
-    """列出所有保存的对话(供前端 mount 时恢复)。"""
+    """List all saved conversations (for frontend restore on mount)."""
     from backend.api import chat_store
     return {"conversations": chat_store.list_conversations()}
 
@@ -288,14 +289,14 @@ async def delete_chat_conversation(conv_id: str) -> dict:
     return {"ok": ok}
 
 
-# === 对话标题生成 ===
+# === Chat title generation ===
 class TitleRequest(BaseModel):
     messages: list[dict]  # [{"role": "user"|"assistant", "content": str}]
 
 
 @router.post("/chat/title")
 async def generate_title(req: TitleRequest) -> dict:
-    """根据对话内容用 AI 生成简短对话标题"""
+    """Generate a short conversation title from chat content using AI."""
     user_config = UserConfig.load()
     api_format = user_config.get("api_format", "openai")
     base_url = user_config.get("base_url") or settings.effective_base_url
@@ -347,14 +348,14 @@ async def generate_title(req: TitleRequest) -> dict:
         return {"title": ""}
 
 
-# === 对话续接建议 ===
+# === Chat continuation suggestions ===
 class SuggestionsRequest(BaseModel):
     messages: list[dict]  # [{"role": "user"|"assistant", "content": str}]
 
 
 @router.post("/chat/suggestions")
 async def generate_suggestions(req: SuggestionsRequest) -> dict:
-    """根据对话历史生成 3 条用户可能继续发送的消息建议"""
+    """Generate 3 suggested follow-up messages the user might send next."""
     user_config = UserConfig.load()
     api_format = user_config.get("api_format", "openai")
     base_url = user_config.get("base_url") or settings.effective_base_url
@@ -364,7 +365,7 @@ async def generate_suggestions(req: SuggestionsRequest) -> dict:
     if not api_key or not model or not req.messages:
         return {"suggestions": []}
 
-    # 取最近若干轮对话作为上下文（避免 token 过多）
+    # Use recent turns as context (avoid excessive tokens)
     recent = req.messages[-6:]
     history_text = "\n".join(
         f"{m['role'].upper()}: {str(m.get('content', ''))[:300]}"
@@ -409,21 +410,21 @@ async def generate_suggestions(req: SuggestionsRequest) -> dict:
         return {"suggestions": []}
 
 
-# === 历史记录 ===
+# === History ===
 @router.get("/history")
 async def get_history() -> dict[str, Any]:
-    """获取分析历史记录。"""
+    """Return analysis history records."""
     return {"history": list(reversed(_analysis_history)), "total": len(_analysis_history)}
 
 
-# === 打开链接 ===
+# === Open URL ===
 class OpenUrlRequest(BaseModel):
     url: str
 
 
 @router.post("/open-url")
 async def open_url(req: OpenUrlRequest) -> dict:
-    """在系统默认浏览器中打开链接。"""
+    """Open a URL in the system default browser."""
     try:
         webbrowser.open(req.url)
         return {"success": True}

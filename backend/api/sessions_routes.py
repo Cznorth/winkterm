@@ -1,7 +1,7 @@
-"""会话生命周期接口。
+"""Session lifecycle API.
 
-供前端实时感知 agent 创建/关闭的终端,自动同步标签栏。
-鉴权:复用 web access key(X-Access-Key 头,或 SSE 用 ?key= 查询参数)。
+Lets the frontend observe agent-created/closed terminals and sync the tab bar in real time.
+Auth: reuses web access key (X-Access-Key header, or ?key= for SSE).
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
 def _require_auth(request: Request, key: Optional[str] = None) -> None:
-    """HTTP/SSE 共用:localhost 放行,远程需 web access key。"""
+    """Shared HTTP/SSE auth: localhost allowed, remote requires web access key."""
     if is_local_request(request):
         return
     web_key = resolve_web_key()
@@ -55,7 +55,7 @@ async def close_session(
     request: Request,
     key: Optional[str] = Query(default=None),
 ) -> dict:
-    """用户显式关闭终端(tab X 按钮触发)。"""
+    """User explicitly closes a terminal (tab X button)."""
     _require_auth(request, key)
     ok = get_session_manager().close_session(session_id)
     if not ok:
@@ -65,7 +65,7 @@ async def close_session(
 
 @router.get("")
 async def list_sessions(request: Request, key: Optional[str] = Query(default=None)) -> dict:
-    """列出全部用户可见的 session(供前端启动时重建标签栏)。"""
+    """List all user-visible sessions (for frontend tab bar rebuild on startup)."""
     _require_auth(request, key)
     sm = get_session_manager()
     sessions = [s for s in sm.list_terminals() if s.get("user_visible")]
@@ -75,15 +75,15 @@ async def list_sessions(request: Request, key: Optional[str] = Query(default=Non
 @router.get("/stream")
 async def stream_sessions(
     request: Request,
-    key: Optional[str] = Query(default=None, description="EventSource 兜底鉴权参数"),
+    key: Optional[str] = Query(default=None, description="EventSource fallback auth param"),
 ) -> StreamingResponse:
-    """SSE 推送 session 生命周期事件:session_created / session_closed。"""
+    """SSE stream of session lifecycle events: session_created / session_closed."""
     _require_auth(request, key)
     sm = get_session_manager()
     queue = sm.subscribe()
 
     async def gen():
-        # 首屏:把现有可见 session 列表打包一次推下去
+        # Initial snapshot: push current visible session list once
         snapshot = [s for s in sm.list_terminals() if s.get("user_visible")]
         yield _sse_format("snapshot", {"sessions": snapshot})
 

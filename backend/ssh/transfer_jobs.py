@@ -1,4 +1,4 @@
-"""SSH 文件传输任务管理。"""
+"""SSH file transfer job management."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from backend.ssh.models import SSHConnection
 
 @dataclass
 class TransferJob:
-    """文件传输任务。"""
+    """File transfer job."""
 
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     direction: str = ""
@@ -47,7 +47,7 @@ class TransferJob:
 
 
 class TransferJobManager:
-    """文件传输任务管理器。"""
+    """File transfer job manager."""
 
     _jobs: dict[str, TransferJob] = {}
     _lock = threading.Lock()
@@ -116,7 +116,7 @@ class TransferJobManager:
 
     @classmethod
     def start_download_job(cls, conn: SSHConnection, remote_path: str, local_path: str) -> dict:
-        """启动本地下载任务。"""
+        """Start a local download job."""
         file_name = PurePosixPath(remote_path).name or "download"
         job = cls._create_job(
             direction="download",
@@ -148,7 +148,7 @@ class TransferJobManager:
         remote_path: str,
         overwrite: bool = False,
     ) -> dict:
-        """启动本地上传任务。"""
+        """Start a local upload job."""
         file_name = Path(local_path).name or "upload"
         job = cls._create_job(
             direction="upload",

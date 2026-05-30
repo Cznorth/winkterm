@@ -5,7 +5,7 @@ import { getWsBaseUrl } from "./config";
 import { getAccessKey } from "./auth";
 import axios from "./axios";
 
-// 获取 chat WebSocket URL（基于 terminal WS URL 替换路径）
+// Get chat WebSocket URL (replace path segment in terminal WS URL)
 const getChatWSUrl = () => getWsBaseUrl().replace("/terminal", "/chat");
 const WS_URL = typeof window !== "undefined" ? getChatWSUrl() : "";
 
@@ -28,7 +28,7 @@ export interface ChatMessage {
   timestamp: number;
   toolCalls?: ToolCall[];
   contentBlocks?: ContentBlock[];
-  thinking?: string;  // AI 思考过程
+  thinking?: string;  // AI reasoning trace
 }
 
 export type ChatMode = "chat" | "craft" | "ask";
@@ -60,7 +60,7 @@ export interface ChatState {
   outputTokens: number;         // derived: active conversation tokens
   maxContext: number;
   messageQueue: string[];       // pending messages queued during streaming
-  pendingApproval: ToolApproval | null;  // ask 模式:等待用户确认的工具调用
+  pendingApproval: ToolApproval | null;  // ask mode: tool call awaiting user approval
 }
 
 function makeConversation(id?: string): Conversation {
@@ -124,7 +124,7 @@ export function useChatWs() {
   const activeConvIdRef = useRef<string>(initialConv.id);
   const streamingConvIdRef = useRef<string>("");
 
-  // 连接 WebSocket
+  // Connect WebSocket
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -160,7 +160,7 @@ export function useChatWs() {
     wsRef.current = ws;
   }, []);
 
-  // 处理消息
+  // Handle incoming messages
   const handleMessage = useCallback((data: {
     type: string;
     content?: string;
@@ -184,8 +184,8 @@ export function useChatWs() {
         currentBlocksRef.current = [];
         currentSegmentRef.current = "";
         isStreamingRef.current = true;
-        // resume 场景:本 WS 没发过 chat 但服务端推 start (in-flight 流接管),
-        // 用 start 自带的 conv_id 让后续 token 能落到对应 conv 上。
+        // Resume: this WS never sent chat but server pushes start (in-flight stream takeover).
+        // Use conv_id from start so subsequent tokens land on the correct conversation.
         if (data.conv_id) {
           streamingConvIdRef.current = data.conv_id;
         }
@@ -402,11 +402,11 @@ export function useChatWs() {
     }
   }, []);
 
-  // 实际发送（不检查 streaming 状态）
+  // Send immediately (does not check streaming state)
   const rawSend = useCallback((content: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
-    // 绑定本次流式输出到发起对话，避免新建/切换对话后输出串台
+    // Bind this stream to the initiating conversation to avoid cross-talk after new/switch
     streamingConvIdRef.current = activeConvIdRef.current;
 
     const userMsg: ChatMessage = {
@@ -427,7 +427,7 @@ export function useChatWs() {
     wsRef.current.send(JSON.stringify({ type: "chat", content, conv_id: activeConvIdRef.current }));
   }, []);
 
-  // 发送消息：streaming 中则入队，否则直接发送
+  // Send message: queue if streaming, otherwise send directly
   const sendMessage = useCallback((content: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setState((s) => ({ ...s, error: "未连接" }));
@@ -444,7 +444,7 @@ export function useChatWs() {
     rawSend(content);
   }, [rawSend]);
 
-  // streaming 结束后自动发送队列首条
+  // Auto-send first queued message when streaming ends
   useEffect(() => {
     if (!state.isStreaming && messageQueueRef.current.length > 0) {
       const [next, ...rest] = messageQueueRef.current;
@@ -455,7 +455,7 @@ export function useChatWs() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.isStreaming]);
 
-  // 打断当前生成并立即发送指定消息（该消息优先于队列其余内容）
+  // Interrupt generation and send the given message (it takes priority over other queued items)
   const interruptAndSend = useCallback((content: string) => {
     messageQueueRef.current = [content];
     setState((s) => ({ ...s, messageQueue: [content] }));
@@ -464,14 +464,14 @@ export function useChatWs() {
     }
   }, []);
 
-  // 从队列中移除指定索引的消息
+  // Remove message at the given queue index
   const removeFromQueue = useCallback((index: number) => {
     const next = messageQueueRef.current.filter((_, i) => i !== index);
     messageQueueRef.current = next;
     setState((s) => ({ ...s, messageQueue: next }));
   }, []);
 
-  // 新建对话
+  // Create a new conversation
   const newConversation = useCallback(() => {
     messageQueueRef.current = [];
     isStreamingRef.current = false;
@@ -489,7 +489,7 @@ export function useChatWs() {
     }));
   }, []);
 
-  // 切换对话
+  // Switch active conversation
   const switchConversation = useCallback((id: string) => {
     messageQueueRef.current = [];
     setState((s) => {
@@ -507,7 +507,7 @@ export function useChatWs() {
     });
   }, []);
 
-  // 删除对话
+  // Delete conversation
   const deleteConversation = useCallback((id: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "delete_conv", conv_id: id }));
@@ -534,7 +534,7 @@ export function useChatWs() {
     });
   }, []);
 
-  // 切换模式
+  // Switch mode
   const switchMode = useCallback((mode: ChatMode) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setState((s) => ({ ...s, error: "未连接" }));
@@ -543,7 +543,7 @@ export function useChatWs() {
     wsRef.current.send(JSON.stringify({ type: "switch_mode", mode }));
   }, []);
 
-  // 切换模型
+  // Switch model
   const switchModel = useCallback((model: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setState((s) => ({ ...s, error: "未连接" }));
@@ -553,7 +553,7 @@ export function useChatWs() {
     setState((s) => ({ ...s, model }));
   }, []);
 
-  // 更新对话标题
+  // Update conversation title
   const updateConvTitle = useCallback((id: string, title: string) => {
     setState((s) => {
       const conversations = s.conversations.map((c) =>
@@ -568,12 +568,12 @@ export function useChatWs() {
         outputTokens: activeConv.outputTokens,
       };
     });
-    // 持久化到后端
+    // Persist to backend
     axios.post(`/api/chat/conversations/${encodeURIComponent(id)}/title`, { title })
       .catch(() => {});
   }, []);
 
-  // 停止生成
+  // Stop generation
   const stopGeneration = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "stop" }));
@@ -588,12 +588,12 @@ export function useChatWs() {
     setState((s) => ({ ...s, pendingApproval: null }));
   }, []);
 
-  // 同步当前激活对话 id 到 ref
+  // Sync active conversation id to ref
   useEffect(() => {
     activeConvIdRef.current = state.activeConvId;
   }, [state.activeConvId]);
 
-  // 自动连接
+  // Auto-connect on mount
   useEffect(() => {
     connect();
     return () => {
@@ -601,7 +601,7 @@ export function useChatWs() {
     };
   }, [connect]);
 
-  // mount 时从后端 chat_store 拉历史会话填回 state(刷新页面后恢复)
+  // On mount, load conversation history from backend chat_store (restore after page refresh)
   useEffect(() => {
     let cancelled = false;
     axios.get("/api/chat/conversations")
@@ -629,7 +629,7 @@ export function useChatWs() {
           outputTokens: c.output_tokens || 0,
         }));
         setState((s) => {
-          // 用后端历史替换初始空会话;保留 ws/连接状态
+          // Replace initial empty conversation with backend history; keep WS/connection state
           const activeConv = convs[0];
           activeConvIdRef.current = activeConv.id;
           return {

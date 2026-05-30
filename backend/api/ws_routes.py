@@ -11,7 +11,7 @@ from backend.vnc.handler import VNCWSHandler
 
 router = APIRouter()
 
-# WebSocket 鉴权失败的关闭码（自定义 4xxx 区间）
+# WebSocket close code for auth failure (custom 4xxx range)
 _WS_AUTH_FAILED = 4401
 
 
@@ -23,13 +23,13 @@ async def terminal_ws(
     connection_id: Optional[str] = Query(default=None),
     key: Optional[str] = Query(default=None),
 ) -> None:
-    """WebSocket 终端连接入口。
+    """WebSocket terminal connection entry.
 
     Args:
-        session_id: 会话 ID
-        type: 连接类型，"local" 或 "ssh"
-        connection_id: SSH 连接 ID（仅 type="ssh" 时有效）
-        key: Web 访问密钥（远程访问时必填，localhost 免鉴权）
+        session_id: Session ID
+        type: Connection type, "local" or "ssh"
+        connection_id: SSH connection ID (only when type="ssh")
+        key: Web access key (required for remote access; localhost exempt)
     """
     if not ws_authorized(websocket, key):
         await websocket.accept()
@@ -50,7 +50,7 @@ async def chat_ws(
     websocket: WebSocket,
     key: Optional[str] = Query(default=None),
 ) -> None:
-    """WebSocket 侧边栏对话入口。"""
+    """WebSocket sidebar chat entry."""
     if not ws_authorized(websocket, key):
         await websocket.accept()
         await websocket.close(code=_WS_AUTH_FAILED)

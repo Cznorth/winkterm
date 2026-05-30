@@ -1,4 +1,4 @@
-"""侧边栏 AI 对话 WebSocket 处理器。"""
+"""Sidebar AI chat WebSocket handler."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ logger = logging.getLogger("ws_chat")
 
 
 # ---------------------------------------------------------------------------
-# 模块级 in-flight 生成状态: 让 WS 重连(用户刷新页面)能复用未完成的 agent 流
+# Module-level in-flight generation state: lets a WS reconnect (user refreshing the page) reuse an unfinished agent stream
 # ---------------------------------------------------------------------------
 
 _active_streams: dict[str, dict[str, Any]] = {}
@@ -38,10 +38,10 @@ _streams_lock = threading.Lock()
 def _new_stream_state(conv_id: str) -> dict[str, Any]:
     return {
         "conv_id": conv_id,
-        "content": "",          # 累积文本(含 token 流)
+        "content": "",          # accumulated text (incl. token stream)
         "thinking": "",
-        "blocks": [],           # contentBlocks 列表(text + tool 块)
-        "subscribers": [],      # list[async send(msg)] 函数
+        "blocks": [],           # list of contentBlocks (text + tool blocks)
+        "subscribers": [],      # list[async send(msg)] functions
         "started_at": time.time(),
     }
 
@@ -72,7 +72,7 @@ def _remove_subscriber(conv_id: str, send: Callable[[dict], Awaitable[None]]) ->
 
 
 async def _broadcast(conv_id: str, msg: dict) -> None:
-    """异步把消息推给所有订阅者,失败的静默移除。"""
+    """Asynchronously push a message to all subscribers, silently dropping failures."""
     with _streams_lock:
         s = _active_streams.get(conv_id)
         if not s:
@@ -92,19 +92,19 @@ async def _broadcast(conv_id: str, msg: dict) -> None:
 
 
 class ChatWSHandler:
-    """侧边栏对话 WebSocket 处理器，支持多种模式。"""
+    """Sidebar chat WebSocket handler, supporting multiple modes."""
 
     def __init__(self, websocket: WebSocket):
         self.ws = websocket
         self.agents: dict[str, CompiledGraph] = {}
-        self.current_mode = "craft"  # 默认 craft 模式
-        self._stop_requested = False  # 停止生成标志
-        self._current_task: asyncio.Task | None = None  # 当前处理任务
+        self.current_mode = "craft"  # default craft mode
+        self._stop_requested = False  # stop-generation flag
+        self._current_task: asyncio.Task | None = None  # current processing task
 
     @staticmethod
     def _history_to_langchain(messages: list[dict]) -> list[HumanMessage | AIMessage]:
-        """store 里的 dict 消息 → langchain Message 列表 (供 agent 用)。
-        contentBlocks/thinking 等 UI 字段忽略,只取 role + content。"""
+        """Convert dict messages from store → list of langchain Messages (for the agent).
+        UI fields like contentBlocks/thinking are ignored; only role + content are kept."""
         out: list[HumanMessage | AIMessage] = []
         for m in messages:
             role = m.get("role")
@@ -121,15 +121,15 @@ class ChatWSHandler:
         await self.ws.accept()
         logger.info("[ACCEPT] Chat WebSocket 已连接")
 
-        # 发送当前模型
+        # Send the current model
         config = UserConfig.load()
         current_model = config.get("selected_model", "")
         if current_model:
             await self._send({"type": "model_changed", "model": current_model})
 
-        # 初始无 conv 上下文，不发 usage（前端切到具体 conv 时按需获取）
+        # No conv context initially, so don't send usage (frontend fetches on demand when switching to a specific conv)
 
-        # 预加载常用 agent
+        # Preload common agents
         try:
             self.agents["chat"] = get_agent("chat", lang="en")
             self.agents["craft"] = get_agent("craft", lang="en")
@@ -139,12 +139,12 @@ class ChatWSHandler:
             await self._send_error("Agent 加载失败")
             return
 
-        # 检查是否有正在进行中的 agent 流(用户刷新前的对话),订阅并下发当前进度
+        # Check for an in-flight agent stream (a conversation from before the refresh), subscribe and send the current progress
         await self._resume_active_streams()
 
         try:
             while True:
-                # 接收消息
+                # Receive a message
                 data = await self.ws.receive_text()
                 logger.debug(f"[RECV] {data[:100]}")
 
@@ -161,12 +161,12 @@ class ChatWSHandler:
                     if not conv_id:
                         await self._send_error("缺少 conv_id")
                         continue
-                    # 将处理放入独立任务，支持中断
+                    # Run handling in a separate task to support interruption
                     self._current_task = asyncio.create_task(
                         self._handle_chat(msg.get("content", ""), conv_id)
                     )
                 elif msg_type == "stop":
-                    # 停止生成
+                    # Stop generation
                     self._stop_requested = True
                     cancel_all_approvals()  # release any tool node waiting on approval
                     if self._current_task:
@@ -202,13 +202,13 @@ class ChatWSHandler:
                         await self._send_error(f"未知模式: {mode}")
                 elif msg_type == "switch_model":
                     model = msg.get("model", "")
-                    # 保存到配置
+                    # Save to config
                     config = UserConfig.load()
                     config["selected_model"] = model
                     UserConfig.save(config)
                     logger.info(f"[MODEL] 切换到: {model}")
                     await self._send({"type": "model_changed", "model": model})
-                    # 切换模型不重发 usage，前端按需 get_usage
+                    # Switching model doesn't resend usage; frontend calls get_usage on demand
                 else:
                     logger.warning(f"[MSG] 未知消息类型: {msg_type}")
 
@@ -222,8 +222,8 @@ class ChatWSHandler:
             logger.info("[CLEANUP] Chat WebSocket 关闭")
 
     async def _resume_active_streams(self) -> None:
-        """WS 刚连上时若有正在进行的 agent 流(用户刷新前的对话),订阅之并
-        给本 WS 下发 start + 当前已生成内容 + 注册后续 token。"""
+        """When the WS just connects, if there's an in-flight agent stream (a conversation
+        from before the refresh), subscribe to it and send this WS the start + already-generated content + register for subsequent tokens."""
         for conv_id in _list_active_conv_ids():
             stream = _get_stream(conv_id)
             if not stream:
@@ -232,10 +232,10 @@ class ChatWSHandler:
             await self._send({"type": "start", "conv_id": conv_id})
             if stream["thinking"]:
                 await self._send({"type": "thinking", "content": stream["thinking"]})
-            # 推送已累积内容到本 WS(前端按 token 累加渲染)
+            # Push already-accumulated content to this WS (frontend renders by accumulating tokens)
             if stream["content"]:
                 await self._send({"type": "token", "content": stream["content"]})
-            # 也推送已经 done 的 tool 块(用 tool_start + tool_end 配对)
+            # Also push already-done tool blocks (paired as tool_start + tool_end)
             for block in stream.get("blocks", []):
                 if block.get("type") == "tool":
                     tc = block.get("toolCall", {})
@@ -250,23 +250,23 @@ class ChatWSHandler:
                             "tool": tc.get("tool"),
                             "result": tc.get("result", ""),
                         })
-            # 加入订阅,后续 token 自动推到本 WS
+            # Subscribe so subsequent tokens are automatically pushed to this WS
             _add_subscriber(conv_id, self._send)
 
     async def _handle_chat(self, content: str, conv_id: str) -> None:
-        """处理对话消息，流式输出。"""
+        """Handle a chat message, streaming the output."""
         if not content.strip():
             return
 
-        # 同一 conv 已有 in-flight 流就拒绝,避免双重生成串台
+        # Reject if the same conv already has an in-flight stream, to avoid double-generation crosstalk
         if _get_stream(conv_id) is not None:
             await self._send_error(f"会话 {conv_id} 已有生成进行中,请等待完成")
             return
 
-        # 保存原始用户输入(下方 stream 循环里 content 会被 chunk.content 覆盖)
+        # Save the original user input (content below is overwritten by chunk.content in the stream loop)
         user_input = content
 
-        # 重置停止标志
+        # Reset the stop flag
         self._stop_requested = False
 
         # ask mode reuses craft's full toolset, but confirms each tool before running
@@ -279,23 +279,23 @@ class ChatWSHandler:
 
         logger.info(f"[CHAT] 用户 ({self.current_mode}, conv={conv_id}): {user_input[:50]}")
 
-        # 写入用户消息到 store
+        # Write the user message to the store
         user_dict = {"role": "user", "content": user_input, "timestamp": time.time()}
         chat_store.append_message(conv_id, user_dict)
         history = self._history_to_langchain(
             chat_store.get_conversation(conv_id).get("messages", [])
         )
 
-        # 注册 in-flight 流并把本 WS 加入订阅
+        # Register the in-flight stream and add this WS as a subscriber
         stream = _new_stream_state(conv_id)
         with _streams_lock:
             _active_streams[conv_id] = stream
         _add_subscriber(conv_id, self._send)
 
-        # 获取终端上下文
+        # Get the terminal context
         terminal_output = get_terminal_context_raw(50)
         if terminal_output:
-            # 清理 ANSI 转义序列
+            # Strip ANSI escape sequences
             ansi_escape = re.compile(
                 r"\x1b\[[\?0-9;]*[A-Za-z]"
                 r"|\x1b\].*?(?:\x07|\x1b\\)"
@@ -309,14 +309,14 @@ class ChatWSHandler:
                 terminal_output = "...(省略前面内容)...\n" + terminal_output[-4000:]
             logger.debug(f"[CHAT] 终端上下文: {len(terminal_output)} 字符")
 
-        # 构建消息：历史 + 当前用户消息
+        # Build messages: history + the current user message
         messages = list(history)
 
         # ask-mode approval broadcast: push tool_approval to all subscribers of this conv
         async def _approval_emit(msg: dict) -> None:
             await _broadcast(conv_id, msg)
 
-        # 初始状态
+        # Initial state
         state: AgentState = {
             "messages": messages,
             "terminal_output": terminal_output,
@@ -327,16 +327,16 @@ class ChatWSHandler:
             "approval_emit": _approval_emit if ask_mode else None,
         }
 
-        # 发送开始标记(广播给所有订阅者)
+        # Send the start marker (broadcast to all subscribers)
         await _broadcast(conv_id, {"type": "start", "conv_id": conv_id})
 
-        # 流式处理
+        # Stream processing
         collected_content = ""
         last_persist_len = 0
         config = {"recursion_limit": settings.agent_recursion_limit}
 
         async def _on_text(text: str) -> None:
-            """累计文本 + 推订阅者 + 增量持久化(>=200 字符 flush 一次内存)。"""
+            """Accumulate text + push to subscribers + incremental persistence (flush memory once per >=200 chars)."""
             nonlocal collected_content, last_persist_len
             if not text:
                 return
@@ -349,7 +349,7 @@ class ChatWSHandler:
 
         try:
             async for event in agent.astream_events(state, config=config, version="v2"):
-                # 检查停止标志
+                # Check the stop flag
                 if self._stop_requested:
                     logger.info("[CHAT] 用户请求停止")
                     await _broadcast(conv_id, {"type": "stopped"})
@@ -357,12 +357,12 @@ class ChatWSHandler:
 
                 event_type = event.get("event", "")
 
-                # LLM 流式输出
+                # LLM streaming output
                 if event_type == "on_chat_model_stream":
                     chunk = event.get("data", {}).get("chunk")
                     if chunk and hasattr(chunk, "content"):
                         content = chunk.content
-                        # content 可能是 string 或 list[dict]
+                        # content may be a string or list[dict]
                         if isinstance(content, str):
                             await _on_text(content)
                         elif isinstance(content, list):
@@ -381,7 +381,7 @@ class ChatWSHandler:
                                 elif isinstance(part, str):
                                     await _on_text(part)
 
-                # 工具调用
+                # Tool call
                 elif event_type == "on_tool_start":
                     tool_name = event.get("name", "unknown")
                     tool_args = event.get("data", {}).get("input", {})
@@ -430,15 +430,15 @@ class ChatWSHandler:
                         "result": tool_result,
                     })
 
-            # 正常结束：添加 AI 回复到 store
+            # Normal end: add the AI reply to the store
             if collected_content and not self._stop_requested:
                 history.append(AIMessage(content=collected_content))
-                # 把流过程中已 placeholder 的 last assistant 替换为最终内容
+                # Replace the last assistant placeholder from the stream with the final content
                 chat_store.update_last_assistant(
                     conv_id, collected_content, flush_disk=True
                 )
 
-            # 用 tiktoken 计算 token 用量
+            # Compute token usage with tiktoken
             conv = chat_store.get_conversation(conv_id)
             new_input = count_history_tokens(history)
             new_output = conv.get("output_tokens", 0) + count_tokens(collected_content)
@@ -448,7 +448,7 @@ class ChatWSHandler:
             )
             await self._send_usage(conv_id)
 
-            # 发送结束标记(广播)
+            # Send the end marker (broadcast)
             if self._stop_requested:
                 await _broadcast(conv_id, {"type": "stopped"})
             else:
@@ -459,15 +459,15 @@ class ChatWSHandler:
                 })
 
         except asyncio.CancelledError:
-            # 被取消(刷新引起的本 ws_handler 实例退出不会取消 task,这里主要是
-            # /stop 显式取消的路径)。把已生成内容落盘后退出。
+            # Cancelled (a ws_handler instance exiting due to refresh won't cancel the task;
+            # this is mainly the explicit /stop cancellation path). Persist generated content, then exit.
             logger.info("[CHAT] 已取消")
             if collected_content:
                 chat_store.update_last_assistant(conv_id, collected_content, flush_disk=True)
             await _broadcast(conv_id, {"type": "stopped"})
 
         except Exception as e:
-            # 出错时移除已添加的用户消息(store 里)
+            # On error, remove the already-added user message (from the store)
             conv = chat_store.get_conversation(conv_id)
             msgs = conv.get("messages", [])
             if msgs and msgs[-1].get("role") == "user" and msgs[-1].get("content") == user_input:
@@ -477,23 +477,23 @@ class ChatWSHandler:
 
         finally:
             self._current_task = None
-            # 清理 in-flight 流状态
+            # Clean up in-flight stream state
             with _streams_lock:
                 _active_streams.pop(conv_id, None)
 
     async def _send(self, data: dict) -> None:
-        """发送 JSON 消息。"""
+        """Send a JSON message."""
         try:
             await self.ws.send_text(json.dumps(data, ensure_ascii=False))
         except Exception as e:
             logger.warning(f"[SEND] 发送失败: {e}")
 
     async def _send_error(self, message: str) -> None:
-        """发送错误消息。"""
+        """Send an error message."""
         await self._send({"type": "error", "message": message})
 
     async def _send_usage(self, conv_id: str) -> None:
-        """发送 token 使用量信息。"""
+        """Send token usage information."""
         config = UserConfig.load()
         current_model = config.get("selected_model", "")
         max_context = 200000

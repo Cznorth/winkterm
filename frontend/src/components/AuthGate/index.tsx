@@ -64,7 +64,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       const endpoint = phase === "setup" ? "/api/auth/setup" : "/api/auth/login";
       await axios.post(endpoint, { key: trimmed });
       setAccessKey(trimmed);
-      // 重新加载，让所有 HTTP/WebSocket 客户端带上访问密钥重新初始化
+      // Reload so HTTP/WebSocket clients re-init with the access key
       window.location.reload();
     } catch (e: unknown) {
       const err = e as { response?: { status?: number; data?: { detail?: string } } };

@@ -283,7 +283,7 @@ function ConvTabs({
     listRef.current?.scrollBy({ left: dir === "left" ? -120 : 120, behavior: "smooth" });
   };
 
-  /** 中键关闭（与终端标签栏一致） */
+  /** Middle-click close (same as terminal tab bar) */
   const handleTabMouseDown = (e: React.MouseEvent, convId: string) => {
     if (e.button !== 1 || conversations.length <= 1) return;
     e.preventDefault();

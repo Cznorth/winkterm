@@ -9,7 +9,7 @@ function measureKeyboardInset(): number {
   return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
 }
 
-/** 同步 --keyboard-inset，供操作键栏在系统键盘弹出时上移（不影响底栏导航） */
+/** Sync --keyboard-inset so the action bar moves up when the system keyboard opens (bottom nav unaffected) */
 export function useKeyboardInset(enabled: boolean): number {
   const [inset, setInset] = useState(0);
 

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-// HTTP API 类型（保留，用于 AI 分析功能）
+// HTTP API types (kept for AI analysis features)
 // ------------------------------------------------------------------
 
 export interface AnalyzeRequest {

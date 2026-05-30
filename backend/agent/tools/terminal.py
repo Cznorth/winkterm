@@ -1,8 +1,9 @@
-"""统一终端工具集。
+"""Unified terminal toolset.
 
-供 LangGraph agent 调用,底层走 SessionManager(与外部 HTTP API 同源)。
-所有工具显式接 terminal_id,agent 通过每轮 system prompt 注入的终端列表
-自主决定操作哪个终端。
+Called by the LangGraph agent; backed by SessionManager (same source as the
+external HTTP API). All tools take an explicit terminal_id; the agent decides
+which terminal to operate on based on the terminal list injected into each
+round's system prompt.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ logger = logging.getLogger("agent.tools.terminal")
 
 
 def _truncate(value: object, limit: int = 4000) -> object:
-    """工具结果截断,避免单次返回灌爆 LLM 上下文。"""
+    """Truncate tool results to avoid flooding the LLM context in one return."""
     if isinstance(value, str) and len(value) > limit:
         return value[:limit] + f"...(已截断,原长 {len(value)})"
     if isinstance(value, dict):
@@ -33,17 +34,18 @@ def _truncate(value: object, limit: int = 4000) -> object:
 
 
 # ---------------------------------------------------------------------------
-# 终端管理
+# Terminal management
 # ---------------------------------------------------------------------------
 
 @tool
 def list_terminals() -> dict:
-    """列出所有终端会话(含用户激活标记)。
+    """List all terminal sessions (including the user-active flag).
 
-    返回字段重点:id / type / title / is_user_active / user_visible / created_by /
-    idle_seconds / cwd / last_command。
+    Key returned fields: id / type / title / is_user_active / user_visible /
+    created_by / idle_seconds / cwd / last_command.
 
-    通常每轮 prompt 已自动注入终端列表,本工具用于刷新或需要更详细字段时调用。
+    The terminal list is usually injected into each round's prompt; use this
+    tool to refresh it or when more detailed fields are needed.
     """
     return {"terminals": get_session_manager().list_terminals()}
 
@@ -57,16 +59,18 @@ async def create_terminal(
     rows: int = 40,
     ttl_seconds: float = 1800.0,
 ) -> dict:
-    """新建终端会话(始终出现在用户标签栏)。
+    """Create a new terminal session (always shown in the user's tab bar).
 
     Args:
-        terminal_type: "local" 本地 shell / "ssh" SSH 连接(需 connection_id)。
-        connection_id: SSH 类型必填,来自 list_ssh_connections。
-        name: 终端展示名(可选,会显示在标签上)。
-        ttl_seconds: 空闲回收时间,0/负数 = 永不过期。
+        terminal_type: "local" for a local shell / "ssh" for an SSH connection
+            (requires connection_id).
+        connection_id: Required for the SSH type, from list_ssh_connections.
+        name: Terminal display name (optional, shown on the tab).
+        ttl_seconds: Idle reclaim time; 0/negative = never expires.
 
-    所有 agent 建的终端都对用户可见(透明可审计)。
-    用完记得 close_terminal,避免标签栏堆满。
+    All agent-created terminals are visible to the user (transparent and
+    auditable). Remember to close_terminal when done to avoid cluttering the
+    tab bar.
     """
     try:
         session = await get_session_manager().create(
@@ -87,13 +91,13 @@ async def create_terminal(
 
 @tool
 def close_terminal(terminal_id: str) -> dict:
-    """关闭并删除指定终端。"""
+    """Close and delete the specified terminal."""
     ok = get_session_manager().close(terminal_id)
     return {"ok": ok, "terminal_id": terminal_id}
 
 
 # ---------------------------------------------------------------------------
-# 终端交互
+# Terminal interaction
 # ---------------------------------------------------------------------------
 
 @tool
@@ -105,13 +109,14 @@ def terminal_snapshot(
     context: int = 0,
     case_insensitive: bool = False,
 ) -> dict:
-    """读取终端输出快照(只读)。
+    """Read a snapshot of terminal output (read-only).
 
     Args:
-        terminal_id: 终端 id。
-        since: 绝对字节偏移,首次传 None 拉全量,后续传上次返回的 size。
-        pattern: 给定时附带 grep 字段返回匹配行。
-        context: grep 上下文行数(0-20)。
+        terminal_id: Terminal id.
+        since: Absolute byte offset; pass None first to fetch everything, then
+            pass the size returned last time.
+        pattern: When given, returns matching lines via a grep field.
+        context: Number of grep context lines (0-20).
     """
     session = get_session_manager().get_session(terminal_id)
     if not session:
@@ -141,16 +146,18 @@ async def terminal_input(
     strip_echo: bool = False,
     halt_for_user: bool = False,
 ) -> dict:
-    """向终端发送输入(命令/控制键/原始文本)。
+    """Send input to a terminal (command / control keys / raw text).
 
     Args:
-        terminal_id: 目标终端 id。
-        data: 文本内容(命令本身)。
-        keys: 命名控制键数组,如 ["ctrl+c"]、["up","enter"]。
-        enter: 末尾是否追加回车(默认 true)。
-        wait: 是否等待输出落定再返回。
-        halt_for_user: 仅写入不执行 + 等待用户决策时设 true(配合 enter=false 使用)。
-            agent 会终止本轮,把控制交还用户。适合"建议命令但让用户确认执行"场景。
+        terminal_id: Target terminal id.
+        data: Text content (the command itself).
+        keys: Array of named control keys, e.g. ["ctrl+c"], ["up","enter"].
+        enter: Whether to append a carriage return at the end (default true).
+        wait: Whether to wait for output to settle before returning.
+        halt_for_user: Set true to write without executing and wait for the
+            user's decision (use together with enter=false). The agent ends
+            this round and hands control back to the user. Suitable for the
+            "suggest a command but let the user confirm execution" scenario.
     """
     session = get_session_manager().get_session(terminal_id)
     if not session:
@@ -182,15 +189,16 @@ async def terminal_exec(
     cwd: Optional[str] = None,
     env: Optional[dict[str, str]] = None,
 ) -> dict:
-    """原子执行 POSIX shell 命令,返回 stdout + exit_code + cwd。
+    """Atomically run a POSIX shell command; returns stdout + exit_code + cwd.
 
-    cwd / env 用 subshell 注入,不污染终端持久状态。命令包含 sentinel
-    跟踪退出码,适合需要可靠判断成功与否的场景。
+    cwd / env are injected via a subshell so the terminal's persistent state
+    is not polluted. The command includes a sentinel to track the exit code,
+    suitable for cases needing a reliable success/failure determination.
 
     Args:
-        terminal_id: 目标终端 id。
-        command: 命令字符串。
-        timeout: 超时秒数。
+        terminal_id: Target terminal id.
+        command: Command string.
+        timeout: Timeout in seconds.
     """
     session = get_session_manager().get_session(terminal_id)
     if not session:
@@ -208,12 +216,12 @@ async def terminal_exec(
 
 
 # ---------------------------------------------------------------------------
-# SSH 辅助
+# SSH helpers
 # ---------------------------------------------------------------------------
 
 @tool
 def list_ssh_connections() -> dict:
-    """列出所有已配置的 SSH 连接(密码脱敏)。"""
+    """List all configured SSH connections (passwords redacted)."""
     from backend.ssh.connection_manager import SSHConnectionManager
 
     return SSHConnectionManager.list_connections()
@@ -228,10 +236,11 @@ async def ssh_run(
     cwd: Optional[str] = None,
     env: Optional[dict[str, str]] = None,
 ) -> dict:
-    """一次性 SSH 命令:新建隐藏终端 → exec → 关闭。
+    """One-shot SSH command: create a hidden terminal -> exec -> close.
 
-    适合一次性诊断/巡检,不进入用户标签栏。如需复用 shell 状态(cd/env),
-    用 create_terminal + terminal_exec 两步流程。
+    Suitable for one-off diagnostics/inspections without entering the user's
+    tab bar. To reuse shell state (cd/env), use the two-step flow of
+    create_terminal + terminal_exec.
     """
     from backend.ssh.connection_manager import SSHConnectionManager
 
@@ -268,19 +277,19 @@ async def ssh_run(
 
 
 # ---------------------------------------------------------------------------
-# 通用
+# General
 # ---------------------------------------------------------------------------
 
 @tool
 async def wait(seconds: float) -> str:
-    """等待指定秒数,用于让长任务跑完或观察日志变化。范围 0-60。"""
+    """Wait the given number of seconds, to let long tasks finish or observe log changes. Range 0-60."""
     seconds = min(max(seconds, 0), 60)
     await asyncio.sleep(seconds)
     return f"[等待完成] {seconds} 秒"
 
 
 # ---------------------------------------------------------------------------
-# 导出
+# Exports
 # ---------------------------------------------------------------------------
 
 TERMINAL_TOOLS = [

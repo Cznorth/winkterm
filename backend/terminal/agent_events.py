@@ -1,6 +1,6 @@
-"""Agent 操作事件日志。
+"""Agent operation event log.
 
-环形缓冲 + asyncio 广播，供前端实时订阅。无持久化。
+Ring buffer plus asyncio broadcast for frontend real-time subscription. Not persisted.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ _MAX_EVENTS = 500
 
 
 class AgentEventLog:
-    """内存里的事件环形缓冲，支持多订阅者实时拉取。"""
+    """In-memory ring buffer of events with multi-subscriber real-time delivery."""
 
     _instance: Optional[AgentEventLog] = None
     _singleton_lock = threading.Lock()
@@ -33,7 +33,7 @@ class AgentEventLog:
         return cls._instance
 
     def emit(self, action: str, **fields) -> dict:
-        """记录一条事件并广播给订阅者。"""
+        """Record one event and broadcast it to subscribers."""
         with self._lock:
             self._seq += 1
             event = {
@@ -54,7 +54,7 @@ class AgentEventLog:
         return event
 
     def recent(self, since_id: Optional[int] = None, limit: int = 100) -> list[dict]:
-        """返回最近 limit 条事件。``since_id`` 给定则只返回 id > since_id 的。"""
+        """Return the most recent ``limit`` events. When ``since_id`` is set, only id > since_id."""
         with self._lock:
             events = list(self._events)
         if since_id is not None:
@@ -62,21 +62,21 @@ class AgentEventLog:
         return events[-limit:]
 
     async def stream(self, since_id: int = 0) -> AsyncIterator[dict]:
-        """异步生成器：每当有新事件 yield 一条。
+        """Async generator: yield one event whenever a new one arrives.
 
-        首先一次性返回缓冲里 id > since_id 的历史事件，然后实时推送新事件。
+        First replays buffered events with id > since_id, then pushes new events in real time.
         """
         wake = asyncio.Event()
         with self._lock:
             self._subscribers.add(wake)
 
         try:
-            # 先回放历史
+            # Replay history first
             for ev in self.recent(since_id=since_id, limit=_MAX_EVENTS):
                 yield ev
                 since_id = ev["id"]
 
-            # 实时推送
+            # Real-time push
             while True:
                 try:
                     await asyncio.wait_for(wake.wait(), timeout=15.0)
@@ -97,7 +97,7 @@ def get_event_log() -> AgentEventLog:
 
 
 def short_text(s: str, n: int = 120) -> str:
-    """截断字符串供事件日志显示。"""
+    """Truncate a string for display in the event log."""
     if not s:
         return ""
     s = s.replace("\n", "\\n").replace("\r", "")

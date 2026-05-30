@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * E2E: Settings panel — agents.md / memory.md (AI 指令与记忆)
+ * E2E: Settings panel — agents.md / memory.md (AI instructions & memory)
  */
 import puppeteer from "puppeteer-core";
 
@@ -114,12 +114,12 @@ async function main() {
     });
     const page = await browser.newPage();
 
-    // 1. 打开应用并进入设置
+    // 1. Open app and navigate to settings
     await page.goto(APP, { waitUntil: "networkidle2", timeout: 30000 });
     await openSettings(page);
     pass("打开设置页");
 
-    // 2. 验证 UI 结构（中文）
+    // 2. Verify UI structure (Chinese locale)
     let group = await getAgentDocsGroup(page);
     if (!group) throw new Error("未找到 AI 指令与记忆分组");
     if (!group.title?.includes("AI 指令与记忆")) throw new Error(`标题异常: ${group.title}`);
@@ -130,7 +130,7 @@ async function main() {
     if (!group.textareas.every((t) => t.className.includes("settings-textarea"))) throw new Error("textarea 样式类缺失");
     pass("UI 结构与中英文案（中文）");
 
-    // 3. 编辑并保存 agents.md
+    // 3. Edit and save agents.md
     await fillTextareaInAgentDocsGroup(page, 0, MARKER_AGENTS);
     await saveInAgentDocsGroup(page, 0);
     await page.waitForFunction(
@@ -151,7 +151,7 @@ async function main() {
     if (agentsAfterSave !== MARKER_AGENTS) throw new Error("API agents.md 与 UI 保存不一致");
     pass("保存 agents.md — API 校验");
 
-    // 4. 编辑并保存 memory.md
+    // 4. Edit and save memory.md
     await fillTextareaInAgentDocsGroup(page, 1, MARKER_MEMORY);
     await saveInAgentDocsGroup(page, 1);
     await page.waitForFunction(
@@ -172,7 +172,7 @@ async function main() {
     if (memoryAfterSave !== MARKER_MEMORY) throw new Error("API memory.md 与 UI 保存不一致");
     pass("保存 memory.md — API 校验");
 
-    // 5. 刷新后内容持久化
+    // 5. Verify persistence after page reload
     await page.reload({ waitUntil: "networkidle2" });
     await openSettings(page);
     group = await getAgentDocsGroup(page);
@@ -180,7 +180,7 @@ async function main() {
     if (group.textareas[1].value !== MARKER_MEMORY) throw new Error("刷新后 memory.md 未持久化");
     pass("刷新后 textarea 内容持久化");
 
-    // 6. 切换英文 i18n
+    // 6. Switch to English i18n
     await page.select(".settings-select", "en");
     await sleep(400);
     group = await getAgentDocsGroup(page);
@@ -189,12 +189,12 @@ async function main() {
     if (!group.labels.some((l) => l?.includes("Long-term Memory"))) throw new Error(`英文 labels: ${group.labels}`);
     pass("切换 English — i18n 文案");
 
-    // 7. 英文下保存按钮文案
+    // 7. Save button label in English locale
     await page.select(".settings-select", "zh");
     await sleep(300);
     pass("切回中文");
 
-    // 8. 空内容保存
+    // 8. Save empty content
     await fillTextareaInAgentDocsGroup(page, 0, "");
     await saveInAgentDocsGroup(page, 0);
     await sleep(600);

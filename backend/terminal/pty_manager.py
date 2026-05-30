@@ -29,10 +29,10 @@ else:
 
 
 class PtyManager:
-    """PTY 管理器：纯透传字节，不做任何解析。
+    """PTY manager: passes through raw bytes without any parsing.
 
-    Windows: 使用 pywinpty（真正的 PTY）
-    Unix:    使用 ptyprocess
+    Windows: uses pywinpty (a real PTY)
+    Unix:    uses ptyprocess
     """
 
     BUFFER_LINES = 500
@@ -40,18 +40,18 @@ class PtyManager:
     def __init__(self) -> None:
         self._proc = None  # winpty.PtyProcess | ptyprocess.PtyProcess
         self._output_buffer: deque[str] = deque(maxlen=self.BUFFER_LINES)
-        self._screen_content: str = ""  # 前端序列化的屏幕内容
+        self._screen_content: str = ""  # screen content serialized by the frontend
         self._read_callbacks: list[Callable[[bytes], None]] = []
         self._queue: asyncio.Queue[bytes | None] | None = None
         self._read_thread: threading.Thread | None = None
         self._alive = False
         self._loop: asyncio.AbstractEventLoop | None = None
-        # SSH 相关
+        # SSH-related
         self._ssh_password_handler = None
         self._ssh_connection_id: Optional[str] = None
 
     # ------------------------------------------------------------------
-    # 生命周期
+    # Lifecycle
     # ------------------------------------------------------------------
 
     def spawn(
@@ -61,23 +61,23 @@ class PtyManager:
         rows: int = 24,
         ssh_config: dict | None = None,
     ) -> None:
-        """启动 PTY 进程。
+        """Start the PTY process.
 
         Args:
-            shell: 本地 shell 路径
-            cols: 列数
-            rows: 行数
-            ssh_config: SSH 连接配置，包含 host, port, username, password 等
+            shell: local shell path
+            cols: number of columns
+            rows: number of rows
+            ssh_config: SSH connection config, including host, port, username, password, etc.
         """
         if not _HAS_PTY:
             raise RuntimeError("PTY not available: install pywinpty (Windows) or ptyprocess (Unix)")
 
-        # SSH 模式
+        # SSH mode
         if ssh_config:
             self._spawn_ssh(ssh_config, cols, rows)
             return
 
-        # 本地 shell 模式
+        # Local shell mode
         if sys.platform == "win32":
             # Windows: pywinpty
             shell = shell or "powershell.exe"
@@ -92,7 +92,7 @@ class PtyManager:
             # Unix: ptyprocess
             import os
             shell = shell or os.environ.get("SHELL", "/bin/bash")
-            # 设置必要的环境变量
+            # Set the necessary environment variables
             env = os.environ.copy()
             env.setdefault("TERM", "xterm-256color")
             env.setdefault("LANG", "en_US.UTF-8")
@@ -109,11 +109,11 @@ class PtyManager:
         self._alive = True
 
     def _spawn_ssh(self, ssh_config: dict, cols: int, rows: int) -> None:
-        """启动 SSH 连接。"""
+        """Start an SSH connection."""
         from backend.ssh.pty_spawner import SSHPtySpawner, PasswordAutoInput
         from backend.ssh.models import SSHConnection
 
-        # 构建 SSHConnection 对象
+        # Build the SSHConnection object
         conn = SSHConnection(
             host=ssh_config.get("host", ""),
             port=ssh_config.get("port", 22),
@@ -123,12 +123,12 @@ class PtyManager:
             private_key_path=ssh_config.get("private_key_path"),
         )
 
-        # 存储 SSH 连接 ID
+        # Store the SSH connection ID
         self._ssh_connection_id = ssh_config.get("id")
 
-        # 构建 SSH 命令
+        # Build the SSH command
         if sys.platform == "win32":
-            # Windows: winpty 需要字符串
+            # Windows: winpty needs a string
             ssh_cmd = SSHPtySpawner.build_ssh_command_str(conn)
             logger.info(f"[SPAWN SSH] Windows: 启动 SSH {conn.username}@{conn.host}:{conn.port}")
             self._proc = winpty.PtyProcess.spawn(
@@ -136,10 +136,10 @@ class PtyManager:
                 dimensions=(rows, cols),
             )
         else:
-            # Unix: ptyprocess 需要列表
+            # Unix: ptyprocess needs a list
             import os
             ssh_cmd = SSHPtySpawner.build_ssh_command(conn)
-            # 设置必要的环境变量
+            # Set the necessary environment variables
             env = os.environ.copy()
             env.setdefault("TERM", "xterm-256color")
             env.setdefault("LANG", "en_US.UTF-8")
@@ -154,7 +154,7 @@ class PtyManager:
         self._pid = getattr(self._proc, "pid", "N/A")
         logger.info(f"[SPAWN SSH] PTY 进程已启动, pid={self._pid}")
 
-        # 设置密码自动输入处理器（注册为回调）
+        # Set up the password auto-input handler (registered as a callback)
         if conn.auth_type == "password" and conn.password:
             self._ssh_password_handler = PasswordAutoInput(
                 password=conn.password,
@@ -185,11 +185,11 @@ class PtyManager:
         self._proc = None
 
     # ------------------------------------------------------------------
-    # 写操作（透传字节）
+    # Write operations (passing through bytes)
     # ------------------------------------------------------------------
 
     def write(self, data: bytes) -> None:
-        """透传原始字节给 PTY。"""
+        """Pass raw bytes through to the PTY."""
         if self._proc is None:
             logger.warning("[WRITE] PTY 进程未启动，忽略写入")
             return
@@ -197,23 +197,23 @@ class PtyManager:
             logger.warning("[WRITE] PTY 没有 write 方法")
             return
         try:
-            # winpty 需要 str, ptyprocess 需要 bytes
+            # winpty needs str, ptyprocess needs bytes
             if sys.platform == "win32":
                 text = data.decode("utf-8", errors="replace")
-                # logger.debug(f"[WRITE] Windows: 写入 {len(text)} 字符: {repr(text[:50])}")
+                # logger.debug(f"[WRITE] Windows: write {len(text)} chars: {repr(text[:50])}")
                 self._proc.write(text)
             else:
-                # logger.debug(f"[WRITE] Unix: 写入 {len(data)} 字节: {repr(data[:50])}")
+                # logger.debug(f"[WRITE] Unix: write {len(data)} bytes: {repr(data[:50])}")
                 self._proc.write(data)
         except Exception as e:
             logger.error(f"[WRITE] 写入失败: {e}")
 
     def write_command(self, command: str) -> None:
-        """写入命令到输入行（不执行，不发送回车）。"""
+        """Write a command into the input line (without running it or sending Enter)."""
         self.write(command.encode("utf-8"))
 
     def resize(self, cols: int, rows: int) -> None:
-        """调整 PTY 大小。"""
+        """Adjust the PTY size."""
         if self._proc and hasattr(self._proc, "setwinsize"):
             try:
                 self._proc.setwinsize(rows, cols)
@@ -221,7 +221,7 @@ class PtyManager:
                 pass
 
     # ------------------------------------------------------------------
-    # 异步读取（后台线程 + asyncio queue）
+    # Async reading (background thread + asyncio queue)
     # ------------------------------------------------------------------
 
     def add_output_callback(self, cb: Callable[[bytes], None]) -> None:
@@ -231,9 +231,9 @@ class PtyManager:
         self._read_callbacks = [c for c in self._read_callbacks if c is not cb]
 
     async def start_read_loop(self) -> None:
-        """启动读取循环：后台线程读 PTY，放入 asyncio queue。
+        """Start the read loop: a background thread reads the PTY and puts data into the asyncio queue.
 
-        幂等:若已有读线程在跑则直接 await 现有任务(防多 agent/WS 重复触发)。
+        Idempotent: if a read thread is already running, just await the existing task (prevents duplicate triggers from multiple agents/WS).
         """
         if self._proc is None or not hasattr(self._proc, "read"):
             return
@@ -258,14 +258,14 @@ class PtyManager:
                     break
                 except Exception:
                     break
-            # 终止信号
+            # Termination signal
             if self._loop:
                 self._loop.call_soon_threadsafe(self._queue.put_nowait, None)
 
         self._read_thread = threading.Thread(target=_reader, daemon=True)
         self._read_thread.start()
 
-        # 主循环：从 queue 取数据，回调处理
+        # Main loop: take data from the queue and dispatch to callbacks
         while True:
             data = await self._queue.get()
             if data is None:
@@ -274,7 +274,7 @@ class PtyManager:
             self._notify_callbacks(data)
 
     def _notify_callbacks(self, data: bytes) -> None:
-        """通知所有输出回调。"""
+        """Notify all output callbacks."""
         for cb in list(self._read_callbacks):
             try:
                 cb(data)
@@ -282,28 +282,28 @@ class PtyManager:
                 pass
 
     # ------------------------------------------------------------------
-    # 屏幕内容（从前端 xterm.js 序列化）
+    # Screen content (serialized from the frontend xterm.js)
     # ------------------------------------------------------------------
 
     def set_screen_content(self, content: str) -> None:
-        """更新屏幕内容缓存（由 ws_handler 调用）。"""
+        """Update the screen content cache (called by ws_handler)."""
         self._screen_content = content
 
     def get_screen_content(self) -> str:
-        """获取当前屏幕内容。"""
+        """Get the current screen content."""
         return self._screen_content
 
     # ------------------------------------------------------------------
-    # 上下文（用于 AI 分析）
+    # Context (used for AI analysis)
     # ------------------------------------------------------------------
 
     def get_context(self, lines: int = 500) -> str:
-        """获取终端上下文，优先使用屏幕内容。
+        """Get the terminal context, preferring the screen content.
 
-        如果有前端序列化的屏幕内容，直接返回（这是最准确的渲染结果）。
-        否则回退到 output buffer（原始 ANSI 流）。
+        If frontend-serialized screen content is available, return it directly (this is the most accurate rendered result).
+        Otherwise fall back to the output buffer (the raw ANSI stream).
         """
         if self._screen_content:
-            return self._screen_content[-5000:]  # 截取最后部分屏幕内容，避免过大
+            return self._screen_content[-5000:]  # take only the last part of the screen content to avoid it getting too large
         recent = list(self._output_buffer)[-lines:]
         return "\n".join(recent)

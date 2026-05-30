@@ -1,4 +1,4 @@
-"""SSH 连接数据模型。"""
+"""SSH connection data models."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import uuid
 
 @dataclass
 class SSHConnection:
-    """SSH 连接配置。"""
+    """SSH connection configuration."""
 
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     title: str = ""
@@ -19,27 +19,27 @@ class SSHConnection:
     username: str = ""
     auth_type: Literal["password", "key"] = "password"
 
-    # 密码认证
+    # Password authentication
     password: Optional[str] = None
 
-    # 密钥认证
+    # Key authentication
     private_key_path: Optional[str] = None
     passphrase: Optional[str] = None
 
-    # VNC（经 SSH 隧道）
+    # VNC (via SSH tunnel)
     vnc_port: int = 5901
     vnc_password: Optional[str] = None
 
-    # 显示选项
+    # Display options
     color: Optional[str] = None
     group: Optional[str] = None
 
-    # 元数据
+    # Metadata
     created_at: datetime = field(default_factory=datetime.now)
     last_connected: Optional[datetime] = None
 
     def to_dict(self) -> dict:
-        """转换为字典。"""
+        """Convert to a dictionary."""
         return {
             "id": self.id,
             "title": self.title,
@@ -60,7 +60,7 @@ class SSHConnection:
 
     @classmethod
     def from_dict(cls, data: dict) -> "SSHConnection":
-        """从字典创建。"""
+        """Create from a dictionary."""
         return cls(
             id=data.get("id", str(uuid.uuid4())[:8]),
             title=data.get("title", ""),
@@ -81,7 +81,7 @@ class SSHConnection:
 
     @classmethod
     def from_electerm(cls, bookmark: dict) -> "SSHConnection":
-        """从 electerm bookmark 创建。"""
+        """Create from an electerm bookmark."""
         return cls(
             id=bookmark.get("id", str(uuid.uuid4())[:8]),
             title=bookmark.get("title", "") or bookmark.get("host", "未命名"),

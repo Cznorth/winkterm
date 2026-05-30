@@ -1,4 +1,4 @@
-"""监控分析工具模块（终端外Agent使用）。"""
+"""Monitoring and analysis tool module (used by the out-of-terminal Agent)."""
 
 from __future__ import annotations
 
@@ -7,27 +7,27 @@ from langchain_core.tools import tool
 
 @tool
 def query_prometheus(query: str) -> str:
-    """查询 Prometheus 指标。
+    """Query Prometheus metrics.
 
     Args:
-        query: PromQL 查询语句
+        query: PromQL query statement
     """
-    # TODO: 接入真实 Prometheus
-    # 这里是 demo 实现
+    # TODO: integrate with a real Prometheus
+    # This is a demo implementation
     return f"[Mock Prometheus] 查询: {query}\n结果: CPU使用率 45%, 内存使用率 62%"
 
 
 @tool
 def search_logs(service: str, keywords: str = "") -> str:
-    """搜索日志（Loki/ELK）。
+    """Search logs (Loki/ELK).
 
     Args:
-        service: 服务名称
-        keywords: 搜索关键词
+        service: service name
+        keywords: search keywords
     """
-    # TODO: 接入真实日志系统
+    # TODO: integrate with a real logging system
     return f"[Mock Logs] 服务: {service}, 关键词: {keywords}\n最近日志: [INFO] 服务正常运行"
 
 
-# 模块导出的工具列表
+# List of tools exported by this module
 MONITORING_TOOLS = [query_prometheus, search_logs]

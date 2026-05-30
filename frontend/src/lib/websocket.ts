@@ -9,7 +9,7 @@ type StatusHandler = (connected: boolean) => void;
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 20;
 
-// 调试日志工具
+// Debug logging utilities
 const DEBUG = process.env.NODE_ENV === "development";
 const log = {
   info: (msg: string, ...args: unknown[]) =>
@@ -22,17 +22,17 @@ const log = {
     console.error(`[WS] ${new Date().toISOString()} ${msg}`, ...args),
 };
 
-// 截断并转义控制字符用于日志
+// Truncate and escape control characters for logging
 const truncate = (data: string, maxLen = 80): string => {
   const escaped = JSON.stringify(data);
   return escaped.length > maxLen ? escaped.slice(0, maxLen) + '..."' : escaped;
 };
 
 /**
- * WebSocket 客户端：纯透传文本。
+ * WebSocket client: plain text passthrough.
  *
- * - send(data): 直接发送文本到 WebSocket
- * - onMessage(handler): 接收 PTY 输出文本
+ * - send(data): send text directly to the WebSocket
+ * - onMessage(handler): receive PTY output text
  */
 export class TerminalWebSocket {
   private ws: WebSocket | null = null;
@@ -44,7 +44,7 @@ export class TerminalWebSocket {
   private sessionId: string;
   private terminalType: "local" | "ssh";
   private sshConnectionId?: string;
-  // 调试统计
+  // Debug counters
   private _connectTime = 0;
   private _msgCount = 0;
   private _bytesReceived = 0;
@@ -126,13 +126,13 @@ export class TerminalWebSocket {
     ws.onmessage = (event: MessageEvent<string>) => {
       this._msgCount++;
       this._bytesReceived += event.data.length;
-      // 每 100 条消息打印一次统计
+      // Log stats every 100 messages
       if (this._msgCount % 100 === 0) {
         log.info(
           `[onmessage] 统计: msgs=${this._msgCount}, rx=${this._bytesReceived}B, tx=${this._bytesSent}B`
         );
       }
-      // 首几条消息打印详细内容
+      // Log first few messages in detail
       if (this._msgCount <= 3) {
         log.info(`[onmessage] #${this._msgCount} len=${event.data.length} data=${truncate(event.data)}`);
       }
@@ -154,7 +154,7 @@ export class TerminalWebSocket {
 
     ws.onerror = (event: Event) => {
       log.error("[onerror] WebSocket 错误:", event.type);
-      // 浏览器会同时触发 onclose
+      // Browser also fires onclose
     };
 
     this.ws = ws;
@@ -209,12 +209,12 @@ export class TerminalWebSocket {
   }
 
   /**
-   * 发送文本到 WebSocket（直接透传）。
+   * Send text to the WebSocket (direct passthrough).
    */
   send(data: string): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this._bytesSent += data.length;
-      // 首几条消息打印详细内容
+      // Log first few messages in detail
       if (this._bytesSent <= 200) {
         log.info(`[send] len=${data.length} data=${truncate(data)}`);
       }
@@ -226,16 +226,16 @@ export class TerminalWebSocket {
   }
 
   /**
-   * 发送 resize 事件。
+   * Send a resize event.
    */
   sendResize(cols: number, rows: number): void {
     log.info(`[sendResize] cols=${cols} rows=${rows}`);
-    // 格式: ESC[8;rows;colst
+    // Format: ESC[8;rows;colst
     this.send(`\x1b[8;${rows};${cols}t`);
   }
 
   /**
-   * 发送激活消息（通知后端此会话被激活）。
+   * Send an activate message (notify backend this session is active).
    */
   sendActivate(): void {
     log.info(`[sendActivate] session=${this.sessionId}`);
@@ -269,7 +269,7 @@ export class TerminalWebSocket {
   }
 }
 
-// 多实例缓存（按 session_id）
+// Multi-instance cache keyed by session_id
 const _instances: Map<string, TerminalWebSocket> = new Map();
 
 export function getWebSocket(
@@ -277,7 +277,7 @@ export function getWebSocket(
   terminalType: "local" | "ssh" = "local",
   sshConnectionId?: string
 ): TerminalWebSocket {
-  // 对于 SSH 连接，使用不同的缓存 key（包含 connection_id）
+  // For SSH connections, use a distinct cache key (includes connection_id)
   const cacheKey = terminalType === "ssh" && sshConnectionId
     ? `${sessionId}:ssh:${sshConnectionId}`
     : sessionId;
@@ -289,7 +289,7 @@ export function getWebSocket(
 }
 
 export function closeWebSocket(sessionId: string): void {
-  // 查找并关闭所有以该 sessionId 开头的实例
+  // Find and close all instances whose key starts with this sessionId
   for (const [key, instance] of _instances.entries()) {
     if (key === sessionId || key.startsWith(`${sessionId}:`)) {
       instance.disconnect();

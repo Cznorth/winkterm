@@ -25,7 +25,7 @@ interface Options {
   onSnapshot?: (sessions: SessionInfo[]) => void;
 }
 
-/** SSE 订阅后端 session 生命周期事件,自动重连。 */
+/** SSE subscription to backend session lifecycle events with auto-reconnect. */
 export function useSessionsStream({ onCreated, onClosed, onSnapshot }: Options): void {
   const handlersRef = useRef({ onCreated, onClosed, onSnapshot });
   handlersRef.current = { onCreated, onClosed, onSnapshot };

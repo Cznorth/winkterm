@@ -1,8 +1,8 @@
-"""侧边栏对话历史存储 (进程级单例 + 文件持久化)。
+"""Sidebar chat history store (process-level singleton + file persistence).
 
-之前 ChatWSHandler 把 histories 放在 self 上,WS 断开实例销毁 → 前端 refresh
-就丢光。这里改成模块级 dict,跨 WS 重连保留,可选写入 ~/.winkterm/chat_history.json
-让进程重启也保留。
+Previously ChatWSHandler kept histories on self; when the WS disconnected the instance
+was destroyed and frontend refresh lost everything. Now a module-level dict survives
+WS reconnects, with optional write to ~/.winkterm/chat_history.json for process restarts.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _ensure_loaded() -> None:
 
 
 def _flush() -> None:
-    """写盘。调用方持锁。"""
+    """Flush to disk. Caller must hold the lock."""
     global _dirty
     if not _dirty:
         return
@@ -68,7 +68,7 @@ def _new_conv() -> dict[str, Any]:
 
 
 def get_conversation(conv_id: str) -> dict[str, Any]:
-    """获取/创建会话条目。"""
+    """Get or create a conversation entry."""
     _ensure_loaded()
     with _lock:
         if conv_id not in _conversations:
@@ -77,7 +77,7 @@ def get_conversation(conv_id: str) -> dict[str, Any]:
 
 
 def list_conversations() -> list[dict[str, Any]]:
-    """列出所有会话(按 updated_at 倒序)。"""
+    """List all conversations (newest updated_at first)."""
     _ensure_loaded()
     with _lock:
         items = []
@@ -97,7 +97,7 @@ def list_conversations() -> list[dict[str, Any]]:
 
 
 def append_message(conv_id: str, message: dict[str, Any]) -> None:
-    """追加一条消息(message 含 role + content + 可选 thinking/contentBlocks)。"""
+    """Append one message (role + content + optional thinking/contentBlocks)."""
     _ensure_loaded()
     global _dirty
     with _lock:
@@ -109,7 +109,7 @@ def append_message(conv_id: str, message: dict[str, Any]) -> None:
 
 
 def set_messages(conv_id: str, messages: list[dict[str, Any]]) -> None:
-    """覆盖整条消息列表(撤回最后一条等场景)。"""
+    """Replace the entire message list (e.g. undo last message)."""
     _ensure_loaded()
     global _dirty
     with _lock:
@@ -128,9 +128,9 @@ def update_last_assistant(
     content_blocks: list[dict[str, Any]] | None = None,
     flush_disk: bool = False,
 ) -> None:
-    """流式追加场景:就地更新最后一条 assistant 消息的内容。
-    如果末尾不是 assistant 就 append 一条。flush_disk=False 时只更内存,
-    减小流式期间频繁写盘开销;end 时 flush_disk=True 落盘。"""
+    """Streaming append: update the last assistant message in place.
+    If the last message is not assistant, append one. When flush_disk=False, memory only
+    to reduce disk writes during streaming; set flush_disk=True on end to persist."""
     _ensure_loaded()
     global _dirty
     with _lock:

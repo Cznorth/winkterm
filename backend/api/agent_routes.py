@@ -1,7 +1,8 @@
-"""外部 agent HTTP 接口。
+"""External agent HTTP API.
 
-供外部 agent 通过 HTTP + 静态 token 操作终端、查看 SSH 列表、传输文件。
-所有端点统一前缀 /api/agent，需 Bearer token 鉴权（AGENT_API_TOKEN）。
+Allows external agents to operate terminals, list SSH connections, and transfer files
+via HTTP with a static token. All endpoints use the /api/agent prefix and require
+Bearer token auth (AGENT_API_TOKEN).
 """
 
 from __future__ import annotations
@@ -34,23 +35,23 @@ logger = logging.getLogger("agent_routes")
 
 
 # -----------------------------------------------------------
-# 鉴权
+# Authentication
 # -----------------------------------------------------------
 
 def _resolve_agent_token() -> str:
-    """优先用设置页持久化的 token，其次用环境变量 AGENT_API_TOKEN。"""
+    """Prefer the token persisted on the settings page, then env var AGENT_API_TOKEN."""
     return UserConfig.load().get("agent_api_token") or settings.agent_api_token
 
 
 def require_agent_token(
     authorization: Optional[str] = Header(default=None),
-    token: Optional[str] = Query(default=None, description="备用 token 入口（SSE/EventSource 无法发自定义 header 时用）"),
+    token: Optional[str] = Query(default=None, description="Fallback token param when SSE/EventSource cannot send custom headers"),
 ) -> None:
-    """校验 Bearer token。
+    """Validate Bearer token.
 
-    支持两种入口：
-    1. `Authorization: Bearer <token>` 头（首选）
-    2. `?token=<token>` 查询参数（EventSource 等不支持自定义 header 的场景）
+    Supports two entry points:
+    1. `Authorization: Bearer <token>` header (preferred)
+    2. `?token=<token>` query param (EventSource and other clients without custom headers)
     """
     expected = _resolve_agent_token()
     if not expected:
@@ -70,12 +71,12 @@ router = APIRouter(
     dependencies=[Depends(require_agent_token)],
 )
 
-# 无需鉴权的公开路由（仅用于下发 skill 文件 + localhost handshake）
+# Public routes (no auth): skill file download + localhost handshake only
 public_router = APIRouter(tags=["agent"])
 
 
 def _skill_dir_file(filename: str) -> Optional[Path]:
-    """定位 agent-skill/ 下的文件（兼容开发模式与 PyInstaller 打包）。"""
+    """Locate a file under agent-skill/ (dev mode and PyInstaller bundle)."""
     candidates: list[Path] = []
     if getattr(sys, "frozen", False):
         candidates.append(Path(sys._MEIPASS) / "agent-skill" / filename)  # type: ignore[attr-defined]
@@ -88,7 +89,7 @@ def _skill_dir_file(filename: str) -> Optional[Path]:
 
 @public_router.get("/api/agent/skill.md")
 async def download_skill() -> Response:
-    """下发 winkterm-remote skill 文件，供外部 agent 下载安装。"""
+    """Serve the winkterm-remote skill file for external agents to download and install."""
     path = _skill_dir_file("SKILL.md")
     if not path:
         raise HTTPException(status_code=404, detail="SKILL.md 未找到")
@@ -100,7 +101,7 @@ async def download_skill() -> Response:
 
 @public_router.get("/api/agent/handshake")
 async def agent_handshake(request: Request) -> dict:
-    """返回当前 agent token，供已可信的客户端自动接入。"""
+    """Return the current agent token for trusted clients to connect automatically."""
     from backend.api.auth_routes import (
         is_local_request,
         resolve_web_key,
@@ -130,7 +131,7 @@ async def agent_handshake(request: Request) -> dict:
 
 @public_router.get("/api/agent/install.md")
 async def install_guide(request: Request) -> Response:
-    """下发外部 agent 接入指导，{BASE_URL} 替换为当前后端地址。"""
+    """Serve external agent onboarding guide; {BASE_URL} is replaced with the current backend URL."""
     path = _skill_dir_file("INSTALL.md")
     if not path:
         raise HTTPException(status_code=404, detail="INSTALL.md 未找到")
@@ -140,7 +141,7 @@ async def install_guide(request: Request) -> Response:
 
 
 # -----------------------------------------------------------
-# 请求模型
+# Request models
 # -----------------------------------------------------------
 
 class TerminalCreate(BaseModel):
@@ -181,7 +182,7 @@ class SSHRun(BaseModel):
     timeout: float = 60.0
     cols: int = 200
     rows: int = 50
-    initial_wait: float = 12.0  # banner+login 上限,idle 检测会提前返回
+    initial_wait: float = 12.0  # upper bound for banner+login; idle detection may return earlier
     cwd: Optional[str] = None
     env: Optional[dict[str, str]] = None
 
@@ -212,7 +213,7 @@ class DeletePathsRequest(BaseModel):
 
 
 # -----------------------------------------------------------
-# 辅助
+# Helpers
 # -----------------------------------------------------------
 
 def _get_session_or_404(terminal_id: str):
@@ -258,7 +259,7 @@ def _sse_format(event_name: str, data: dict, event_id: Optional[str] = None) -> 
 
 
 # -----------------------------------------------------------
-# SSH 列表
+# SSH list
 # -----------------------------------------------------------
 
 @router.get("/ssh/connections")
@@ -267,15 +268,15 @@ async def list_ssh_connections() -> dict:
 
 
 # -----------------------------------------------------------
-# 终端
+# Terminals
 # -----------------------------------------------------------
 
 @router.post("/terminals")
 async def create_terminal(req: TerminalCreate) -> dict:
-    """新建终端(local 或 ssh)。
+    """Create a terminal (local or ssh).
 
-    ``user_visible=true`` 默认进入用户标签栏,与用户协同。
-    一次性后台任务建议 ``transient=true`` + ``user_visible=false``。
+    ``user_visible=true`` (default) adds it to the user's tab bar for collaboration.
+    One-off background tasks should use ``transient=true`` + ``user_visible=false``.
     """
     sm = get_session_manager()
     try:
@@ -329,7 +330,7 @@ async def delete_terminal(terminal_id: str) -> dict:
 @router.get("/terminals/{terminal_id}/snapshot")
 async def terminal_snapshot(
     terminal_id: str,
-    since: Optional[int] = Query(default=None, description="绝对字节偏移"),
+    since: Optional[int] = Query(default=None, description="Absolute byte offset"),
     strip_ansi: bool = Query(default=True),
     pattern: Optional[str] = Query(default=None),
     context: int = Query(default=0, ge=0, le=20),
@@ -436,12 +437,12 @@ async def terminal_stream(
 
 
 # -----------------------------------------------------------
-# 一次性 SSH 命令
+# One-shot SSH commands
 # -----------------------------------------------------------
 
 @router.post("/ssh/{conn_id}/run")
 async def ssh_run(conn_id: str, req: SSHRun) -> dict:
-    """新建临时 SSH 终端 → 执行命令 → 关闭，三步合一。"""
+    """Create a temporary SSH terminal, run a command, then close — three steps in one."""
     _get_connection_or_404(conn_id)
     sm = get_session_manager()
     rid = make_request_id()
@@ -468,7 +469,7 @@ async def ssh_run(conn_id: str, req: SSHRun) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
-        # idle + prompt 双信号,initial_wait 当上限
+        # idle + prompt dual signals; initial_wait is the upper bound
         await session.wait_until_idle(idle=2.0, max_wait=max(req.initial_wait, 5.0))
         result = await session.exec(
             command=req.command,
@@ -495,7 +496,7 @@ async def ssh_run(conn_id: str, req: SSHRun) -> dict:
 
 
 # -----------------------------------------------------------
-# 操作事件流
+# Operation event stream
 # -----------------------------------------------------------
 
 @router.get("/events/recent")
@@ -525,7 +526,7 @@ async def events_stream(
 
 
 # -----------------------------------------------------------
-# 文件传输
+# File transfer
 # -----------------------------------------------------------
 
 @router.get("/ssh/{conn_id}/files")

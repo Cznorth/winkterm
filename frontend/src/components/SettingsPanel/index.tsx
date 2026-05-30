@@ -178,7 +178,7 @@ export default function SettingsPanel() {
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
     } catch {
-      /* clipboard 不可用时忽略 */
+      /* Ignore when clipboard is unavailable */
     }
   };
 

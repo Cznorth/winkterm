@@ -7,7 +7,7 @@ import { xtermDarkTheme, xtermLightTheme } from "@/lib/theme";
 import axios from "@/lib/axios";
 
 const DEBUG = process.env.NODE_ENV === "development";
-const SCREEN_SYNC_DELAY = 200; // 防抖延迟（毫秒）
+const SCREEN_SYNC_DELAY = 200; // Debounce delay (ms)
 
 const DESKTOP_FONT_SIZE = 14;
 const MOBILE_FONT_SIZE = 11;
@@ -24,7 +24,7 @@ function getTerminalFontSettings(isCompact: boolean) {
   };
 }
 
-/** 在用户手势（keydown）内同步写入剪贴板；async clipboard API 失败会被 silent catch */
+/** Sync write to clipboard within user gesture (keydown); async clipboard API failures are silently caught */
 function syncCopyText(text: string): boolean {
   const el = document.createElement("textarea");
   el.value = text;
@@ -57,33 +57,34 @@ export function useTerminal(
   const wsRef = useRef(getWebSocket(sessionId, terminalType, sshConnectionId));
   const initRef = useRef(false);
   const screenSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 保存清理函数
+  // Store cleanup functions
   const unsubRef = useRef<{ msg?: () => void; status?: () => void }>({});
 
   const init = useCallback(async () => {
     if (initRef.current) return;
     if (!containerRef.current) return;
 
-    // 检查容器是否有有效尺寸
+    // Check container has valid dimensions
     if (containerRef.current.offsetWidth === 0 || containerRef.current.offsetHeight === 0) {
       DEBUG && console.log(`[useTerminal] 容器尺寸为 0，跳过初始化, sessionId=${sessionId}`);
-      initRef.current = false; // 允许稍后重试
+      initRef.current = false; // Allow retry later
       return;
     }
 
     initRef.current = true;
     DEBUG && console.log(`[useTerminal] 开始初始化, sessionId=${sessionId}, type=${terminalType}`);
 
-    // 动态导入
+    // Dynamic import
     const { Terminal } = await import("@xterm/xterm");
     const { FitAddon } = await import("@xterm/addon-fit");
     const { WebLinksAddon } = await import("@xterm/addon-web-links");
     const { SerializeAddon } = await import("@xterm/addon-serialize");
 
-    // import 期间容器可能已被父组件 (SplitContainer) 切到 display:none
-    // (例如 agent 一次创建多个终端,中间 tab 短暂激活又失活)。
-    // 此时继续 init 会在 0-dim 容器上 open xterm + fit,xterm.cols 被算成
-    // 异常小值。回退,等容器再次可见时 ResizeObserver 重试 init。
+    // During import the container may have been hidden (display:none) by the parent
+    // (SplitContainer), e.g. when the agent creates multiple terminals and an intermediate
+    // tab is briefly activated then deactivated. Continuing init would open xterm + fit
+    // on a zero-dim container, yielding abnormally small xterm.cols. Bail out and let
+    // ResizeObserver retry init when the container becomes visible again.
     if (
       !containerRef.current ||
       containerRef.current.offsetWidth === 0 ||
@@ -110,7 +111,7 @@ export function useTerminal(
     const serializeAddon = new SerializeAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(serializeAddon);
-    // 自定义链接处理器：通过后端 API 在系统浏览器中打开
+    // Custom link handler: open in system browser via backend API
     term.loadAddon(new WebLinksAddon((_event: MouseEvent, uri: string) => {
       axios.post("/api/open-url", { url: uri }).catch((e) => {
         console.error("打开链接失败:", e);
@@ -119,7 +120,7 @@ export function useTerminal(
     term.open(containerRef.current);
     fitAddon.fit();
 
-    // 有选区时 Ctrl/Cmd+C 复制到剪贴板，不发送 SIGINT (\x03)
+    // When selection exists, Ctrl/Cmd+C copies to clipboard instead of sending SIGINT (\x03)
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       if (event.type !== "keydown") return true;
       const isCopyKey =
@@ -143,10 +144,10 @@ export function useTerminal(
     fitAddonRef.current = fitAddon;
     serializeAddonRef.current = serializeAddon;
 
-    // 键盘输入 → WebSocket
+    // Keyboard input → WebSocket
     term.onData((data) => {
-      // 检测回车键：在发送用户输入之前，先同步屏幕内容
-      // 这样后端可以在命令执行前捕获到用户输入的命令
+      // Detect Enter: sync screen content before sending user input so the backend
+      // can capture the command before execution
       if (data === '\r' || data === '\n' || data === '\r\n') {
         if (serializeAddonRef.current) {
           const screenContent = serializeAddonRef.current.serialize();
@@ -158,17 +159,17 @@ export function useTerminal(
 
     term.focus();
 
-    // 清理之前的 handler
+    // Clean up previous handlers
     if (unsubRef.current.msg) unsubRef.current.msg();
     if (unsubRef.current.status) unsubRef.current.status();
 
-    // 初始化 WebSocket
+    // Initialize WebSocket
     const ws = wsRef.current;
     const { cols, rows } = term;
 
     unsubRef.current.msg = ws.onMessage((data: string) => {
       term.write(data);
-      // 每次输出后同步屏幕内容（防抖）
+      // Sync screen content after each output (debounced)
       if (screenSyncTimerRef.current) {
         clearTimeout(screenSyncTimerRef.current);
       }
@@ -192,9 +193,10 @@ export function useTerminal(
           resizeOnConnect = null;
         }
       } else {
-        // 不再往 xterm 写"断开/重连中"提示:后端 ws_handler 重连时会回放
-        // session._raw / screen_content,中间插一行黄字会让 PSReadLine 的
-        // 光标定位错乱(prompt 重画后还在旧的光标坐标上覆盖)。
+        // Do not write "disconnected/reconnecting" text into xterm: on reconnect the
+        // backend ws_handler replays session._raw / screen_content; inserting a yellow
+        // line in between breaks PSReadLine cursor positioning (overwrites at stale coords
+        // after prompt redraw).
         resizeOnConnect = () => {
           if (termRef.current) {
             const { cols, rows } = termRef.current;
@@ -210,7 +212,7 @@ export function useTerminal(
     DEBUG && console.log(`[useTerminal] 初始化完成, sessionId=${sessionId}, type=${terminalType}, cols=`, cols, "rows=", rows);
   }, [containerRef, sessionId, terminalType, sshConnectionId, isCompact, resolvedTheme]);
 
-  // 手机端/桌面切换时更新字号并 refit
+  // Update font size and refit on mobile/desktop switch
   useEffect(() => {
     const term = termRef.current;
     const fitAddon = fitAddonRef.current;
@@ -235,14 +237,14 @@ export function useTerminal(
     }
   }, [isCompact, containerRef]);
 
-  // 主题变化时更新 xterm 主题
+  // Update xterm theme when theme changes
   useEffect(() => {
     if (termRef.current) {
       termRef.current.options.theme = resolvedTheme === "light" ? xtermLightTheme : xtermDarkTheme;
     }
   }, [resolvedTheme]);
 
-  // resize 监听 - 用 ResizeObserver 监听容器尺寸变化
+  // Resize listener - use ResizeObserver to watch container size changes
   useEffect(() => {
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -250,9 +252,9 @@ export function useTerminal(
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         if (!fitAddonRef.current || !termRef.current || !containerRef.current) return;
-        // 容器隐藏/过小(如 tab 切换到其他 pane 时 display:none)绝不 fit。
-        // 否则 fitAddon 用 0 维容器算出来的 cols 会把 xterm 缩成 2 之类,
-        // 等切回来 xterm 还残留小 cols → prompt 显示截断。
+        // Never fit when container is hidden or too small (e.g. display:none when tab
+        // switches to another pane). Otherwise fitAddon computes cols from zero-dim
+        // container (e.g. 2), and stale small cols truncate the prompt after switching back.
         const el = containerRef.current;
         if (el.clientWidth < 100 || el.clientHeight < 50) return;
         try {
@@ -281,7 +283,7 @@ export function useTerminal(
     };
   }, []);
 
-  // 清理
+  // Cleanup
   useEffect(() => {
     return () => {
       if (screenSyncTimerRef.current) {
@@ -293,18 +295,18 @@ export function useTerminal(
     };
   }, []);
 
-  // 激活会话（当标签页切换为激活状态时）
+  // Activate session when tab becomes active
   useEffect(() => {
     if (isActive && wsRef.current.isConnected) {
       wsRef.current.sendActivate();
     }
   }, [isActive]);
 
-  // 手动触发 fit（用于布局切换后）
+  // Manually trigger fit (after layout changes)
   const fit = useCallback(() => {
     if (!fitAddonRef.current || !termRef.current || !containerRef.current) return;
     const el = containerRef.current;
-    // 容器过小/不可见时不 fit,避免 xterm.cols 被算成异常小值
+    // Skip fit when container is too small/hidden to avoid abnormal xterm.cols
     if (el.clientWidth < 100 || el.clientHeight < 50) {
       DEBUG && console.log(`[useTerminal] 容器过小跳过 fit, sessionId=${sessionId}, w=${el.clientWidth}, h=${el.clientHeight}`);
       return;
@@ -323,7 +325,7 @@ export function useTerminal(
     }
   }, [containerRef, sessionId]);
 
-  // 使用指定的尺寸发送 resize（用于隐藏的终端）
+  // Send resize with specified dimensions (for hidden terminals)
   const fitWithSize = useCallback((cols: number, rows: number) => {
     if (termRef.current && wsRef.current.isConnected) {
       wsRef.current.sendResize(cols, rows);

@@ -29,7 +29,7 @@ interface TabBarProps {
   aiVisible?: boolean;
 }
 
-// 终端图标
+// Terminal icon
 const TerminalIcon = ({ color }: { color?: string }) => (
   <svg
     viewBox="0 0 24 24"
@@ -44,7 +44,7 @@ const TerminalIcon = ({ color }: { color?: string }) => (
   </svg>
 );
 
-// VNC 图标（显示器）
+// VNC icon (monitor)
 const VNCIcon = ({ color }: { color?: string }) => (
   <svg
     viewBox="0 0 24 24"
@@ -60,7 +60,7 @@ const VNCIcon = ({ color }: { color?: string }) => (
   </svg>
 );
 
-// SSH 图标
+// SSH icon
 const SSHIcon = ({ color }: { color?: string }) => (
   <svg
     viewBox="0 0 24 24"
@@ -151,7 +151,7 @@ export default function TabBar({
     return { top: triggerRect.bottom, left, width };
   };
 
-  // 加载 SSH 连接列表
+  // Load SSH connection list
   useEffect(() => {
     axios.get("/api/ssh/connections").then((res) => {
       setSSHConnections(res.data.connections || []);
@@ -161,7 +161,7 @@ export default function TabBar({
   const handleDropdownToggle = () => {
     setShowTabList(false);
     if (!showDropdown) {
-      // 每次打开下拉时重新加载 SSH 列表
+      // Reload SSH list each time dropdown opens
       axios.get("/api/ssh/connections").then((res) => {
         setSSHConnections(res.data.connections || []);
       }).catch(() => {});
@@ -182,13 +182,13 @@ export default function TabBar({
     setShowTabList(!showTabList);
   };
 
-  // 桌面端：活动标签滚入可视区域
+  // Desktop: scroll active tab into view
   useEffect(() => {
     if (isMobileTabBar) return;
     activeTabRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [activeTabId, isMobileTabBar]);
 
-  // 点击外部关闭下拉菜单
+  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -244,7 +244,7 @@ export default function TabBar({
     setShowDropdown(false);
   };
 
-  /** 中键关闭（与浏览器标签一致；左键切换、右键不受影响） */
+  /** Middle-click close (browser tab behavior; left-click switch unaffected) */
   const handleTabMouseDown = (e: React.MouseEvent, tabId: string) => {
     if (e.button !== 1 || tabs.length <= 1) return;
     e.preventDefault();
@@ -371,7 +371,7 @@ export default function TabBar({
           </div>
         ))}
 
-        {/* 新建按钮 */}
+        {/* New tab button */}
         <div className="tab-add-wrapper" ref={dropdownRef}>
           <button
             className={`tab-add ${showDropdown ? "active" : ""}`}
@@ -451,7 +451,7 @@ export default function TabBar({
         document.body
       )}
 
-      {/* 下拉菜单 - Portal 到 body，避免 split-pane overflow 裁切 */}
+      {/* Dropdown — portal to body to avoid split-pane overflow clipping */}
       {portalReady && showDropdown && createPortal(
         <div
           ref={dropdownMenuRef}

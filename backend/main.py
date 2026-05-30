@@ -59,7 +59,7 @@ app.add_middleware(
 )
 
 # Mount routes
-# 鉴权路由自身不挂依赖；业务路由远程访问需 Web 访问密钥（localhost 免鉴权）
+# Auth routes carry no dependency themselves; business routes require a Web access key for remote access (localhost is auth-free)
 app.include_router(auth_router)
 app.include_router(http_router, prefix="/api", tags=["analysis"], dependencies=[Depends(require_web_auth)])
 app.include_router(ws_router, prefix="/ws", tags=["terminal"])
