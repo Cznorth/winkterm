@@ -276,6 +276,14 @@ function ConvTabs({
     listRef.current?.scrollBy({ left: dir === "left" ? -120 : 120, behavior: "smooth" });
   };
 
+  /** 中键关闭（与终端标签栏一致） */
+  const handleTabMouseDown = (e: React.MouseEvent, convId: string) => {
+    if (e.button !== 1 || conversations.length <= 1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onDelete(convId);
+  };
+
   return (
     <div className="ai-tabs">
       {canScrollLeft && (
@@ -291,6 +299,7 @@ function ConvTabs({
             key={conv.id}
             className={`ai-tab ${conv.id === activeConvId ? "active" : ""}`}
             onClick={() => onSwitch(conv.id)}
+            onMouseDown={(e) => handleTabMouseDown(e, conv.id)}
             title={conv.title || `${t("ai.conversation")} ${i + 1}`}
           >
             <span className="ai-tab-title">

@@ -423,6 +423,10 @@ export default function TabBar({
                 onTabClick(tab.id);
                 setShowTabList(false);
               }}
+              onMouseDown={(e) => {
+                handleTabMouseDown(e, tab.id);
+                if (e.button === 1 && tabs.length > 1) setShowTabList(false);
+              }}
             >
               <span className="tab-list-icon">
                 <TabTypeIcon tab={tab} />
