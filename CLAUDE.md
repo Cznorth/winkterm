@@ -233,6 +233,15 @@ await new Promise((r) => setTimeout(r, 2500));  // 等 SplitContainer fit + repl
 - 前端 dev server 是 Next.js + Turbopack,改文件秒热更新,无需重启。
 - 后端 `--reload` 模式同样热更新,但 pty 子进程不重启。
 
+## Git 提交规范
+
+- **commit message 一律用英文**，遵循 Conventional Commits：`type(scope): summary`。
+  - 常用 type：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`。
+  - 例：`feat(agent): add kubectl tool`、`fix(ws): handle reconnect on close code 1006`。
+- 主题行 ≤72 字符，必要时加正文解释 why。
+- 不添加 `Co-Authored-By` 行。
+- 详见 [CONTRIBUTING.md](CONTRIBUTING.md#commit-messages)。
+
 ## 打包发布
 
 推送 tag 触发 GitHub Actions 自动打包：
