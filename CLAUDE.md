@@ -2,168 +2,168 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 项目概述
+## Project Overview
 
-WinkTerm 是一个 AI + 终端人机合一的运维工具。AI 和用户共享同一个 pty 会话，所有交互都在终端内完成。用户输入 `# 开头的消息` 与 AI 对话，AI 可以建议命令并写入终端输入行，用户按回车执行或退格修改。
+WinkTerm is an AI + terminal "human-machine fusion" ops tool. The AI and the user share the same pty session, and all interaction happens inside the terminal. The user talks to the AI by typing a `# message`; the AI can suggest commands and write them into the input line, where the user presses Enter to run or Backspace to edit.
 
-## 常用命令
+## Common Commands
 
-### 后端开发
+### Backend Development
 ```bash
 cd backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 启动开发服务器
+# Start the development server
 python -m uvicorn backend.main:app --reload --port 8000
 ```
 
-### 前端开发
+### Frontend Development
 ```bash
 cd frontend
 npm install
-npm run dev           # 开发模式
-npm run build         # 构建（输出到 frontend/out/）
-npm run lint          # 代码检查
-npm run gen:api       # 从 OpenAPI 生成 TypeScript 类型和 react-query hooks
+npm run dev           # Development mode
+npm run build         # Build (output to frontend/out/)
+npm run lint          # Lint check
+npm run gen:api       # Generate TypeScript types and react-query hooks from OpenAPI
 ```
 
-### 桌面应用打包
+### Desktop App Packaging
 ```bash
 # Windows
 build\build.bat
 
-# 或手动执行
+# Or run manually
 pyinstaller build\winkterm.spec --clean --noconfirm
 ```
 
-### Docker 部署
+### Docker Deployment
 ```bash
 docker compose up -d
 ```
 
-## 架构要点
+## Architecture
 
-### 核心数据流
+### Core Data Flow
 ```
-用户键盘输入
+User keyboard input
     │
     ▼
-前端 Terminal (xterm.js)
+Frontend Terminal (xterm.js)
     │  WebSocket
     ▼
 ws_handler.py
     │
-    ├── 普通输入 ──► pty_manager.write() ──► shell 进程
+    ├── Normal input ──► pty_manager.write() ──► shell process
     │
-    └── # 开头的行 ──► 拦截 ──► Agent (LangGraph)
+    └── Lines starting with # ──► intercept ──► Agent (LangGraph)
 ```
 
-### 关键模块
+### Key Modules
 
-| 模块 | 路径 | 职责 |
-|------|------|------|
-| WebSocket 处理 | `backend/terminal/ws_handler.py` | 消息分发、`#` 检测、调用 Agent |
-| PTY 管理 | `backend/terminal/pty_manager.py` | shell 进程封装、读写、上下文获取 |
-| 会话管理 | `backend/terminal/session_manager.py` | 多终端会话、激活状态 |
-| Agent 图 | `backend/agent/graph.py` | LangGraph StateGraph 定义 |
-| Agent 工具 | `backend/agent/tools/` | 终端交互工具定义 |
-| SSH 连接 | `backend/ssh/` | SSH 连接管理、文件传输 |
+| Module | Path | Responsibility |
+|--------|------|----------------|
+| WebSocket handling | `backend/terminal/ws_handler.py` | Message dispatch, `#` detection, Agent invocation |
+| PTY management | `backend/terminal/pty_manager.py` | Shell process wrapper, read/write, context retrieval |
+| Session management | `backend/terminal/session_manager.py` | Multi-terminal sessions, active state |
+| Agent graph | `backend/agent/graph.py` | LangGraph StateGraph definition |
+| Agent tools | `backend/agent/tools/` | Terminal interaction tool definitions |
+| SSH connections | `backend/ssh/` | SSH connection management, file transfer |
 
-### 终端工具（Agent Tools）
+### Agent Tools
 
-- `terminal_input`: 执行命令或发送控制键，返回执行结果
-- `write_command`: 写入命令到输入行（不执行），agent 终止等待用户操作
-- `get_terminal_context`: 获取终端输出内容（只读）
+- `terminal_input`: Run a command or send control keys, returns the execution result
+- `write_command`: Write a command into the input line (without running it); the agent stops and waits for the user
+- `get_terminal_context`: Read terminal output content (read-only)
 
-### WebSocket 消息协议
+### WebSocket Message Protocol
 
-| 方向 | type | 含义 |
-|------|------|------|
-| 前端 → 后端 | input | 用户键盘输入 |
-| 前端 → 后端 | resize | 终端尺寸变化 |
-| 后端 → 前端 | output | pty 原始输出 |
+| Direction | type | Meaning |
+|-----------|------|---------|
+| Frontend → Backend | input | User keyboard input |
+| Frontend → Backend | resize | Terminal size change |
+| Backend → Frontend | output | Raw pty output |
 
-AI 消息通过 pty output 返回，保证人机合一体验。
+AI messages are returned via pty output, preserving the human-machine fusion experience.
 
-### 前端结构
+### Frontend Structure
 
 - `src/app/`: Next.js App Router
-- `src/components/Terminal/`: xterm.js 封装
-- `src/lib/websocket.ts`: WebSocket 客户端（含重连）
-- `src/lib/api/generated.ts`: orval 生成的 API hooks
+- `src/components/Terminal/`: xterm.js wrapper
+- `src/lib/websocket.ts`: WebSocket client (with reconnect)
+- `src/lib/api/generated.ts`: orval-generated API hooks
 
-## 环境变量
+## Environment Variables
 
-| 变量 | 说明 | 必填 |
-|------|------|------|
-| `ANTHROPIC_API_KEY` | Anthropic API Key | 是 |
-| `MODEL_NAME` | Claude 模型名 | 否（默认 claude-opus-4-6） |
-| `NEXT_PUBLIC_API_URL` | 后端 HTTP API 地址 | 否 |
-| `NEXT_PUBLIC_WS_URL` | 后端 WebSocket 地址 | 否 |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ANTHROPIC_API_KEY` | Anthropic API Key | Yes |
+| `MODEL_NAME` | Claude model name | No (default `claude-opus-4-6`) |
+| `NEXT_PUBLIC_API_URL` | Backend HTTP API address | No |
+| `NEXT_PUBLIC_WS_URL` | Backend WebSocket address | No |
 
-## 前端调试方法 (Agent 自验证)
+## Frontend Debugging (Agent Self-Verification)
 
-验证前端修复时，**按运行环境选一种方式**（不要混用）：
+When verifying frontend fixes, **pick one method based on the runtime environment** (don't mix them):
 
-| 环境 | 方式 |
-|------|------|
-| **Cursor IDE** | 内置浏览器（Browser MCP） |
-| **其他**（Claude Code、CI、无 MCP 的 Agent） | puppeteer-core + 系统 Chrome（见下文） |
+| Environment | Method |
+|-------------|--------|
+| **Cursor IDE** | Built-in browser (Browser MCP) |
+| **Others** (Claude Code, CI, agents without MCP) | puppeteer-core + system Chrome (see below) |
 
-### Cursor：内置浏览器（优先）
+### Cursor: Built-in Browser (preferred)
 
-在 Cursor 里测 `http://localhost:3000` 时，让 Agent **只用内置浏览器**，不要起 puppeteer。
+When testing `http://localhost:3000` in Cursor, have the agent use **only the built-in browser** — don't start puppeteer.
 
-**前置**：前后端已启动；已复制 `frontend/.env.example` → `frontend/.env.local`（指向 `localhost:8000`）。
+**Prerequisites**: backend and frontend are running; `frontend/.env.example` has been copied to `frontend/.env.local` (pointing at `localhost:8000`).
 
-**推荐流程**：
+**Recommended flow**:
 
 1. `browser_navigate` → `http://localhost:3000`
-2. `browser_lock` → 操作 → `browser_unlock`
-3. 常规控件：`browser_snapshot` → `browser_click` / `browser_type` / `browser_fill`
-4. **xterm 终端**：先点 `.xterm-screen`（或 `browser_cdp` 点击），再用 `browser_press_key` 输入；读输出用 `browser_cdp` + `Runtime.evaluate` 读 `.xterm-rows`（不要用整页 `textContent`）
-5. **侧栏活动栏 / 分屏布局**：快照里常无 ref，用 `browser_cdp` 点 `.activity-item`、`.layout-btn` 等
+2. `browser_lock` → interact → `browser_unlock`
+3. Standard controls: `browser_snapshot` → `browser_click` / `browser_type` / `browser_fill`
+4. **xterm terminal**: first click `.xterm-screen` (or click via `browser_cdp`), then type with `browser_press_key`; read output via `browser_cdp` + `Runtime.evaluate` on `.xterm-rows` (don't use whole-page `textContent`)
+5. **Activity bar / split layout**: snapshots often lack a ref — use `browser_cdp` to click `.activity-item`, `.layout-btn`, etc.
 
-**可覆盖的冒烟项**：鉴权、本地终端 echo、新建标签、`+` 下拉、SSH 列表、设置页、AI 侧栏与对话、分屏布局。
+**Smoke items to cover**: auth, local terminal echo, new tab, `+` dropdown, SSH list, settings page, AI sidebar and chat, split layout.
 
-**密码/密钥保存**：编辑 SSH 或设置时未改密码/API Key 字段，保存后不应被清空（前后端已做保留逻辑，可顺带用 API 校验 `~/.winkterm/config.json`）。
+**Password/secret retention**: when editing SSH or settings without changing the password/API Key fields, they must not be cleared after save (the frontend and backend already implement retention logic; you can additionally verify `~/.winkterm/config.json` via the API).
 
-后端联动、增量读终端等仍可用下文 **「跑场景」** 的 Agent HTTP API；与浏览器测 UI 互补。
+Backend interaction, incremental terminal reads, etc. can still use the Agent HTTP API under **"Running Scenarios"** below; it complements browser-based UI testing.
 
-### 其他环境：puppeteer-core + 系统 Chrome
+### Other Environments: puppeteer-core + system Chrome
 
-无 Browser MCP 时，用 puppeteer-core 驱动系统 Chrome 访问 `localhost:3000`。
+Without Browser MCP, use puppeteer-core to drive system Chrome against `localhost:3000`.
 
-可选脚本：`node scripts/e2e-frontend-test.mjs`（需本机已装 Chrome，并在临时目录 `npm install puppeteer-core`）。
+Optional script: `node scripts/e2e-frontend-test.mjs` (requires Chrome installed locally and `npm install puppeteer-core` in a temp directory).
 
-### 一键测试模板（puppeteer）
+### One-Shot Test Template (puppeteer)
 
 ```bash
-# 1. 临时目录装依赖(只装 puppeteer-core,不下 Chromium)
+# 1. Install deps in a temp dir (only puppeteer-core, no Chromium download)
 mkdir -p /c/Users/$USER/AppData/Local/Temp/winkterm-test
 cd /c/Users/$USER/AppData/Local/Temp/winkterm-test
 npm init -y && npm install puppeteer-core --no-audit --no-fund
 
-# 2. 取 agent token (localhost 免鉴权)
+# 2. Get an agent token (localhost is auth-free)
 curl -s http://localhost:8000/api/agent/handshake
 # → {"token": "...", ...}
 ```
 
-测试脚本要点:
+Test script essentials:
 
 ```js
 const puppeteer = require("puppeteer-core");
 const browser = await puppeteer.launch({
   executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  headless: false,  // headed 看清楚;CI 改 true
+  headless: false,  // headed to see clearly; set true for CI
   defaultViewport: { width: 1400, height: 900 },
   args: ["--no-sandbox"],
 });
 const page = await browser.newPage();
 
-// 捕获前端 console (调试用)
+// Capture frontend console (for debugging)
 page.on("console", (msg) => {
   const t = msg.text();
   if (t.includes("useTerminal")) console.log("[browser]", t);
@@ -172,30 +172,30 @@ page.on("console", (msg) => {
 await page.goto("http://localhost:3000", { waitUntil: "networkidle2" });
 ```
 
-### 跑场景
+### Running Scenarios
 
-后端 agent HTTP API 模拟用户/agent 动作:
+The backend agent HTTP API simulates user/agent actions:
 
 ```bash
 TOKEN=<from handshake>
 AUTH="Authorization: Bearer $TOKEN"
 BASE=http://localhost:8000
 
-# 建终端
+# Create a terminal
 curl -s -X POST $BASE/api/agent/terminals -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"type":"local","name":"verify-1"}'
 
-# 发命令
+# Send a command
 curl -s -X POST $BASE/api/agent/terminals/<id>/input -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"data":"echo MARKER_X","enter":true}'
 
-# 清理
+# Clean up
 curl -s -X DELETE $BASE/api/agent/terminals/<id> -H "$AUTH"
 ```
 
-### 提取 xterm 内容
+### Extracting xterm Content
 
-`textContent` 会带上 xterm 的 `<style>` 块。读 `.xterm-rows` 拿干净文本:
+`textContent` includes xterm's `<style>` block. Read `.xterm-rows` to get clean text:
 
 ```js
 const visible = await page.evaluate(() => {
@@ -208,46 +208,46 @@ const visible = await page.evaluate(() => {
 });
 ```
 
-切 tab:
+Switch tabs:
 ```js
 await page.evaluate((needle) => {
   document.querySelectorAll(".tab")
     .forEach((t) => { if (t.textContent.includes(needle)) t.click(); });
 }, "verify-2");
-await new Promise((r) => setTimeout(r, 2500));  // 等 SplitContainer fit + replay
+await new Promise((r) => setTimeout(r, 2500));  // wait for SplitContainer fit + replay
 ```
 
-### 常用 debug 思路
+### Common Debugging Approaches
 
-| 现象 | 排查路径 |
-|------|---------|
-| tab 空显示 | 看 console 有无 `跳过初始化` / `import 后容器已不可见,放弃 init` |
-| prompt 截断 | 看 backend `[SPAWN] cols=` 是不是异常小;前端 `fit 完成 cols=` |
-| 输出乱码 | 检查 cols 是否 mismatch(backend pty vs frontend xterm) |
-| WS 不重连 | 浏览器 Network → WS frame,看 close code |
+| Symptom | Where to look |
+|---------|---------------|
+| Tab shows empty | Check console for `跳过初始化` (skipped init) / `import 后容器已不可见,放弃 init` (container hidden after import, init abandoned) |
+| Prompt truncated | Check backend `[SPAWN] cols=` for an abnormally small value; frontend `fit 完成 cols=` (fit done cols=) |
+| Garbled output | Check for cols mismatch (backend pty vs frontend xterm) |
+| WS won't reconnect | Browser Network → WS frame, check close code |
 
-### 注意
+### Notes
 
-- **Cursor** 用内置浏览器时无需 puppeteer 临时目录。
-- **puppeteer 路径**：用完删 `/c/Users/$USER/AppData/Local/Temp/winkterm-test` 避免堆积。
-- 前端 dev server 是 Next.js + Turbopack,改文件秒热更新,无需重启。
-- 后端 `--reload` 模式同样热更新,但 pty 子进程不重启。
+- **Cursor** with the built-in browser does not need the puppeteer temp directory.
+- **puppeteer path**: delete `/c/Users/$USER/AppData/Local/Temp/winkterm-test` when done to avoid buildup.
+- The frontend dev server is Next.js + Turbopack — file changes hot-reload instantly, no restart needed.
+- The backend `--reload` mode also hot-reloads, but the pty child process is not restarted.
 
-## Git 提交规范
+## Git Commit Convention
 
-- **commit message 一律用英文**，遵循 Conventional Commits：`type(scope): summary`。
-  - 常用 type：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`。
-  - 例：`feat(agent): add kubectl tool`、`fix(ws): handle reconnect on close code 1006`。
-- 主题行 ≤72 字符，必要时加正文解释 why。
-- 不添加 `Co-Authored-By` 行。
-- 详见 [CONTRIBUTING.md](CONTRIBUTING.md#commit-messages)。
+- **Write all commit messages in English**, following Conventional Commits: `type(scope): summary`.
+  - Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
+  - Examples: `feat(agent): add kubectl tool`, `fix(ws): handle reconnect on close code 1006`.
+- Keep the subject line ≤72 characters; add a body to explain the "why" when it isn't obvious.
+- Do not add `Co-Authored-By` lines.
+- See [CONTRIBUTING.md](CONTRIBUTING.md#commit-messages) for details.
 
-## 打包发布
+## Release & Packaging
 
-推送 tag 触发 GitHub Actions 自动打包：
+Pushing a tag triggers GitHub Actions to build automatically:
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-生成 Windows (.exe) 和 macOS (.app，分 Intel 和 AppleSilicon) 两种安装包。
+This produces Windows (.exe) and macOS (.app, both Intel and AppleSilicon) installers.
