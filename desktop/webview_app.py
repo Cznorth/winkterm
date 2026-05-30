@@ -590,44 +590,65 @@ def run_desktop_app(host: str, port: int, width: int, height: int):
     webview.start(debug=not IS_FROZEN)
 
 
-def _wait_for_backend(host: str, port: int, attempts: int = 100) -> str:
-    """启动后端并等待 /health 就绪，返回应用根 URL。"""
+def _poll_backend_ready(host: str, port: int, attempts: int = 100) -> bool:
+    """Poll /health until the backend answers, returning True when ready.
+
+    The local backend must always be reached directly. trust_env=False makes
+    httpx ignore the system/HTTP(S)_PROXY settings, otherwise a configured
+    proxy (e.g. Clash on 127.0.0.1:7890) tries to forward the loopback request
+    and returns 502, so /health never succeeds and the window never advances.
+    """
     import httpx
 
     url = f"http://{host}:{port}"
-    logger.info(f"Starting backend server on port {port}...")
-    threading.Thread(target=start_backend, args=(host, port), daemon=True).start()
-
     logger.info("Waiting for server...")
-    for _ in range(attempts):
-        try:
-            resp = httpx.get(f"{url}/health", timeout=0.5)
-            if resp.status_code == 200:
-                logger.info(f"Server ready at {url}")
-                return f"{url}/"
-        except Exception:
-            pass
-        time.sleep(0.1)
+    with httpx.Client(trust_env=False, timeout=0.5) as client:
+        for _ in range(attempts):
+            try:
+                resp = client.get(f"{url}/health")
+                if resp.status_code == 200:
+                    logger.info(f"Server ready at {url}")
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.1)
 
-    logger.error("Backend failed to start")
-    sys.exit(1)
+    return False
 
 
 def run_desktop_app_with_loading(host: str, port: int, width: int, height: int):
-    """启动桌面应用（先显示加载页，后端就绪后再载入主界面）"""
+    """Run the desktop app: show the loading page first, start the backend in
+    the background, then swap to the main UI once /health is ready."""
     import webview
 
-    global _window, _backend_started
+    global _window
 
-    app_url = _wait_for_backend(host, port)
+    url = f"http://{host}:{port}"
+
+    # Start the backend in the background so it boots while the loading page is
+    # already on screen. The window is created immediately below.
+    logger.info(f"Starting backend server on port {port}...")
+    threading.Thread(target=start_backend, args=(host, port), daemon=True).start()
+
+    waiter_started = threading.Event()
+
+    def wait_and_swap():
+        """Off the GUI thread: wait for the backend, then load the main UI."""
+        global _backend_started
+        if _poll_backend_ready(host, port):
+            if not _backend_started:
+                _backend_started = True
+                _window.load_url(f"{url}/")
+        else:
+            logger.error("Backend failed to start")
 
     def on_loaded():
-        """加载页展示后立刻切到主界面（后端已就绪）"""
-        global _backend_started
-        if _backend_started:
+        """Fires once the loading page is visible (and again after the app URL
+        loads). Kick off the backend waiter only on the first fire."""
+        if waiter_started.is_set():
             return
-        _backend_started = True
-        _window.load_url(app_url)
+        waiter_started.set()
+        threading.Thread(target=wait_and_swap, daemon=True).start()
 
     _window = webview.create_window(
         title="WinkTerm",
