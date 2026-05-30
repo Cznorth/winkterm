@@ -233,6 +233,10 @@ await new Promise((r) => setTimeout(r, 2500));  // wait for SplitContainer fit +
 - The frontend dev server is Next.js + Turbopack — file changes hot-reload instantly, no restart needed.
 - The backend `--reload` mode also hot-reloads, but the pty child process is not restarted.
 
+## Code Comments
+
+- **Write all code comments and docstrings in English** (both backend Python and frontend TypeScript). Do not add new Chinese comments — existing ones are being migrated incrementally.
+
 ## Git Commit Convention
 
 - **Write all commit messages in English**, following Conventional Commits: `type(scope): summary`.

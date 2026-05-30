@@ -109,6 +109,7 @@ winkterm/
 2. **Write tests** for new functionality (backend tests in `backend/test/`, frontend in `frontend/__tests__/`)
 3. **Run lint** before committing
 4. **Update docs** if you change behavior or add features
+5. **Write code comments in English** — all new comments and docstrings should be in English so the whole community can read them. (Existing Chinese comments are being migrated incrementally; don't add new ones.)
 
 ## Commit Messages
 
