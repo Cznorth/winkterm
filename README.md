@@ -115,6 +115,15 @@ WinkTerm's HTTP Agent API is designed for AI agents (Claude Code, Cursor, etc.) 
 
 ### Installable Skill
 
+**Claude Code plugin (one-liner):**
+
+```bash
+/plugin marketplace add Cznorth/winkterm
+/plugin install winkterm-remote@winkterm
+```
+
+**Any agent (raw skill from a running backend):**
+
 ```bash
 curl -s http://<your-winkterm-host>:8000/api/agent/skill.md > SKILL.md
 ```

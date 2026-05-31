@@ -1,0 +1,13 @@
+{
+  "name": "winkterm-remote",
+  "description": "Drive a running WinkTerm backend over HTTP: list SSH connections, open local/SSH terminals, run commands and read output, take terminal snapshots, and transfer files via SSH. Requires a reachable WinkTerm backend.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Cznorth",
+    "url": "https://github.com/Cznorth"
+  },
+  "homepage": "https://github.com/Cznorth/winkterm",
+  "repository": "https://github.com/Cznorth/winkterm",
+  "license": "MIT",
+  "keywords": ["terminal", "ssh", "ops", "remote", "pty", "devops"]
+}

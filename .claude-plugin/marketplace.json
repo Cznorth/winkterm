@@ -1,0 +1,26 @@
+{
+  "name": "winkterm",
+  "owner": {
+    "name": "Cznorth",
+    "url": "https://github.com/Cznorth"
+  },
+  "metadata": {
+    "description": "Plugins for WinkTerm, an open-source AI terminal where the AI shares your pty session.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "winkterm-remote",
+      "source": "./plugins/winkterm-remote",
+      "description": "Drive a running WinkTerm backend over HTTP: list SSH connections, open local/SSH terminals, run commands and read output, take terminal snapshots, and transfer files via SSH.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Cznorth",
+        "url": "https://github.com/Cznorth"
+      },
+      "homepage": "https://github.com/Cznorth/winkterm",
+      "license": "MIT",
+      "keywords": ["terminal", "ssh", "ops", "remote", "pty", "devops"]
+    }
+  ]
+}
