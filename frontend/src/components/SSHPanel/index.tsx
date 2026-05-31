@@ -73,6 +73,7 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
   const [vncPort, setVncPort] = useState(5901);
   const [vncPassword, setVncPassword] = useState("");
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
     title: "",
     host: "",
@@ -211,8 +212,27 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
     }
   };
 
+  const togglePasswordVisible = async () => {
+    // Revealing while editing: the stored password was never sent to the
+    // frontend (masked), so fetch the plaintext on demand.
+    if (!showPassword && editingId && !form.password) {
+      try {
+        const res = await axios.get<{ connection: SSHConnection }>(
+          `/api/ssh/connections/${editingId}`,
+          { params: { secrets: true } },
+        );
+        const secret = res.data.connection.password;
+        if (secret) setForm((f) => ({ ...f, password: secret }));
+      } catch (e) {
+        console.error("Reveal password failed:", e);
+      }
+    }
+    setShowPassword((v) => !v);
+  };
+
   const handleEdit = (conn: SSHConnection) => {
     setTransferTarget(null);
+    setShowPassword(false);
     setEditingId(conn.id);
     setForm({
       title: conn.title,
@@ -278,6 +298,7 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
 
   const handleNewConnection = () => {
     setTransferTarget(null);
+    setShowPassword(false);
     setEditingId(null);
     setForm({
       title: "",
@@ -307,6 +328,7 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
 
   const handleCloseForm = () => {
     setShowForm(false);
+    setShowPassword(false);
     setEditingId(null);
   };
 
@@ -373,12 +395,22 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
         {form.auth_type === "password" ? (
           <div className="ssh-form-row">
             <label>{t("ssh.password")}</label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder={editingId ? t("ssh.passwordPlaceholderEdit") : t("ssh.password")}
-            />
+            <div className="ssh-password-field">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder={editingId ? t("ssh.passwordPlaceholderEdit") : t("ssh.password")}
+              />
+              <button
+                type="button"
+                className="ssh-password-toggle"
+                onClick={togglePasswordVisible}
+                title={showPassword ? t("ssh.hidePassword") : t("ssh.showPassword")}
+              >
+                {showPassword ? "🙈" : "👁"}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="ssh-form-row">
