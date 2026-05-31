@@ -27,6 +27,8 @@ from backend.ssh.file_transfer import (
     SSHFileTransferError,
     SSHInvalidPathError,
 )
+from backend.ssh.command_exec import build_command, run_command
+from backend.ssh.run_jobs import RunJob, RunJobManager
 from backend.terminal._term_utils import UnknownKeyError
 from backend.terminal.agent_events import get_event_log, make_request_id, short_text
 from backend.terminal.session_manager import get_session_manager
@@ -493,6 +495,73 @@ async def ssh_run(conn_id: str, req: SSHRun) -> dict:
     )
     result["request_id"] = rid
     return result
+
+
+# -----------------------------------------------------------
+# Async one-shot SSH commands (job-based, survives gateway timeouts)
+# -----------------------------------------------------------
+
+@router.post("/ssh/{conn_id}/run_async")
+async def ssh_run_async(conn_id: str, req: SSHRun) -> dict:
+    """Submit a command without waiting for it to finish.
+
+    Returns a ``job_id`` immediately; poll ``GET /api/agent/jobs/{job_id}`` for
+    status and output. Use this instead of ``/run`` for anything that may exceed
+    the reverse-proxy timeout (installs, dumps, builds, large transfers).
+
+    The command runs over a dedicated SSH channel inside a worker thread
+    (``asyncio.to_thread``), so neither the submit response nor other requests are
+    blocked by the connect/run, and a hung host stalls only its own job.
+    """
+    conn = _get_connection_or_404(conn_id)
+    # Validate/assemble up front so a bad command/env fails the submit, not the job.
+    try:
+        final_command = build_command(req.command, req.command_b64, req.cwd, req.env)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    preview = short_text(req.command or "(b64)")
+
+    async def worker(job: RunJob) -> None:
+        result = await asyncio.to_thread(run_command, conn, final_command, req.timeout)
+        job.finish(result)
+        get_event_log().emit(
+            "ssh_run_async_done",
+            job_id=job.id,
+            connection_id=conn_id,
+            exit_code=job.exit_code,
+            ok=job.ok,
+        )
+
+    job = RunJobManager.submit(conn_id, preview, worker)
+    get_event_log().emit(
+        "ssh_run_async_start",
+        job_id=job["job_id"],
+        connection_id=conn_id,
+        command=preview,
+    )
+    return job
+
+
+@router.get("/jobs")
+async def list_run_jobs() -> dict:
+    return {"jobs": RunJobManager.list()}
+
+
+@router.get("/jobs/{job_id}")
+async def get_run_job(job_id: str) -> dict:
+    job = RunJobManager.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return job
+
+
+@router.delete("/jobs/{job_id}")
+async def cancel_run_job(job_id: str) -> dict:
+    job = RunJobManager.cancel(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    get_event_log().emit("ssh_run_async_cancel", job_id=job_id)
+    return job
 
 
 # -----------------------------------------------------------

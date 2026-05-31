@@ -20,6 +20,7 @@ from typing import AsyncIterator, Optional
 
 from backend.terminal._term_utils import (
     decode_b64,
+    decode_terminal_text,
     grep_lines,
     resolve_keys,
     strip_ansi,
@@ -125,7 +126,7 @@ class TerminalSession:
             tail = bytes(self._raw[-tail_bytes:]) if self._raw else b""
         # Strip ANSI from the tail and check whether the cursor sits on a prompt character
         try:
-            text = strip_ansi(tail.decode("utf-8", errors="replace")).rstrip("\n\r ")
+            text = strip_ansi(decode_terminal_text(tail)).rstrip("\n\r ")
         except Exception:
             return False
         return bool(text) and text[-1] in "$#>%"
@@ -247,7 +248,7 @@ class TerminalSession:
             else:
                 idx = max(0, since - buf_start)
                 chunk = bytes(self._raw[idx:])
-        text = chunk.decode("utf-8", errors="replace")
+        text = decode_terminal_text(chunk)
         if strip:
             text = strip_ansi(text)
 
@@ -405,7 +406,7 @@ class TerminalSession:
                 chunk_offset = max(0, start_offset - buf_start)
                 chunk = bytes(self._raw[chunk_offset:])
 
-            text = strip_ansi(chunk.decode("utf-8", errors="replace"))
+            text = strip_ansi(decode_terminal_text(chunk))
             match = pattern.search(text)
             if match:
                 exit_code = int(match.group(1))

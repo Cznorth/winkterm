@@ -123,3 +123,57 @@ def decode_b64(value: str) -> str:
         return base64.b64decode(value, validate=True).decode("utf-8")
     except (binascii.Error, UnicodeDecodeError) as exc:
         raise ValueError(f"base64 解码失败: {exc}") from exc
+
+
+def _looks_like_gbk_mojibake(text: str) -> bool:
+    """Heuristic: does a *successful* UTF-8 decode actually look like GBK garbage?
+
+    Some GBK byte sequences are coincidentally valid UTF-8 and decode without
+    error into rare Latin Extended / IPA / spacing-modifier / Greek code points
+    (e.g. GBK ``模式`` -> ``ģʽ``). Such characters U+0100..U+04FF essentially
+    never appear in real terminal/ops output, so their presence is a strong
+    mojibake signal worth a GBK re-decode attempt.
+    """
+    return any(0x0100 <= ord(ch) <= 0x04FF for ch in text)
+
+
+def _has_cjk(text: str) -> bool:
+    return any(0x4E00 <= ord(ch) <= 0x9FFF for ch in text)
+
+
+def decode_terminal_text(data: bytes) -> str:
+    """Decode raw PTY/SSH bytes to text, tolerating non-UTF-8 locales.
+
+    Remote hosts with a GBK/CP936 locale (common on Chinese Windows and some
+    CentOS/older installs) emit GBK-encoded bytes; decoding those as UTF-8 yields
+    garble -- either replacement chars (``版本`` -> ``�汾``) when the bytes are
+    invalid UTF-8, or rare Latin glyphs (``模式`` -> ``ģʽ``) when they happen to
+    be valid UTF-8. Strategy:
+
+    1. UTF-8 strict. If it succeeds but the result looks like GBK mojibake
+       (rare Latin-Extended range) *and* a GBK re-decode yields real CJK, prefer
+       the GBK reading. Otherwise keep the UTF-8 result.
+    2. UTF-8 failed -> GBK strict, recovering Chinese GBK output.
+    3. Both failed -> lossy UTF-8 for genuinely mixed/binary bytes.
+
+    Pure ASCII and ordinary UTF-8 (including UTF-8 Chinese) are unaffected: they
+    never enter the rare-range branch and never fail UTF-8 decoding.
+    """
+    if not data:
+        return ""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            return data.decode("gbk")
+        except UnicodeDecodeError:
+            return data.decode("utf-8", errors="replace")
+
+    if _looks_like_gbk_mojibake(text):
+        try:
+            gbk = data.decode("gbk")
+        except UnicodeDecodeError:
+            return text
+        if _has_cjk(gbk):
+            return gbk
+    return text
