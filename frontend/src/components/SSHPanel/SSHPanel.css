@@ -382,6 +382,39 @@
   cursor: pointer;
 }
 
+.ssh-password-field {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ssh-password-field input {
+  flex: 1;
+  padding-right: 34px;
+}
+
+.ssh-password-toggle {
+  position: absolute;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.ssh-password-toggle:hover {
+  opacity: 1;
+}
+
 .ssh-form-footer {
   display: flex;
   justify-content: flex-end;

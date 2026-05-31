@@ -184,6 +184,8 @@ const translations = {
   "ssh.password": { zh: "密码", en: "Password" },
   "ssh.key": { zh: "密钥", en: "Key" },
   "ssh.passwordPlaceholderEdit": { zh: "留空保持不变", en: "Leave blank to keep unchanged" },
+  "ssh.showPassword": { zh: "显示密码", en: "Show password" },
+  "ssh.hidePassword": { zh: "隐藏密码", en: "Hide password" },
   "ssh.privateKeyPath": { zh: "私钥路径", en: "Private key path" },
   "ssh.privateKeyPlaceholder": { zh: "例如 ~/.ssh/id_rsa", en: "e.g. ~/.ssh/id_rsa" },
   "ssh.color": { zh: "颜色", en: "Color" },

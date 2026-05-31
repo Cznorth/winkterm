@@ -109,9 +109,14 @@ class PtyManager:
         self._alive = True
 
     def _spawn_ssh(self, ssh_config: dict, cols: int, rows: int) -> None:
-        """Start an SSH connection."""
-        from backend.ssh.pty_spawner import SSHPtySpawner, PasswordAutoInput
+        """Start an SSH connection.
+
+        Uses paramiko's native authentication (password/key passed as a
+        parameter) instead of spawning the ``ssh`` CLI and screen-scraping the
+        password prompt. The old CLI path remains as a fallback.
+        """
         from backend.ssh.models import SSHConnection
+        from backend.ssh.paramiko_channel import ParamikoShellChannel
 
         # Build the SSHConnection object
         conn = SSHConnection(
@@ -121,9 +126,39 @@ class PtyManager:
             auth_type=ssh_config.get("auth_type", "password"),
             password=ssh_config.get("password"),
             private_key_path=ssh_config.get("private_key_path"),
+            passphrase=ssh_config.get("passphrase"),
         )
 
         # Store the SSH connection ID
+        self._ssh_connection_id = ssh_config.get("id")
+
+        # Preferred path: paramiko native auth (no prompt scraping).
+        logger.info(
+            f"[SPAWN SSH] paramiko 原生认证 {conn.username}@{conn.host}:{conn.port}"
+        )
+        self._proc = ParamikoShellChannel(conn, cols=cols, rows=rows)
+        self._pid = getattr(self._proc, "pid", "paramiko")
+        self._alive = True
+        logger.info(f"[SPAWN SSH] paramiko channel 已建立, pid={self._pid}")
+        return
+
+    def _spawn_ssh_cli(self, ssh_config: dict, cols: int, rows: int) -> None:
+        """Fallback SSH path: spawn the ``ssh`` CLI and auto-type the password.
+
+        Kept for environments where paramiko is unavailable.
+        """
+        from backend.ssh.pty_spawner import SSHPtySpawner, PasswordAutoInput
+        from backend.ssh.models import SSHConnection
+
+        conn = SSHConnection(
+            host=ssh_config.get("host", ""),
+            port=ssh_config.get("port", 22),
+            username=ssh_config.get("username", ""),
+            auth_type=ssh_config.get("auth_type", "password"),
+            password=ssh_config.get("password"),
+            private_key_path=ssh_config.get("private_key_path"),
+        )
+
         self._ssh_connection_id = ssh_config.get("id")
 
         # Build the SSH command
