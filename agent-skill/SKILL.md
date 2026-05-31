@@ -1,6 +1,6 @@
 ---
 name: winkterm-remote
-version: 3
+version: 4
 description: 通过 HTTP 远程操作 WinkTerm —— 查看 SSH 连接列表、新建本地/SSH 终端、发送命令并读取输出、获取终端快照、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
 ---
 
@@ -285,6 +285,38 @@ body: {
 ```
 
 如果要复用 shell 状态（cd、环境变量）请走 `/terminals` + `/exec` 两步流程。
+
+### 异步一次性执行（长任务 / 防网关超时，**推荐**）
+
+`/run` 是同步的：HTTP 请求一直挂到命令结束。命令耗时超过反向代理网关超时
+（常见 ~60s）时会 504，哪怕命令在主机上还在跑。**安装包、mysqldump、docker
+build、大文件拷贝等长命令一律用异步版本。**
+
+提交立即返回 `job_id`，命令在后台**独立线程 + 专用 SSH 通道**里跑（不占事件
+循环、互不影响：某台主机卡住只拖住它自己的 job）。之后轮询 `/jobs/{id}` 取结果。
+
+```
+POST /api/agent/ssh/{conn_id}/run_async
+body: 同 /run（command / command_b64 / timeout / cwd / env）
+→ { "job_id": "...", "status": "running", "done": false, ... }   # 立即返回
+
+GET /api/agent/jobs/{job_id}
+→ {
+    "job_id": "...", "conn_id": "...", "command": "<预览>",
+    "status": "running|success|failed|timeout|error|canceled",
+    "done": true,
+    "exit_code": 0, "ok": true,
+    "stdout": "...",          # 已解码(UTF-8/GBK 自适应)+去 ANSI
+    "reason": null, "error": null,
+    "created_at": "...", "updated_at": "..."
+  }
+
+GET    /api/agent/jobs              列出所有 job
+DELETE /api/agent/jobs/{job_id}     取消（任务级取消；已在跑的远端进程不保证中止）
+```
+
+轮询节奏建议：长任务先 sleep 命令预估时长再查，别每秒打。`status != "running"`
+即 `done`。job 在内存里保留最近 200 条，进程重启清零。
 
 ### 操作事件流
 
