@@ -1,7 +1,7 @@
 ---
 name: winkterm-remote
-version: 4
-description: 通过 HTTP 远程操作 WinkTerm —— 查看 SSH 连接列表、新建本地/SSH 终端、发送命令并读取输出、获取终端快照、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
+version: 5
+description: 通过 HTTP 远程操作 WinkTerm —— 管理 SSH 连接（增删改查）、新建本地/SSH 终端、发送命令并读取输出、获取终端快照、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
 ---
 
 # WinkTerm 远程终端 Skill
@@ -94,6 +94,42 @@ GET /api/agent/ssh/connections
 → { "connections": [ { "id": "ab12cd34", "title": "...", "host": "...", "port": 22, "username": "..." } ] }
 ```
 密码字段已脱敏。
+
+### 管理 SSH 连接（增删改查）
+
+连接配置存在后端 `~/.winkterm/config.json`，密码/passphrase/vnc_password 为机密字段。
+
+```
+POST   /api/agent/ssh/connections                创建连接
+       body: {
+         "title": "prod-db", "host": "1.2.3.4", "port": 22, "username": "root",
+         "auth_type": "password",        # "password" | "key"
+         "password": "...",              # auth_type=password 时
+         "private_key_path": "...",      # auth_type=key 时（后端机器上的路径）
+         "passphrase": "...",            # 私钥口令，可选
+         "group": "...", "color": "..."  # 可选分组/颜色
+       }
+       → { "success": true, "id": "ab12cd34" }
+       host / username 为空 → 400。
+
+GET    /api/agent/ssh/connections/{id}            查看单个连接（机密脱敏为 ********）
+       ?secrets=true                              返回明文机密（仅必要时用，如建 VNC 隧道）
+       → { "connection": { ... } }
+
+PUT    /api/agent/ssh/connections/{id}            更新连接（只传要改的字段）
+       body: 同 create，全部字段可选
+       → { "success": true }
+       机密字段留空 / 不传 / 传 ******** = 保持原值不变（不会被清空）。
+
+DELETE /api/agent/ssh/connections/{id}            删除连接
+       → { "success": true }
+
+POST   /api/agent/ssh/import/electerm             批量导入 electerm 书签
+       body: { "bookmarks": [ {...}, {...} ] }    按 host+port+username 去重
+       → { "success": true, "imported": 3 }
+```
+
+不存在的 `id` → 404。改密码时只发 `password` 字段即可；想保留旧密码就别传该字段。
 
 ### 新建终端
 ```

@@ -95,6 +95,7 @@ WinkTerm's HTTP Agent API is designed for AI agents (Claude Code, Cursor, etc.) 
 |----------|---------|
 | `POST /api/agent/terminals/{id}/exec` | **Atomic execution**: returns stdout + real `exit_code` + current `cwd`. Sentinel marker auto-strips command echo and prompt. Supports `cwd` / `env` subshell injection (doesn't pollute persistent terminal state). |
 | `POST /api/agent/ssh/{conn_id}/run` | **One-shot SSH execution**: bundles create → exec → close into one call, saving 3 round-trips. |
+| `POST/GET/PUT/DELETE /api/agent/ssh/connections[/{id}]` | **SSH connection management**: full CRUD on the stored connection profiles, plus `POST /api/agent/ssh/import/electerm`. Update leaves masked/omitted secrets unchanged. |
 | `POST /api/agent/terminals/{id}/input` | **Named control keys**: `{"keys": ["ctrl+c"]}` instead of stuffing control chars into JSON. `data_b64` input bypasses multi-layer quote escape hell. |
 | `GET /api/agent/terminals/{id}/snapshot?pattern=...` | **Server-side grep**: regex-match within the 256KB rolling buffer. Save bandwidth. |
 | `GET /api/agent/terminals/{id}/stream` | **SSE live output**: killer feature for long-running commands / `tail -f`. Resume with `since` after disconnect. |

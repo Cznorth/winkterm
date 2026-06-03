@@ -1,7 +1,7 @@
 ---
 name: winkterm-remote
-description: Drive a running WinkTerm backend over HTTP — list SSH connections, open local/SSH terminals, send commands and read output, take terminal snapshots, run async SSH jobs, and transfer files via SSH. Use when you need to run shell commands on remote servers or inside a controlled terminal. Requires a reachable WinkTerm backend.
-version: 4
+description: Drive a running WinkTerm backend over HTTP — manage SSH connections (create/read/update/delete), open local/SSH terminals, send commands and read output, take terminal snapshots, run async SSH jobs, and transfer files via SSH. Use when you need to run shell commands on remote servers or inside a controlled terminal. Requires a reachable WinkTerm backend.
+version: 5
 license: MIT
 homepage: https://github.com/Cznorth/winkterm
 ---
@@ -75,6 +75,12 @@ next session. Never overwrite silently — show a diff first.
 
 ## Useful shortcuts
 
+- **Manage SSH connections**: full CRUD on the connection store —
+  `POST /api/agent/ssh/connections` (create), `GET .../ssh/connections/{id}` (read,
+  `?secrets=true` for plaintext), `PUT .../ssh/connections/{id}` (update — omitted or
+  masked secrets stay unchanged), `DELETE .../ssh/connections/{id}` (delete),
+  `POST /api/agent/ssh/import/electerm` (bulk import). Create a connection, then open
+  an SSH terminal against its `id`.
 - **One-shot SSH**: `POST /api/agent/ssh/{conn_id}/run` runs a single command on a
   connection without manual create/exec/delete.
 - **Async SSH job** (long tasks, survives gateway timeouts):

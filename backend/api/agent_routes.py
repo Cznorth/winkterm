@@ -214,6 +214,43 @@ class DeletePathsRequest(BaseModel):
     paths: list[str]
 
 
+class SSHConnectionCreate(BaseModel):
+    """Create an SSH connection. Secrets are stored as given."""
+    title: str = ""
+    host: str
+    port: int = 22
+    username: str
+    auth_type: str = "password"
+    password: Optional[str] = None
+    private_key_path: Optional[str] = None
+    passphrase: Optional[str] = None
+    vnc_port: int = 5901
+    vnc_password: Optional[str] = None
+    color: Optional[str] = None
+    group: Optional[str] = None
+
+
+class SSHConnectionUpdate(BaseModel):
+    """Update an SSH connection. Omitted/empty/masked secrets are left unchanged."""
+    title: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[int] = None
+    username: Optional[str] = None
+    auth_type: Optional[str] = None
+    password: Optional[str] = None
+    private_key_path: Optional[str] = None
+    passphrase: Optional[str] = None
+    vnc_port: Optional[int] = None
+    vnc_password: Optional[str] = None
+    color: Optional[str] = None
+    group: Optional[str] = None
+
+
+class ElectermImport(BaseModel):
+    """Bulk-import electerm bookmarks (deduped by host+port+username)."""
+    bookmarks: list[dict]
+
+
 # -----------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------
@@ -261,12 +298,68 @@ def _sse_format(event_name: str, data: dict, event_id: Optional[str] = None) -> 
 
 
 # -----------------------------------------------------------
-# SSH list
+# SSH connection management (CRUD)
 # -----------------------------------------------------------
 
 @router.get("/ssh/connections")
 async def list_ssh_connections() -> dict:
     return SSHConnectionManager.list_connections()
+
+
+@router.post("/ssh/connections")
+async def create_ssh_connection(req: SSHConnectionCreate) -> dict:
+    """Create an SSH connection; returns the new connection id."""
+    if not req.host:
+        raise HTTPException(status_code=400, detail="主机地址不能为空")
+    if not req.username:
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+    result = SSHConnectionManager.create_connection(req.model_dump())
+    get_event_log().emit(
+        "ssh_connection_create",
+        connection_id=result.get("id"),
+        host=req.host,
+        title=req.title,
+    )
+    return result
+
+
+@router.get("/ssh/connections/{conn_id}")
+async def get_ssh_connection(conn_id: str, secrets: bool = Query(default=False)) -> dict:
+    """Get one connection; secrets=true returns plaintext password/key (use sparingly)."""
+    data = SSHConnectionManager.get_connection_dict(conn_id, include_secrets=secrets)
+    if not data:
+        raise HTTPException(status_code=404, detail="SSH 连接不存在")
+    return {"connection": data}
+
+
+@router.put("/ssh/connections/{conn_id}")
+async def update_ssh_connection(conn_id: str, req: SSHConnectionUpdate) -> dict:
+    """Update a connection. Omitted fields and masked/empty secrets are left unchanged."""
+    if not SSHConnectionManager.get_connection_dict(conn_id):
+        raise HTTPException(status_code=404, detail="SSH 连接不存在")
+    result = SSHConnectionManager.update_connection(conn_id, req.model_dump(exclude_none=True))
+    get_event_log().emit("ssh_connection_update", connection_id=conn_id)
+    return result
+
+
+@router.delete("/ssh/connections/{conn_id}")
+async def delete_ssh_connection(conn_id: str) -> dict:
+    """Delete a connection."""
+    if not SSHConnectionManager.get_connection_dict(conn_id):
+        raise HTTPException(status_code=404, detail="SSH 连接不存在")
+    result = SSHConnectionManager.delete_connection(conn_id)
+    get_event_log().emit("ssh_connection_delete", connection_id=conn_id)
+    return result
+
+
+@router.post("/ssh/import/electerm")
+async def import_electerm(req: ElectermImport) -> dict:
+    """Bulk-import electerm bookmarks (skips entries that already exist)."""
+    if not req.bookmarks:
+        raise HTTPException(status_code=400, detail="没有可导入的配置")
+    result = SSHConnectionManager.import_from_electerm(req.bookmarks)
+    get_event_log().emit("ssh_import_electerm", imported=result.get("imported"))
+    return result
 
 
 # -----------------------------------------------------------
