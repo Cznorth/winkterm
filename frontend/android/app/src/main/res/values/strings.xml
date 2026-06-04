@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WinkTerm</string>
+    <string name="title_activity_main">WinkTerm</string>
+    <string name="package_name">com.winkterm.app</string>
+    <string name="custom_url_scheme">com.winkterm.app</string>
+</resources>

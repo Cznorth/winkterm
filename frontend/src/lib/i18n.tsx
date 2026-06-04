@@ -333,6 +333,16 @@ const translations = {
   "auth.errWrongKey": { zh: "访问密钥错误", en: "Incorrect access key" },
   "auth.errNetwork": { zh: "无法连接到服务", en: "Cannot connect to the server" },
   "auth.retry": { zh: "重试", en: "Retry" },
+  "auth.serverTitle": { zh: "连接服务器", en: "Connect to Server" },
+  "auth.serverDesc": {
+    zh: "输入 WinkTerm 后端地址（建议使用 https/wss）。",
+    en: "Enter the WinkTerm backend address (https/wss recommended).",
+  },
+  "auth.serverLabel": { zh: "服务器地址", en: "Server URL" },
+  "auth.serverPlaceholder": { zh: "https://host:8000", en: "https://host:8000" },
+  "auth.submitServer": { zh: "连接", en: "Connect" },
+  "auth.changeServer": { zh: "更换服务器", en: "Change Server" },
+  "auth.errBadUrl": { zh: "请输入有效的服务器地址", en: "Enter a valid server URL" },
 
   // === Settings: Web Access ===
   "settings.webAccess": { zh: "Web 远程访问", en: "Web Remote Access" },

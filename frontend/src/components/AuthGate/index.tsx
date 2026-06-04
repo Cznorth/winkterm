@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback, ReactNode } from "react";
 import axios from "@/lib/axios";
 import { setAccessKey } from "@/lib/auth";
+import { isNativeApp, getBackendUrl, setBackendUrl } from "@/lib/backend";
 import { useI18n } from "@/lib/i18n";
 
-type Phase = "loading" | "ok" | "setup" | "login" | "neterror";
+type Phase = "loading" | "ok" | "setup" | "login" | "neterror" | "server";
 
 interface AuthStatus {
   local: boolean;
@@ -18,10 +19,16 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [key, setKey] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [server, setServer] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const checkStatus = useCallback(async () => {
+    // Native app with no backend chosen yet: ask for the server first.
+    if (isNativeApp() && !getBackendUrl()) {
+      setPhase("server");
+      return;
+    }
     setPhase("loading");
     try {
       const res = await axios.get<AuthStatus>("/api/auth/status");
@@ -41,6 +48,21 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     checkStatus();
   }, [checkStatus]);
+
+  const handleSaveServer = () => {
+    setError("");
+    const raw = server.trim();
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error();
+    } catch {
+      setError(t("auth.errBadUrl"));
+      return;
+    }
+    setBackendUrl(raw);
+    // Reload so axios baseURL / WS clients re-init against the new backend.
+    window.location.reload();
+  };
 
   const handleSubmit = async () => {
     setError("");
@@ -83,6 +105,32 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     return <div style={overlayStyle} aria-busy="true" />;
   }
 
+  if (phase === "server") {
+    return (
+      <Overlay>
+        <div style={titleStyle}>{t("auth.serverTitle")}</div>
+        <div style={descStyle}>{t("auth.serverDesc")}</div>
+        <label style={labelStyle}>{t("auth.serverLabel")}</label>
+        <input
+          type="url"
+          inputMode="url"
+          autoFocus
+          style={inputStyle}
+          value={server}
+          placeholder={t("auth.serverPlaceholder")}
+          onChange={(e) => setServer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSaveServer();
+          }}
+        />
+        {error && <div style={errorStyle}>{error}</div>}
+        <button style={btnStyle} onClick={handleSaveServer}>
+          {t("auth.submitServer")}
+        </button>
+      </Overlay>
+    );
+  }
+
   if (phase === "neterror") {
     return (
       <Overlay>
@@ -90,6 +138,11 @@ export default function AuthGate({ children }: { children: ReactNode }) {
         <button style={btnStyle} onClick={checkStatus}>
           {t("auth.retry")}
         </button>
+        {isNativeApp() && (
+          <button style={linkBtnStyle} onClick={() => setPhase("server")}>
+            {t("auth.changeServer")}
+          </button>
+        )}
       </Overlay>
     );
   }
@@ -135,6 +188,12 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       <button style={btnStyle} onClick={handleSubmit} disabled={submitting}>
         {submitting ? "..." : isSetup ? t("auth.submitSetup") : t("auth.submitLogin")}
       </button>
+
+      {isNativeApp() && (
+        <button style={linkBtnStyle} onClick={() => setPhase("server")}>
+          {t("auth.changeServer")}
+        </button>
+      )}
     </Overlay>
   );
 }
@@ -216,4 +275,14 @@ const btnStyle: React.CSSProperties = {
   padding: "10px 16px",
   cursor: "pointer",
   marginTop: 4,
+};
+
+const linkBtnStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  color: "var(--fg-secondary)",
+  fontSize: 12,
+  padding: "10px 0 0",
+  cursor: "pointer",
+  textDecoration: "underline",
 };

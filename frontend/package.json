@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "build:desktop": "bash scripts/build-desktop.sh",
+    "build:android": "next build && cap sync android",
+    "android:apk": "next build && cap sync android && cd android && gradlew.bat assembleDebug",
     "start": "next start",
     "lint": "next lint",
     "gen:api": "orval"
@@ -17,6 +19,9 @@
     "Edge >= 79"
   ],
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
     "@novnc/novnc": "^1.7.0",
     "@tanstack/react-query": "^5.45.0",
     "@xterm/addon-fit": "^0.10.0",
