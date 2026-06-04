@@ -5,8 +5,15 @@
  * Desktop/same-origin deploy: same host:port as the page (desktop port assigned by pywebview).
  */
 
+import { getBackendUrl } from "./backend";
+
 function defaultPort(protocol: string): string {
   return protocol === "https:" ? "443" : "80";
+}
+
+/** Convert an http(s) backend base URL to its ws(s) equivalent. */
+function toWsBase(httpBase: string): string {
+  return httpBase.replace(/^http/, "ws");
 }
 
 function isDesktopRuntime(): boolean {
@@ -63,6 +70,10 @@ function useSameOriginApi(baked: string | undefined): boolean {
 
 /** HTTP API base URL */
 export function getApiBaseUrl(): string {
+  const override = getBackendUrl();
+  if (override) {
+    return override;
+  }
   const baked = process.env.NEXT_PUBLIC_API_URL;
   if (useSameOriginApi(baked)) {
     return "";
@@ -75,6 +86,10 @@ export function getApiBaseUrl(): string {
 
 /** VNC WebSocket base URL */
 export function getVncWsBaseUrl(): string {
+  const override = getBackendUrl();
+  if (override) {
+    return `${toWsBase(override)}/ws/vnc`;
+  }
   const baked = process.env.NEXT_PUBLIC_WS_URL;
   if (useSameOriginApi(baked)) {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -92,6 +107,10 @@ export function getVncWsBaseUrl(): string {
 
 /** WebSocket base URL */
 export function getWsBaseUrl(): string {
+  const override = getBackendUrl();
+  if (override) {
+    return `${toWsBase(override)}/ws/terminal`;
+  }
   const baked = process.env.NEXT_PUBLIC_WS_URL;
   if (useSameOriginApi(baked)) {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
