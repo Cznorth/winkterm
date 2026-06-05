@@ -625,12 +625,8 @@ def run_desktop_app_with_loading(host: str, port: int, width: int, height: int):
 
     url = f"http://{host}:{port}"
 
-    # Start the backend in the background so it boots while the loading page is
-    # already on screen. The window is created immediately below.
     logger.info(f"Starting backend server on port {port}...")
     threading.Thread(target=start_backend, args=(host, port), daemon=True).start()
-
-    waiter_started = threading.Event()
 
     def wait_and_swap():
         """Off the GUI thread: wait for the backend, then load the main UI."""
@@ -641,14 +637,6 @@ def run_desktop_app_with_loading(host: str, port: int, width: int, height: int):
                 _window.load_url(f"{url}/")
         else:
             logger.error("Backend failed to start")
-
-    def on_loaded():
-        """Fires once the loading page is visible (and again after the app URL
-        loads). Kick off the backend waiter only on the first fire."""
-        if waiter_started.is_set():
-            return
-        waiter_started.set()
-        threading.Thread(target=wait_and_swap, daemon=True).start()
 
     _window = webview.create_window(
         title="WinkTerm",
@@ -662,7 +650,9 @@ def run_desktop_app_with_loading(host: str, port: int, width: int, height: int):
         js_api=window_api,
     )
 
-    _window.events.loaded += on_loaded
+    # Start polling immediately — on macOS the loaded event may not fire
+    # for inline HTML, causing the app to hang on the loading screen.
+    threading.Thread(target=wait_and_swap, daemon=True).start()
     webview.start(debug=not IS_FROZEN)
 
 
