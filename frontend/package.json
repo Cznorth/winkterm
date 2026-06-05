@@ -19,9 +19,6 @@
     "Edge >= 79"
   ],
   "dependencies": {
-    "@capacitor/android": "^8.4.0",
-    "@capacitor/cli": "^8.4.0",
-    "@capacitor/core": "^8.4.0",
     "@novnc/novnc": "^1.7.0",
     "@tanstack/react-query": "^5.45.0",
     "@xterm/addon-fit": "^0.10.0",
@@ -43,7 +40,6 @@
     "@babel/preset-env": "^7.29.2",
     "@babel/preset-react": "^7.28.5",
     "@babel/preset-typescript": "^7.28.5",
-    "@capacitor/assets": "^3.0.5",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
@@ -51,5 +47,11 @@
     "orval": "^6.31.0",
     "sharp": "^0.34.5",
     "typescript": "^5.5.0"
+  },
+  "optionalDependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/assets": "^3.0.5"
   }
 }

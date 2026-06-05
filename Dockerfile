@@ -3,7 +3,7 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci
+RUN npm ci --omit=optional
 # Pre-install SWC binary for Linux x64 musl
 RUN npm install --no-save @next/swc-linux-x64-musl
 
