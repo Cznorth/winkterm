@@ -310,6 +310,12 @@ npm run gen:api
 
 ---
 
+## 🔗 友情链接
+
+- [LinuxDo](https://linux.do) —— 新的、好的网络社区
+
+---
+
 ## 📄 许可证
 
 [MIT](LICENSE) © 2026 Cznorth

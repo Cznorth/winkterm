@@ -320,6 +320,12 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
+## 🔗 Friendly Links
+
+- [LinuxDo](https://linux.do) — a community of people who love technology
+
+---
+
 ## 📄 License
 
 [MIT](LICENSE) © 2026 Cznorth
