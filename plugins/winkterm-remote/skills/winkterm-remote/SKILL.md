@@ -1,20 +1,38 @@
 ---
 name: winkterm-remote
-description: Drive a running WinkTerm backend over HTTP — manage SSH connections (create/read/update/delete), open local/SSH terminals, send commands and read output, take terminal snapshots, run async SSH jobs, and transfer files via SSH. Use when you need to run shell commands on remote servers or inside a controlled terminal. Requires a reachable WinkTerm backend.
-version: 5
+description: Drive a running WinkTerm backend — prefer the `winkterm` CLI (WebSocket long-connection, so long-running commands aren't cut by a reverse proxy's idle timeout) with HTTP as fallback. Manage SSH connections (create/read/update/delete), open local/SSH terminals, send commands and read output, take snapshots, run async SSH jobs, and transfer files via SSH. Use when you need to run shell commands on remote servers or inside a controlled terminal. Requires a reachable WinkTerm backend.
+version: 6
 license: MIT
 homepage: https://github.com/Cznorth/winkterm
 ---
 
 # WinkTerm Remote Terminal
 
-Operate WinkTerm's terminals over its HTTP API. The backend keeps a dedicated PTY
-per terminal; you can open local or SSH terminals, run commands, read output, run
-long-running jobs asynchronously, and move files over SSH.
+Operate WinkTerm's terminals over two interchangeable channels. The backend keeps a
+dedicated PTY per terminal; you can open local or SSH terminals, run commands, read
+output, run long-running jobs asynchronously, and move files over SSH.
 
-This skill is a thin bootstrap. The authoritative, always-current reference lives
-on the backend at `GET /api/agent/skill.md` — fetch it on first use so you have the
-exact endpoint surface for the version you are talking to.
+**Prefer the CLI.** It carries the full agent surface over one WebSocket with a 15s
+application-level heartbeat, so long commands (installs, builds, dumps) survive a
+reverse proxy's default ~60s idle read-timeout. When the WebSocket is unavailable it
+transparently falls back to the HTTP API.
+
+```bash
+# In the WinkTerm repo:
+cd cli && npm install
+export WINKTERM_BASE_URL=https://your-backend   # default http://localhost:8000
+export WINKTERM_AGENT_TOKEN=<bearer-token>
+node bin/winkterm.js help
+
+# Generic call (covers every method) — long task stays alive over WS:
+node bin/winkterm.js exec <terminal_id> "sleep 300 && echo done"
+node bin/winkterm.js call ssh.run_async '{"conn_id":"ab12","command":"docker build ."}'
+```
+
+This skill is a thin bootstrap. The authoritative, always-current reference (full CLI
+method map + HTTP fallback surface) lives on the backend at `GET /api/agent/skill.md`
+— fetch it on first use so you have the exact surface for the version you are talking
+to.
 
 ## Prerequisites
 

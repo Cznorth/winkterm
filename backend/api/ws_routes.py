@@ -6,6 +6,7 @@ from fastapi import APIRouter, WebSocket, Query
 
 from backend.terminal.ws_handler import TerminalWSHandler
 from backend.api.ws_chat import ChatWSHandler
+from backend.api.ws_agent import AgentWSHandler
 from backend.api.auth_routes import ws_authorized
 from backend.vnc.handler import VNCWSHandler
 
@@ -57,6 +58,22 @@ async def chat_ws(
         return
 
     handler = ChatWSHandler(websocket)
+    await handler.handle()
+
+
+@router.websocket("/agent")
+async def agent_ws(
+    websocket: WebSocket,
+    token: Optional[str] = Query(default=None),
+) -> None:
+    """External agent WebSocket entry.
+
+    Carries the full agent surface (terminals, SSH, files, jobs, events) as JSON
+    messages, with application-level heartbeats so long-running commands survive a
+    reverse-proxy idle timeout. Auth is the agent token (``?token=``); the handler
+    validates it after accept and closes with 4401 on failure.
+    """
+    handler = AgentWSHandler(websocket, token)
     await handler.handle()
 
 

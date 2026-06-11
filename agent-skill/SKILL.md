@@ -1,13 +1,21 @@
 ---
 name: winkterm-remote
-version: 5
-description: 通过 HTTP 远程操作 WinkTerm —— 管理 SSH 连接（增删改查）、新建本地/SSH 终端、发送命令并读取输出、获取终端快照、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
+version: 6
+description: 远程操作 WinkTerm —— 优先用 winkterm CLI（WebSocket 长连接，长任务不被反代超时切断），HTTP 接口作兜底。管理 SSH 连接（增删改查）、新建本地/SSH 终端、发命令并读输出、获取终端快照、运行异步任务、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
 ---
 
 # WinkTerm 远程终端 Skill
 
-通过 WinkTerm 后端的 HTTP 接口远程操作终端。后端为每个请求维护一个独立 PTY，
+远程操作 WinkTerm 后端的终端。后端为每个终端维护一个独立 PTY，
 你可以创建本地或 SSH 终端、发命令、读输出、传文件。
+
+**两条通道，优先用 CLI：**
+
+- **`winkterm` CLI（首选）** —— 走 WebSocket 长连接，应用层心跳每 15s 一次，
+  长命令（安装、build、dump）不会被 nginx 等反向代理的默认 60s 空闲超时切断。
+  见下方 [CLI](#cli推荐).
+- **HTTP 接口（兜底）** —— 原有 REST/SSE 接口全部保留。CLI 连不上时自动 fallback，
+  你也可以直接用 curl。见 [HTTP 接口参考](#http-接口参考兜底).
 
 ## 配置
 
@@ -66,6 +74,87 @@ head -10 <local-skill-path> | grep '^version:'
 
 服务端版本号 `<` 本地，或两者相等：跳过，正常工作。
 
+## CLI（推荐）
+
+`winkterm` CLI 把下方所有 HTTP 接口封成一条 WebSocket 长连接上的 JSON 消息。
+好处：长任务靠心跳保活，**不被反向代理的 60s 空闲超时切断**；连不上时自动退回 HTTP。
+
+### 安装与配置
+
+CLI 源码在 WinkTerm 仓库 `cli/` 目录。
+
+```bash
+cd cli && npm install        # 仅一个依赖 ws
+node bin/winkterm.js help    # 或 npm link 后直接 winkterm
+```
+
+配置走环境变量（与 HTTP 接口同一套 token）：
+
+```bash
+export WINKTERM_BASE_URL=https://ops.example.com   # 默认 http://localhost:8000
+export WINKTERM_AGENT_TOKEN=<bearer-token>         # 同 HTTP 的 agent token
+# 可选：WINKTERM_TRANSPORT=ws|http|auto（默认 auto，先 WS 后 HTTP）
+```
+
+WebSocket URL 自动从 base_url 推导（`http→ws`、`https→wss`，路径 `/ws/agent`）。
+
+### 通用调用（覆盖全部方法）
+
+```bash
+winkterm call <method> '<json-params>'
+```
+
+`call` 直通后端，新增方法无需升级 CLI。结果 JSON 打到 **stdout**，
+实时输出（progress）打到 **stderr**，出错退出码非 0。
+
+### 方法名 ↔ HTTP 接口对照
+
+下方「HTTP 接口参考」的每个端点都有等价 WS 方法，参数同名（路径参数如
+`terminal_id` / `conn_id` / `job_id` 放进 params）：
+
+| WS method | 对应 HTTP | params 关键字段 |
+|-----------|-----------|----------------|
+| `terminal.create` | POST /terminals | type, connection_id, name, ttl_seconds |
+| `terminal.list` | GET /terminals | — |
+| `terminal.get` | GET /terminals/{id} | terminal_id |
+| `terminal.delete` | DELETE /terminals/{id} | terminal_id |
+| `terminal.exec` | POST /terminals/{id}/exec | terminal_id, command/command_b64, timeout, cwd, env |
+| `terminal.input` | POST /terminals/{id}/input | terminal_id, data/keys, enter, wait |
+| `terminal.snapshot` | GET /terminals/{id}/snapshot | terminal_id, since, pattern |
+| `terminal.stream` | GET /terminals/{id}/stream (SSE) | terminal_id, since（**仅 WS**，无 HTTP fallback，改用 snapshot 轮询）|
+| `ssh.connections.list/get/create/update/delete` | …/ssh/connections | conn_id, host, username, … |
+| `ssh.import_electerm` | POST /ssh/import/electerm | bookmarks |
+| `ssh.run` | POST /ssh/{conn_id}/run | conn_id, command, timeout |
+| `ssh.run_async` | POST /ssh/{conn_id}/run_async | conn_id, command, timeout |
+| `job.list/get/cancel` | …/jobs | job_id |
+| `events.recent` | GET /events/recent | since_id, limit |
+| `events.stream` | GET /events/stream (SSE) | since_id（**仅 WS**，无 HTTP fallback）|
+| `ssh.files.list/read/write` | …/ssh/{conn_id}/files… | conn_id, path, content |
+| `ssh.upload` / `ssh.download` | …/ssh/{conn_id}/upload\|download | conn_id, local_path, remote_path |
+| `ssh.mkdir` | POST /ssh/{conn_id}/directories | conn_id, path |
+| `ssh.delete_paths` | DELETE /ssh/{conn_id}/paths | conn_id, paths |
+
+### 便捷子命令
+
+```bash
+winkterm list                                  # 列终端
+winkterm create --type ssh --connection-id ab12cd34 --name fix
+winkterm exec <terminal_id> "sleep 300 && echo done"   # 长任务，WS 全程保活
+winkterm input <terminal_id> ":q!" --no-enter
+winkterm snapshot <terminal_id> --since 1024 --pattern ERROR
+winkterm delete <terminal_id>
+winkterm ssh-list
+winkterm ssh-run <conn_id> "uptime; df -h" --timeout 120
+```
+
+### 长任务怎么办
+
+- **首选 `winkterm exec`**：WS 心跳保活，命令跑多久都不断，输出实时回流。
+- 仍想要 job 语义（提交即返回、断开续查）：用 `winkterm ssh-run --async` 等价的
+  `winkterm call ssh.run_async ...` + `winkterm call job.get ...`。
+- CLI 不可用（旧后端无 `/ws/agent`、WS 被网络阻断）→ auto 模式自动走下方 HTTP；
+  此时长命令仍建议用 `ssh.run_async` + 轮询 `job.get` 躲过网关超时。
+
 ## 选 input 还是 exec
 
 | 场景 | 用哪个 |
@@ -86,7 +175,10 @@ head -10 <local-skill-path> | grep '^version:'
 4. `GET /api/agent/terminals/{id}/snapshot` 查看终端当前内容。
 5. 用完 `DELETE /api/agent/terminals/{id}` 关闭。
 
-## 接口参考
+## HTTP 接口参考（兜底）
+
+> 以下是原有 HTTP/SSE 接口，**全部保留**。CLI 的 auto/http 模式内部就走这些路径；
+> 你也可以在没装 CLI 时直接 curl。优先用上面的 [CLI](#cli推荐)。
 
 ### 查看 SSH 列表
 ```
