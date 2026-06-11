@@ -1,0 +1,20 @@
+{
+  "name": "winkterm-cli",
+  "version": "0.1.0",
+  "description": "Drive a WinkTerm backend over WebSocket (long-task safe) with HTTP fallback.",
+  "type": "module",
+  "bin": {
+    "winkterm": "bin/winkterm.js"
+  },
+  "files": [
+    "bin/",
+    "src/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "license": "MIT"
+}

@@ -31,6 +31,7 @@ uv.lock
 # Node / Next.js
 frontend/node_modules/
 scripts/node_modules/
+cli/node_modules/
 .capture-frames/
 frontend/.next/
 frontend/.next-dev/
