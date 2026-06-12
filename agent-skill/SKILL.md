@@ -1,6 +1,6 @@
 ---
 name: winkterm-remote
-version: 6
+version: 7
 description: 远程操作 WinkTerm —— 优先用 winkterm CLI（WebSocket 长连接，长任务不被反代超时切断），HTTP 接口作兜底。管理 SSH 连接（增删改查）、新建本地/SSH 终端、发命令并读输出、获取终端快照、运行异步任务、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
 ---
 

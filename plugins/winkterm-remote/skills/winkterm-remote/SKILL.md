@@ -1,7 +1,7 @@
 ---
 name: winkterm-remote
 description: Drive a running WinkTerm backend — prefer the `winkterm` CLI (WebSocket long-connection, so long-running commands aren't cut by a reverse proxy's idle timeout) with HTTP as fallback. Manage SSH connections (create/read/update/delete), open local/SSH terminals, send commands and read output, take snapshots, run async SSH jobs, and transfer files via SSH. Use when you need to run shell commands on remote servers or inside a controlled terminal. Requires a reachable WinkTerm backend.
-version: 6
+version: 7
 license: MIT
 homepage: https://github.com/Cznorth/winkterm
 ---
