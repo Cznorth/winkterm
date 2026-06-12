@@ -29,8 +29,15 @@ npx winkterm help          # 免安装直接跑
 # 或全局装：npm install -g winkterm  后直接用 winkterm
 ```
 
-需要 Node ≥ 18。配置与下方 token 同一套（环境变量 `WINKTERM_BASE_URL` /
-`WINKTERM_AGENT_TOKEN`）。CLI 连不上时自动 fallback 到 HTTP，所以装不上也不致命。
+需要 Node ≥ 18。**建议先 `login` 把凭据存一次**（写到 `~/.winkterm/cli.json`，
+权限 0600），后续所有命令行不再带 token——截图也不会泄露：
+
+```bash
+npx winkterm login --base-url {BASE_URL} --token <WINKTERM_AGENT_TOKEN>
+npx winkterm ssh-list      # 之后裸跑即可
+```
+
+token 获取见下方步骤 3。CLI 连不上时自动 fallback 到 HTTP，所以装不上也不致命。
 
 ## 步骤 3 —— 获取鉴权 token
 

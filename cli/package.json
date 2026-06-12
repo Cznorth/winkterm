@@ -1,6 +1,6 @@
 {
   "name": "winkterm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Drive a WinkTerm backend over WebSocket (long-task safe) with HTTP fallback.",
   "type": "module",
   "bin": {

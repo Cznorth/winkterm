@@ -5,7 +5,7 @@
  * stderr; exit code is non-zero on error.
  */
 
-import { resolveConfig } from "./config.js";
+import { resolveConfig, saveConfigFile, clearConfigFile, configPath } from "./config.js";
 import { call, TransportError } from "./transport.js";
 
 const GLOBAL_FLAGS = new Set(["base-url", "token", "transport", "ws-url"]);
@@ -72,6 +72,11 @@ Global flags (or env WINKTERM_BASE_URL / WINKTERM_AGENT_TOKEN / WINKTERM_TRANSPO
   --transport <mode>   ws | http | auto (default auto)
   --ws-url <url>       override derived WebSocket URL
   --quiet              suppress live progress on stderr
+
+Auth (store credentials once so later calls carry no token on the command line):
+  winkterm login --base-url <url> --token <token>   # saved to ~/.winkterm/cli.json (0600)
+  winkterm logout                                   # delete the stored credentials
+  winkterm whoami                                   # show active base-url + masked token + source
 
 Generic (covers every backend method, no client update needed):
   winkterm call <method> [json-params]    # e.g. call terminal.exec '{"terminal_id":"t","command":"ls"}'
@@ -186,12 +191,57 @@ function clean(obj) {
   return out;
 }
 
+/** Show only the last 4 chars of a token; everything else becomes asterisks. */
+function maskToken(token) {
+  if (!token) return null;
+  if (token.length <= 4) return "*".repeat(token.length);
+  return "*".repeat(token.length - 4) + token.slice(-4);
+}
+
 export async function main(argv) {
   const { _, flags } = parseArgs(argv);
   const cmd = _[0];
 
   if (!cmd || cmd === "help" || flags.help) {
     process.stdout.write(HELP);
+    return 0;
+  }
+
+  // Auth meta-commands: never touch the network.
+  if (cmd === "login") {
+    const baseUrl = flags["base-url"] || process.env.WINKTERM_BASE_URL;
+    const token = flags.token || process.env.WINKTERM_AGENT_TOKEN;
+    if (!token) {
+      process.stderr.write("错误: login 需要 --token（或环境变量 WINKTERM_AGENT_TOKEN）\n");
+      return 2;
+    }
+    const path = saveConfigFile({
+      baseUrl: baseUrl ? baseUrl.replace(/\/+$/, "") : undefined,
+      token,
+      transport: flags.transport,
+    });
+    process.stdout.write(`已保存凭据到 ${path}（权限 600）。后续命令无需再带 token。\n`);
+    return 0;
+  }
+  if (cmd === "logout") {
+    const removed = clearConfigFile();
+    process.stdout.write(removed ? `已删除 ${configPath()}\n` : "无已保存的凭据\n");
+    return 0;
+  }
+  if (cmd === "whoami") {
+    const c = configFromFlags(flags);
+    const src = flags.token
+      ? "--token"
+      : process.env.WINKTERM_AGENT_TOKEN
+        ? "env"
+        : "config-file";
+    process.stdout.write(
+      JSON.stringify(
+        { baseUrl: c.baseUrl, token: maskToken(c.token), transport: c.transport, tokenSource: c.token ? src : null },
+        null,
+        2,
+      ) + "\n",
+    );
     return 0;
   }
 
@@ -208,7 +258,9 @@ export async function main(argv) {
 
   const config = configFromFlags(flags);
   if (!config.token) {
-    process.stderr.write("错误: 未配置 token（--token 或 WINKTERM_AGENT_TOKEN）\n");
+    process.stderr.write(
+      "错误: 未配置 token。先 `winkterm login --base-url <url> --token <token>`，或用 --token / 环境变量 WINKTERM_AGENT_TOKEN\n",
+    );
     return 2;
   }
 

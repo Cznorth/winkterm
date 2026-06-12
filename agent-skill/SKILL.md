@@ -90,7 +90,16 @@ npx winkterm help          # 免安装直接跑
 
 （开发场景也可用仓库 `cli/` 目录：`cd cli && npm install && node bin/winkterm.js help`）
 
-配置走环境变量（与 HTTP 接口同一套 token）：
+**推荐：`login` 存一次凭据**，写到 `~/.winkterm/cli.json`（权限 0600），后续命令行不再带 token——**截图也不会泄露**：
+
+```bash
+winkterm login --base-url https://ops.example.com --token <bearer-token>
+winkterm ssh-list        # 之后裸跑，无需 token
+winkterm whoami          # 看当前 base-url + 掩码 token + 来源
+winkterm logout          # 删除已存凭据
+```
+
+也可走环境变量 / flags（优先级 flags > env > 配置文件 > 默认，与 HTTP 同一套 token）：
 
 ```bash
 export WINKTERM_BASE_URL=https://ops.example.com   # 默认 http://localhost:8000

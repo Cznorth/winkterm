@@ -20,8 +20,10 @@ transparently falls back to the HTTP API.
 ```bash
 # Install from npm (no clone needed):
 npx winkterm help          # run without installing; or: npm install -g winkterm
-export WINKTERM_BASE_URL=https://your-backend   # default http://localhost:8000
-export WINKTERM_AGENT_TOKEN=<bearer-token>
+
+# Store credentials once (-> ~/.winkterm/cli.json, mode 0600) so later commands
+# carry no token on the command line and a screenshot can't leak it:
+npx winkterm login --base-url https://your-backend --token <bearer-token>
 
 # Generic call (covers every method) — long task stays alive over WS:
 npx winkterm exec <terminal_id> "sleep 300 && echo done"

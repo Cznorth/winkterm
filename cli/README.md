@@ -30,6 +30,18 @@ node bin/winkterm.js help
 
 ## Configure
 
+Run `login` once — credentials go to `~/.winkterm/cli.json` (mode `0600`), so later
+commands carry no token on the command line (a screenshot can't leak it):
+
+```bash
+npx winkterm login --base-url https://ops.example.com --token <bearer-token>
+npx winkterm ssh-list        # no token needed anymore
+npx winkterm whoami          # show base-url + masked token + source
+npx winkterm logout          # delete stored credentials
+```
+
+Or pass per-call via env / flags (precedence: flags > env > config file > defaults):
+
 ```bash
 export WINKTERM_BASE_URL=https://ops.example.com   # default http://localhost:8000
 export WINKTERM_AGENT_TOKEN=<bearer-token>         # same token as the HTTP agent API
