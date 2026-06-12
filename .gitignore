@@ -65,3 +65,4 @@ gen_demo.py
 
 # Android build outputs (APKs copied to repo root)
 *.apk
+.promo/
