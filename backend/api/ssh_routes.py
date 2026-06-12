@@ -40,6 +40,7 @@ class SSHConnectionCreate(BaseModel):
     vnc_password: Optional[str] = None
     color: Optional[str] = None
     group: Optional[str] = None
+    runbook: str = ""
 
 
 class SSHConnectionUpdate(BaseModel):
@@ -56,6 +57,12 @@ class SSHConnectionUpdate(BaseModel):
     vnc_password: Optional[str] = None
     color: Optional[str] = None
     group: Optional[str] = None
+    runbook: Optional[str] = None
+
+
+class RunbookUpdate(BaseModel):
+    """Update ops runbook request."""
+    runbook: str = ""
 
 
 class ElectermImport(BaseModel):
@@ -141,6 +148,24 @@ async def update_connection(conn_id: str, conn: SSHConnectionUpdate) -> dict:
 async def delete_connection(conn_id: str) -> dict:
     """Delete SSH connection."""
     return SSHConnectionManager.delete_connection(conn_id)
+
+
+@router.get("/connections/{conn_id}/runbook")
+async def get_runbook(conn_id: str) -> dict:
+    """Get the ops runbook (markdown) for a connection."""
+    data = SSHConnectionManager.get_runbook(conn_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="连接不存在")
+    return data
+
+
+@router.put("/connections/{conn_id}/runbook")
+async def update_runbook(conn_id: str, body: RunbookUpdate) -> dict:
+    """Replace the ops runbook (markdown) for a connection."""
+    result = SSHConnectionManager.update_runbook(conn_id, body.runbook)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail="连接不存在")
+    return result
 
 
 @router.post("/import/electerm")

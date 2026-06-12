@@ -247,6 +247,27 @@
   padding: 0;
 }
 
+.ssh-item-btn.runbook {
+  width: 28px;
+  padding: 0;
+}
+
+.ssh-item-btn.runbook svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ssh-item-btn.runbook:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+/* Filled accent dot when a runbook exists for this server */
+.ssh-item-btn.runbook.has-runbook {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
 .ssh-item-btn.vnc svg,
 .ssh-item-btn.transfer svg {
   width: 13px;
@@ -626,5 +647,49 @@
     max-height: none;
     height: 100%;
     border-radius: 0;
+  }
+}
+
+/* Ops runbook editor */
+.ssh-form.runbook-dialog {
+  width: 520px;
+}
+
+.ssh-runbook-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 280px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 10px;
+  background: var(--bg-input, var(--bg-secondary));
+  color: var(--fg-primary);
+  border: 1px solid var(--border-hover);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.ssh-runbook-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.ssh-runbook-status {
+  font-size: 12px;
+  align-self: center;
+}
+
+.ssh-runbook-status.ok {
+  color: var(--accent-primary);
+}
+
+.ssh-runbook-status.err {
+  color: var(--error);
+}
+
+@media (max-width: 768px) {
+  .ssh-form.runbook-dialog {
+    width: 100%;
   }
 }

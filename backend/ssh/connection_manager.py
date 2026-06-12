@@ -53,7 +53,7 @@ class SSHConnectionManager:
 
     @classmethod
     def list_connections(cls) -> dict:
-        """List all connections (passwords masked)."""
+        """List all connections (passwords masked, runbook stripped)."""
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
         # Mask passwords
@@ -64,6 +64,9 @@ class SSHConnectionManager:
                 conn["passphrase"] = "********"
             if conn.get("vnc_password"):
                 conn["vnc_password"] = "********"
+            # Drop the (potentially long) runbook body from the list; expose a
+            # boolean flag instead. Fetch the full text via get_runbook.
+            conn["has_runbook"] = bool(conn.pop("runbook", "").strip())
         return {"connections": connections}
 
     @classmethod
@@ -151,6 +154,34 @@ class SSHConnectionManager:
 
         config["ssh_connections"] = connections
         cls._save_config(config)
+
+    @classmethod
+    def get_runbook(cls, conn_id: str) -> Optional[dict]:
+        """Get the ops runbook for a connection. None if the connection is missing."""
+        config = cls._load_config()
+        for conn in config.get("ssh_connections", []):
+            if conn.get("id") == conn_id:
+                return {
+                    "id": conn_id,
+                    "title": conn.get("title", ""),
+                    "host": conn.get("host", ""),
+                    "runbook": conn.get("runbook", ""),
+                }
+        return None
+
+    @classmethod
+    def update_runbook(cls, conn_id: str, runbook: str) -> dict:
+        """Replace the ops runbook for a connection."""
+        config = cls._load_config()
+        connections = config.get("ssh_connections", [])
+        for conn in connections:
+            if conn.get("id") == conn_id:
+                conn["runbook"] = runbook
+                config["ssh_connections"] = connections
+                cls._save_config(config)
+                logger.info(f"更新运维手册: {conn_id} ({len(runbook)} 字符)")
+                return {"success": True}
+        return {"success": False}
 
     @classmethod
     def import_from_electerm(cls, bookmarks: list[dict]) -> dict:

@@ -34,6 +34,9 @@ class SSHConnection:
     color: Optional[str] = None
     group: Optional[str] = None
 
+    # Ops runbook (markdown notes for this server; edited by user or agent)
+    runbook: str = ""
+
     # Metadata
     created_at: datetime = field(default_factory=datetime.now)
     last_connected: Optional[datetime] = None
@@ -54,6 +57,7 @@ class SSHConnection:
             "vnc_password": self.vnc_password,
             "color": self.color,
             "group": self.group,
+            "runbook": self.runbook,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_connected": self.last_connected.isoformat() if self.last_connected else None,
         }
@@ -75,6 +79,7 @@ class SSHConnection:
             vnc_password=data.get("vnc_password"),
             color=data.get("color"),
             group=data.get("group"),
+            runbook=data.get("runbook", ""),
             created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else datetime.now(),
             last_connected=datetime.fromisoformat(data["last_connected"]) if data.get("last_connected") else None,
         )

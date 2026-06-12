@@ -221,10 +221,46 @@ async def terminal_exec(
 
 @tool
 def list_ssh_connections() -> dict:
-    """List all configured SSH connections (passwords redacted)."""
+    """List all configured SSH connections (passwords redacted).
+
+    Each entry includes has_runbook; use get_ssh_runbook to read the full
+    ops runbook for a server.
+    """
     from backend.ssh.connection_manager import SSHConnectionManager
 
     return SSHConnectionManager.list_connections()
+
+
+@tool
+def get_ssh_runbook(connection_id: str) -> dict:
+    """Read the ops runbook (markdown notes) for an SSH connection.
+
+    The runbook holds server-specific ops knowledge: service layout, deploy
+    steps, restart commands, gotchas, credentials hints. Read it before
+    operating on an unfamiliar server.
+    """
+    from backend.ssh.connection_manager import SSHConnectionManager
+
+    data = SSHConnectionManager.get_runbook(connection_id)
+    if data is None:
+        return {"ok": False, "error": f"SSH 连接不存在: {connection_id}"}
+    return {"ok": True, **data}
+
+
+@tool
+def update_ssh_runbook(connection_id: str, runbook: str) -> dict:
+    """Replace the ops runbook (markdown) for an SSH connection.
+
+    This overwrites the whole runbook, so pass the full new content (read the
+    current text with get_ssh_runbook first, then edit and write it back).
+    Record durable ops knowledge you discover: topology, fixes, pitfalls.
+    """
+    from backend.ssh.connection_manager import SSHConnectionManager
+
+    result = SSHConnectionManager.update_runbook(connection_id, runbook)
+    if not result.get("success"):
+        return {"ok": False, "error": f"SSH 连接不存在: {connection_id}"}
+    return {"ok": True, "connection_id": connection_id}
 
 
 @tool
@@ -300,6 +336,8 @@ TERMINAL_TOOLS = [
     terminal_input,
     terminal_exec,
     list_ssh_connections,
+    get_ssh_runbook,
+    update_ssh_runbook,
     ssh_run,
     wait,
 ]

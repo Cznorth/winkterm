@@ -21,6 +21,7 @@ interface SSHConnection {
   vnc_password?: string;
   color?: string;
   group?: string;
+  has_runbook?: boolean;
 }
 
 interface SSHPanelProps {
@@ -59,6 +60,22 @@ const TransferIcon = () => (
   </svg>
 );
 
+const RunbookIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    <line x1="8" y1="7" x2="16" y2="7" />
+    <line x1="8" y1="11" x2="14" y2="11" />
+  </svg>
+);
+
 export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
   const { t } = useI18n();
   const breakpoint = useBreakpoint();
@@ -74,6 +91,10 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
   const [vncPassword, setVncPassword] = useState("");
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [runbookTarget, setRunbookTarget] = useState<SSHConnection | null>(null);
+  const [runbookText, setRunbookText] = useState("");
+  const [runbookLoading, setRunbookLoading] = useState(false);
+  const [runbookStatus, setRunbookStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [form, setForm] = useState({
     title: "",
     host: "",
@@ -190,6 +211,47 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
 
   const handleCloseVNC = () => {
     setVncTarget(null);
+  };
+
+  const handleOpenRunbook = async (conn: SSHConnection) => {
+    setShowForm(false);
+    setTransferTarget(null);
+    setVncTarget(null);
+    setRunbookTarget(conn);
+    setRunbookText("");
+    setRunbookStatus("idle");
+    setRunbookLoading(true);
+    try {
+      const res = await axios.get<{ runbook: string }>(
+        `/api/ssh/connections/${conn.id}/runbook`
+      );
+      setRunbookText(res.data.runbook || "");
+    } catch (e) {
+      console.error("Failed to load runbook:", e);
+    } finally {
+      setRunbookLoading(false);
+    }
+  };
+
+  const handleCloseRunbook = () => {
+    setRunbookTarget(null);
+    setRunbookText("");
+    setRunbookStatus("idle");
+  };
+
+  const handleSaveRunbook = async () => {
+    if (!runbookTarget) return;
+    setRunbookStatus("saving");
+    try {
+      await axios.put(`/api/ssh/connections/${runbookTarget.id}/runbook`, {
+        runbook: runbookText,
+      });
+      setRunbookStatus("saved");
+      loadConnections();
+    } catch (e) {
+      console.error("Save runbook failed:", e);
+      setRunbookStatus("error");
+    }
   };
 
   const handleImportElecterm = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -515,6 +577,41 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
     </div>
   ) : null;
 
+  const runbookDialog = runbookTarget ? (
+    <div className="ssh-form runbook-dialog">
+      <div className="ssh-form-header">
+        <h3>{t("ssh.runbookTitle")} · {runbookTarget.title || runbookTarget.host}</h3>
+        <button className="ssh-form-close" onClick={handleCloseRunbook} title={t("ssh.close")}>
+          ✕
+        </button>
+      </div>
+      <div className="ssh-form-body">
+        <textarea
+          className="ssh-runbook-textarea"
+          value={runbookText}
+          onChange={(e) => {
+            setRunbookText(e.target.value);
+            if (runbookStatus !== "idle") setRunbookStatus("idle");
+          }}
+          placeholder={runbookLoading ? "…" : t("ssh.runbookPlaceholder")}
+          disabled={runbookLoading}
+          rows={18}
+          spellCheck={false}
+        />
+      </div>
+      <div className="ssh-form-footer">
+        <button className="ssh-btn primary" onClick={handleSaveRunbook} disabled={runbookLoading || runbookStatus === "saving"}>
+          {t("ssh.save")}
+        </button>
+        {runbookStatus === "saved" && <span className="ssh-runbook-status ok">{t("ssh.runbookSaved")}</span>}
+        {runbookStatus === "error" && <span className="ssh-runbook-status err">{t("ssh.runbookSaveFailed")}</span>}
+        <button className="ssh-btn" onClick={handleCloseRunbook}>
+          {t("ssh.cancel")}
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="ssh-panel">
       <div className="ssh-header">
@@ -603,6 +700,14 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
                     <TransferIcon />
                   </button>
                   <button
+                    className={`ssh-item-btn runbook${conn.has_runbook ? " has-runbook" : ""}`}
+                    onClick={() => handleOpenRunbook(conn)}
+                    title={t("ssh.runbook")}
+                    aria-label={t("ssh.runbook")}
+                  >
+                    <RunbookIcon />
+                  </button>
+                  <button
                     type="button"
                     className="ssh-item-btn edit"
                     onClick={() => handleEdit(conn)}
@@ -624,6 +729,7 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
 
         {showForm && !useMobileVncDialog && connectionForm}
         {vncTarget && !useMobileVncDialog && vncDialog}
+        {runbookTarget && !useMobileVncDialog && runbookDialog}
         {transferTarget && (
           <FileTransferDialog
             open={true}
@@ -655,6 +761,18 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
           }}
         >
           <div onClick={(e) => e.stopPropagation()}>{connectionForm}</div>
+        </div>,
+        document.body
+      )}
+
+      {portalReady && useMobileVncDialog && runbookTarget && createPortal(
+        <div
+          className="vnc-dialog-overlay ssh-form-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseRunbook();
+          }}
+        >
+          <div onClick={(e) => e.stopPropagation()}>{runbookDialog}</div>
         </div>,
         document.body
       )}

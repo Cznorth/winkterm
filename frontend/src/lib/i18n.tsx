@@ -192,6 +192,14 @@ const translations = {
   "ssh.save": { zh: "保存", en: "Save" },
   "ssh.cancel": { zh: "取消", en: "Cancel" },
   "ssh.importFailed": { zh: "导入失败，请检查文件格式。", en: "Import failed. Check the file format." },
+  "ssh.runbook": { zh: "运维手册", en: "Runbook" },
+  "ssh.runbookTitle": { zh: "运维手册", en: "Ops Runbook" },
+  "ssh.runbookPlaceholder": {
+    zh: "记录该服务器的运维知识：服务部署、重启命令、注意事项……（支持 Markdown，AI 可读写）",
+    en: "Server ops notes: deployment, restart commands, gotchas… (Markdown; the AI can read & edit)",
+  },
+  "ssh.runbookSaved": { zh: "已保存", en: "Saved" },
+  "ssh.runbookSaveFailed": { zh: "保存失败", en: "Save failed" },
 
   // === AI Panel ===
   "ai.thinking": { zh: "思考中", en: "Thinking" },
