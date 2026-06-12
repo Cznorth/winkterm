@@ -1,4 +1,4 @@
-# winkterm-cli
+# winkterm
 
 Thin client that drives a WinkTerm backend's external agent API over a **WebSocket**
 long-connection, with transparent **HTTP fallback**.
@@ -10,6 +10,16 @@ every 15s, so the socket never goes idle long enough to trip a proxy timeout —
 installs/builds/dumps run to completion.
 
 ## Install
+
+Published to npm — no clone needed:
+
+```bash
+npx winkterm help          # run without installing
+# or install globally:
+npm install -g winkterm    # then `winkterm ...` on PATH
+```
+
+From the repo (development):
 
 ```bash
 cd cli

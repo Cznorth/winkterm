@@ -1,5 +1,5 @@
 {
-  "name": "winkterm-cli",
+  "name": "winkterm",
   "version": "0.1.0",
   "description": "Drive a WinkTerm backend over WebSocket (long-task safe) with HTTP fallback.",
   "type": "module",
@@ -8,7 +8,23 @@
   },
   "files": [
     "bin/",
-    "src/"
+    "src/",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cznorth/winkterm.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/Cznorth/winkterm/tree/master/cli",
+  "bugs": "https://github.com/Cznorth/winkterm/issues",
+  "keywords": [
+    "winkterm",
+    "terminal",
+    "ssh",
+    "agent",
+    "websocket",
+    "cli"
   ],
   "engines": {
     "node": ">=18"

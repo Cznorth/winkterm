@@ -81,12 +81,14 @@ head -10 <local-skill-path> | grep '^version:'
 
 ### 安装与配置
 
-CLI 源码在 WinkTerm 仓库 `cli/` 目录。
+CLI 已发布到 npm，无需 clone 仓库：
 
 ```bash
-cd cli && npm install        # 仅一个依赖 ws
-node bin/winkterm.js help    # 或 npm link 后直接 winkterm
+npx winkterm help          # 免安装直接跑
+# 或全局装：npm install -g winkterm  后直接 winkterm
 ```
+
+（开发场景也可用仓库 `cli/` 目录：`cd cli && npm install && node bin/winkterm.js help`）
 
 配置走环境变量（与 HTTP 接口同一套 token）：
 

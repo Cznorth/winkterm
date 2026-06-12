@@ -19,7 +19,20 @@ curl -fsSL "{BASE_URL}/api/agent/skill.md" \
 ```
 该下载端点无需鉴权。下载后确认文件开头是 `---` 起始的 frontmatter。
 
-## 步骤 2 —— 获取鉴权 token
+## 步骤 2 —— 安装 winkterm CLI（推荐通道）
+
+skill 优先用 `winkterm` CLI（WebSocket 长连接，长任务不被反向代理 60s 空闲超时切断），
+HTTP 接口仅作兜底。CLI 已发布到 npm，无需 clone 仓库：
+
+```bash
+npx winkterm help          # 免安装直接跑
+# 或全局装：npm install -g winkterm  后直接用 winkterm
+```
+
+需要 Node ≥ 18。配置与下方 token 同一套（环境变量 `WINKTERM_BASE_URL` /
+`WINKTERM_AGENT_TOKEN`）。CLI 连不上时自动 fallback 到 HTTP，所以装不上也不致命。
+
+## 步骤 3 —— 获取鉴权 token
 
 调用接口需要 token。向用户索取 `AGENT_API_TOKEN`
 （它配置在 WinkTerm 后端的 `.env` 文件里）。
@@ -29,7 +42,7 @@ curl -fsSL "{BASE_URL}/api/agent/skill.md" \
 
 同时把 `WINKTERM_BASE_URL` 设为 `{BASE_URL}`。
 
-## 步骤 3 —— 验证
+## 步骤 4 —— 验证
 
 ```bash
 curl -s "{BASE_URL}/api/agent/ssh/connections" \

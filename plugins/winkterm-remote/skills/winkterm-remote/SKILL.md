@@ -18,15 +18,14 @@ reverse proxy's default ~60s idle read-timeout. When the WebSocket is unavailabl
 transparently falls back to the HTTP API.
 
 ```bash
-# In the WinkTerm repo:
-cd cli && npm install
+# Install from npm (no clone needed):
+npx winkterm help          # run without installing; or: npm install -g winkterm
 export WINKTERM_BASE_URL=https://your-backend   # default http://localhost:8000
 export WINKTERM_AGENT_TOKEN=<bearer-token>
-node bin/winkterm.js help
 
 # Generic call (covers every method) — long task stays alive over WS:
-node bin/winkterm.js exec <terminal_id> "sleep 300 && echo done"
-node bin/winkterm.js call ssh.run_async '{"conn_id":"ab12","command":"docker build ."}'
+npx winkterm exec <terminal_id> "sleep 300 && echo done"
+npx winkterm call ssh.run_async '{"conn_id":"ab12","command":"docker build ."}'
 ```
 
 This skill is a thin bootstrap. The authoritative, always-current reference (full CLI
