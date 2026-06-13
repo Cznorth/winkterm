@@ -92,9 +92,13 @@ Convenience:
   winkterm ssh-list                               # list SSH connections
   winkterm ssh-run <conn_id> <command...> [--timeout n]
 
+Long tasks: just use exec/ssh-run. The WebSocket heartbeat keeps the call
+alive for as long as the command runs, so there is no job/polling layer here —
+async jobs are an HTTP-only workaround for proxy timeouts the CLI doesn't hit.
+
 Examples:
-  winkterm exec t1 "sleep 120 && echo done"       # long task: WS keeps it alive past proxy timeouts
-  winkterm call job.get '{"job_id":"abc"}'
+  winkterm exec t1 "sleep 600 && echo done"       # 10-min task: WS keeps it alive, output streams live
+  winkterm ssh-run ab12cd34 "apt-get install -y nginx"   # long install, no polling needed
 `;
 
 /** Build (method, params) from a parsed command. Returns null for meta commands. */

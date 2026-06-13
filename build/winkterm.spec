@@ -53,6 +53,7 @@ a = Analysis(
         (str(ROOT / "backend" / "agent" / "prompts"), "backend/agent/prompts"),
         # External agent skill files
         (str(ROOT / "agent-skill" / "SKILL.md"), "agent-skill"),
+        (str(ROOT / "agent-skill" / "HTTP_API.md"), "agent-skill"),
         (str(ROOT / "agent-skill" / "INSTALL.md"), "agent-skill"),
     ],
     hiddenimports=[

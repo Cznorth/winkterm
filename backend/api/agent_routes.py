@@ -101,6 +101,18 @@ async def download_skill() -> Response:
     )
 
 
+@public_router.get("/api/agent/http.md")
+async def download_http_api() -> Response:
+    """Serve the HTTP-fallback reference so agents fetch it only when they truly need HTTP."""
+    path = _skill_dir_file("HTTP_API.md")
+    if not path:
+        raise HTTPException(status_code=404, detail="HTTP_API.md 未找到")
+    return Response(
+        content=path.read_text(encoding="utf-8"),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
 @public_router.get("/api/agent/handshake")
 async def agent_handshake(request: Request) -> dict:
     """Return the current agent token for trusted clients to connect automatically."""
