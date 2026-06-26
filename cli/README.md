@@ -51,6 +51,48 @@ export WINKTERM_TRANSPORT=auto                     # ws | http | auto (default a
 The WebSocket URL is derived from the base URL (`http→ws`, `https→wss`, path
 `/ws/agent`); override with `WINKTERM_WS_URL` or `--ws-url`.
 
+## MCP server
+
+For MCP-capable agents, use `winkterm-mcp` instead of asking the agent to spawn CLI
+commands manually. It exposes common tools (`winkterm_ssh_run`, `winkterm_exec`,
+`winkterm_snapshot`, etc.) plus a generic `winkterm_call` tool for the full backend
+method surface.
+
+Run `login` once first, or pass credentials through environment variables:
+
+```bash
+npx winkterm login --base-url https://ops.example.com --token <bearer-token>
+```
+
+Example MCP config:
+
+```json
+{
+  "mcpServers": {
+    "winkterm": {
+      "command": "npx",
+      "args": ["-y", "winkterm", "mcp"],
+      "env": {
+        "WINKTERM_BASE_URL": "https://ops.example.com",
+        "WINKTERM_AGENT_TOKEN": "<bearer-token>"
+      }
+    }
+  }
+}
+```
+
+If installed globally, use:
+
+```json
+{
+  "mcpServers": {
+    "winkterm": {
+      "command": "winkterm-mcp"
+    }
+  }
+}
+```
+
 ## Usage
 
 ```bash

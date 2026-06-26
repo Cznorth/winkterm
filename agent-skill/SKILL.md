@@ -9,7 +9,12 @@ description: 远程操作 WinkTerm —— 默认用 winkterm CLI（WebSocket 长
 远程操作 WinkTerm 后端的终端。后端为每个终端维护一个独立 PTY，
 你可以创建本地或 SSH 终端、发命令、读输出、传文件。
 
-**默认用 CLI，几乎不用碰 HTTP：**
+**如果当前 agent 支持 MCP，优先用 MCP；否则默认用 CLI，几乎不用碰 HTTP：**
+
+- **MCP（最省心）** —— 配好 `winkterm-mcp` 后，agent 会看到 `winkterm_ssh_run`、
+  `winkterm_exec`、`winkterm_snapshot`、`winkterm_call` 等工具，不需要手写 shell 命令、
+  JSON 引号或 token。MCP server 内部复用同一套 WebSocket-first transport，长任务仍然靠
+  15s 心跳保活，连不上 WS 时自动 HTTP fallback。见下方 [MCP](#mcp优先).
 
 - **`winkterm` CLI（默认，几乎总是用它）** —— 走 WebSocket 长连接，应用层心跳每 15s 一次，
   长命令（安装、build、dump）不会被 nginx 等反向代理的默认 60s 空闲超时切断。
@@ -76,7 +81,62 @@ head -10 <local-skill-path> | grep '^version:'
 
 服务端版本号 `<` 本地，或两者相等：跳过，正常工作。
 
-## CLI（默认）
+## MCP（优先）
+
+如果使用 Codex、Claude Desktop 或其他支持 MCP 的客户端，推荐直接配置 WinkTerm MCP server。
+它走 stdio，暴露常用工具，并保留 `winkterm_call` 覆盖全部后端方法。
+
+先保存一次凭据（或在 MCP 配置里放 env）：
+
+```bash
+npx winkterm login --base-url https://ops.example.com --token <bearer-token>
+```
+
+MCP 配置示例：
+
+```json
+{
+  "mcpServers": {
+    "winkterm": {
+      "command": "npx",
+      "args": ["-y", "winkterm", "mcp"],
+      "env": {
+        "WINKTERM_BASE_URL": "https://ops.example.com",
+        "WINKTERM_AGENT_TOKEN": "<bearer-token>"
+      }
+    }
+  }
+}
+```
+
+全局安装后也可以：
+
+```json
+{
+  "mcpServers": {
+    "winkterm": {
+      "command": "winkterm-mcp"
+    }
+  }
+}
+```
+
+常用 MCP tools：
+
+| Tool | 用途 |
+|------|------|
+| `winkterm_list_ssh_connections` | 列 SSH 连接 |
+| `winkterm_ssh_run` | 对某个 SSH 连接执行一次性命令 |
+| `winkterm_create_terminal` | 创建本地/SSH 终端 |
+| `winkterm_exec` | 在已有终端跑命令，适合长任务 |
+| `winkterm_input` | 发交互输入或控制键 |
+| `winkterm_snapshot` | 读取终端输出 |
+| `winkterm_delete_terminal` | 关闭终端 |
+| `winkterm_call` | 通用方法调用，覆盖新接口/少用接口 |
+
+如果 MCP 工具不可用，再退回 CLI。
+
+## CLI（MCP 不可用时）
 
 `winkterm` CLI 把所有终端/SSH 操作封成一条 WebSocket 长连接上的 JSON 消息。
 好处：长任务靠心跳保活，**不被反向代理的 60s 空闲超时切断**；连不上时自动退回 HTTP。

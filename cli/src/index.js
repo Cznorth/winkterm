@@ -78,6 +78,9 @@ Auth (store credentials once so later calls carry no token on the command line):
   winkterm logout                                   # delete the stored credentials
   winkterm whoami                                   # show active base-url + masked token + source
 
+MCP:
+  winkterm mcp                                      # start the MCP stdio server
+
 Generic (covers every backend method, no client update needed):
   winkterm call <method> [json-params]    # e.g. call terminal.exec '{"terminal_id":"t","command":"ls"}'
                          [--p key=value]   # add/override a param (value JSON-coerced)
@@ -208,6 +211,12 @@ export async function main(argv) {
 
   if (!cmd || cmd === "help" || flags.help) {
     process.stdout.write(HELP);
+    return 0;
+  }
+
+  if (cmd === "mcp") {
+    const { main: mcpMain } = await import("./mcp.js");
+    await mcpMain();
     return 0;
   }
 

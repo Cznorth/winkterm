@@ -1,6 +1,6 @@
 ---
 name: winkterm-remote
-description: Drive a running WinkTerm backend — prefer the `winkterm` CLI (WebSocket long-connection, so long-running commands aren't cut by a reverse proxy's idle timeout) with HTTP as fallback. Manage SSH connections (create/read/update/delete), open local/SSH terminals, send commands and read output, take snapshots, run async SSH jobs, and transfer files via SSH. Use when you need to run shell commands on remote servers or inside a controlled terminal. Requires a reachable WinkTerm backend.
+description: Drive a running WinkTerm backend — prefer the `winkterm-mcp` MCP server when available; otherwise use the `winkterm` CLI (WebSocket long-connection, so long-running commands aren't cut by a reverse proxy's idle timeout) with HTTP as fallback. Manage SSH connections (create/read/update/delete), open local/SSH terminals, send commands and read output, take snapshots, run async SSH jobs, and transfer files via SSH. Use when you need to run shell commands on remote servers or inside a controlled terminal. Requires a reachable WinkTerm backend.
 version: 8
 license: MIT
 homepage: https://github.com/Cznorth/winkterm
@@ -8,14 +8,17 @@ homepage: https://github.com/Cznorth/winkterm
 
 # WinkTerm Remote Terminal
 
-Operate WinkTerm's terminals over two interchangeable channels. The backend keeps a
+Operate WinkTerm's terminals over MCP, CLI, or HTTP fallback. The backend keeps a
 dedicated PTY per terminal; you can open local or SSH terminals, run commands, read
 output, run long-running jobs asynchronously, and move files over SSH.
 
-**Prefer the CLI.** It carries the full agent surface over one WebSocket with a 15s
-application-level heartbeat, so long commands (installs, builds, dumps) survive a
-reverse proxy's default ~60s idle read-timeout. When the WebSocket is unavailable it
-transparently falls back to the HTTP API.
+**Prefer MCP when the client supports it.** `winkterm-mcp` exposes tools such as
+`winkterm_ssh_run`, `winkterm_exec`, `winkterm_snapshot`, and generic
+`winkterm_call`, while reusing the same WebSocket-first transport as the CLI. If MCP
+is unavailable, use the CLI. Both carry the agent surface over one WebSocket with a
+15s application-level heartbeat, so long commands (installs, builds, dumps) survive
+a reverse proxy's default ~60s idle read-timeout. When the WebSocket is unavailable
+they transparently fall back to the HTTP API.
 
 ```bash
 # Install from npm (no clone needed):
@@ -24,6 +27,9 @@ npx winkterm help          # run without installing; or: npm install -g winkterm
 # Store credentials once (-> ~/.winkterm/cli.json, mode 0600) so later commands
 # carry no token on the command line and a screenshot can't leak it:
 npx winkterm login --base-url https://your-backend --token <bearer-token>
+
+# MCP-capable clients can run:
+npx -y winkterm mcp
 
 # Generic call (covers every method) — long task stays alive over WS:
 npx winkterm exec <terminal_id> "sleep 300 && echo done"

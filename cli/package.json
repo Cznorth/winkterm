@@ -4,7 +4,8 @@
   "description": "Drive a WinkTerm backend over WebSocket (long-task safe) with HTTP fallback.",
   "type": "module",
   "bin": {
-    "winkterm": "bin/winkterm.js"
+    "winkterm": "bin/winkterm.js",
+    "winkterm-mcp": "bin/winkterm-mcp.js"
   },
   "files": [
     "bin/",
@@ -30,7 +31,9 @@
     "node": ">=18"
   },
   "dependencies": {
-    "ws": "^8.18.0"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "ws": "^8.18.0",
+    "zod": "^3.25.76"
   },
   "license": "MIT"
 }
