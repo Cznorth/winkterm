@@ -5,9 +5,10 @@ import { getWsBaseUrl } from "./config";
 import { getAccessKey } from "./auth";
 import axios from "./axios";
 
-// Get chat WebSocket URL (replace path segment in terminal WS URL)
+// Get chat WebSocket URL (replace path segment in terminal WS URL).
+// Computed lazily at connect time, not module load, so desktop runtime
+// detection (window.pywebview) and same-origin resolution are accurate.
 const getChatWSUrl = () => getWsBaseUrl().replace("/terminal", "/chat");
-const WS_URL = typeof window !== "undefined" ? getChatWSUrl() : "";
 
 export interface ToolCall {
   id: string;
@@ -129,7 +130,8 @@ export function useChatWs() {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     const accessKey = getAccessKey();
-    const wsUrl = accessKey ? `${WS_URL}?key=${encodeURIComponent(accessKey)}` : WS_URL;
+    const baseUrl = getChatWSUrl();
+    const wsUrl = accessKey ? `${baseUrl}?key=${encodeURIComponent(accessKey)}` : baseUrl;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {

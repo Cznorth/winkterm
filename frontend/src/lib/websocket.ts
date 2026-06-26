@@ -1,8 +1,6 @@
 import { getWsBaseUrl } from "./config";
 import { getAccessKey } from "./auth";
 
-const WS_BASE_URL = typeof window !== "undefined" ? getWsBaseUrl() : "";
-
 type MessageHandler = (data: string) => void;
 type StatusHandler = (connected: boolean) => void;
 
@@ -61,7 +59,9 @@ export class TerminalWebSocket {
   }
 
   private getWsUrl(): string {
-    const baseUrl = `${WS_BASE_URL}/${this.sessionId}`;
+    // Resolve the base lazily (not at module load) so desktop runtime
+    // detection and same-origin resolution are accurate at connect time.
+    const baseUrl = `${getWsBaseUrl()}/${this.sessionId}`;
     const params = new URLSearchParams();
 
     if (this.terminalType === "ssh" && this.sshConnectionId) {

@@ -25,7 +25,7 @@ if not exist "node_modules" (
     echo Installing npm dependencies...
     call npm install
 )
-call npm run build
+call npm run build:desktop
 if errorlevel 1 (
     echo ERROR: Frontend build failed
     exit /b 1
