@@ -67,10 +67,14 @@ winkterm snapshot <terminal_id> --since 1024 --pattern ERROR
 winkterm delete <terminal_id>
 winkterm ssh-list
 winkterm ssh-run <conn_id> "uptime; df -h" --timeout 120
+winkterm call ssh.upload '{"conn_id":"<conn_id>","local_path":"./app.log","remote_path":"/tmp/","overwrite":true}'
 ```
 
 Result payload prints as JSON to **stdout**; live streaming output and diagnostics go
 to **stderr**; exit code is non-zero on error.
+
+For `ssh.upload`, `local_path` is resolved on the machine running the CLI, then
+sent to the WinkTerm backend as multipart file content.
 
 ## Transport behaviour
 

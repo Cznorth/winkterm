@@ -1,6 +1,6 @@
 ---
 name: winkterm-remote
-version: 8
+version: 9
 description: 远程操作 WinkTerm —— 默认用 winkterm CLI（WebSocket 长连接，长任务不被反代超时切断），HTTP 仅在 CLI 不可用时兜底。管理 SSH 连接（增删改查）、新建本地/SSH 终端、发命令并读输出、获取终端快照、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
 ---
 
@@ -140,7 +140,7 @@ winkterm call <method> '<json-params>'
 | `ssh.run` | 一次性 SSH 执行（WS 全程保活） | conn_id, command, timeout |
 | `events.recent` | 操作事件流 | since_id, limit |
 | `ssh.files.list/read/write` | SSH 文件读写 | conn_id, path, content |
-| `ssh.upload` / `ssh.download` | SSH 文件传输 | conn_id, local_path, remote_path |
+| `ssh.upload` / `ssh.download` | SSH 文件传输；CLI 上传读取调用机 `local_path` | conn_id, local_path, remote_path |
 | `ssh.mkdir` | 建远端目录 | conn_id, path |
 | `ssh.delete_paths` | 批量删远端路径 | conn_id, paths |
 

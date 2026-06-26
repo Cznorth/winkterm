@@ -6,6 +6,8 @@
  */
 
 import { WebSocket } from "ws";
+import { basename } from "node:path";
+import { readFile, stat } from "node:fs/promises";
 
 const WS_CONNECT_TIMEOUT_MS = 4000;
 const WS_AUTH_FAILED = 4401;
@@ -29,6 +31,7 @@ export async function call(method, params, opts = {}) {
   const { config, onProgress } = opts;
   const mode = config.transport;
 
+  if (method === "ssh.upload") return httpUploadFile(params, config);
   if (mode === "http") return httpCall(method, params, config);
   if (mode === "ws") return wsCall(method, params, config, onProgress);
 
@@ -237,4 +240,55 @@ async function httpCall(method, params, config) {
     });
   }
   return data;
+}
+
+async function httpUploadFile(params, config) {
+  const { conn_id, local_path, remote_path, overwrite = false } = params || {};
+  if (!conn_id) throw new TransportError("ssh.upload 需要 conn_id", { code: "USAGE" });
+  if (!local_path) throw new TransportError("ssh.upload 需要 local_path", { code: "USAGE" });
+  if (!remote_path) throw new TransportError("ssh.upload 需要 remote_path", { code: "USAGE" });
+
+  let info;
+  try {
+    info = await stat(local_path);
+  } catch {
+    throw new TransportError(`本地文件不存在: ${local_path}`, { code: "LOCAL_FILE_NOT_FOUND" });
+  }
+  if (!info.isFile()) {
+    throw new TransportError(`本地路径不是文件: ${local_path}`, { code: "LOCAL_FILE_NOT_FOUND" });
+  }
+
+  const body = new FormData();
+  body.set("remote_path", String(remote_path));
+  body.set("overwrite", String(Boolean(overwrite)));
+  const data = await readFile(local_path);
+  body.set("file", new Blob([data]), basename(local_path));
+
+  const url = `${config.baseUrl}/api/agent/ssh/${encodeURIComponent(conn_id)}/upload-file`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${config.token}` },
+      body,
+    });
+  } catch (e) {
+    throw new TransportError(`HTTP 上传失败: ${e.message}`, { code: "HTTP_ERROR" });
+  }
+
+  const text = await res.text();
+  let result;
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch {
+    result = { raw: text };
+  }
+  if (!res.ok) {
+    const detail = (result && result.detail) || res.statusText;
+    throw new TransportError(typeof detail === "string" ? detail : JSON.stringify(detail), {
+      status: res.status,
+      code: "HTTP_STATUS",
+    });
+  }
+  return { ...result, local_path };
 }

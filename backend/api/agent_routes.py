@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -743,6 +743,33 @@ def upload_file(conn_id: str, req: FileUploadRequest) -> dict:
         return {"success": True, "local_path": req.local_path, "remote_path": destination}
     except Exception as exc:
         _raise_transfer_error(exc)
+
+
+@router.post("/ssh/{conn_id}/upload-file")
+def upload_file_content(
+    conn_id: str,
+    remote_path: str = Form(...),
+    overwrite: bool = Form(default=False),
+    file: UploadFile = File(...),
+) -> dict:
+    """Upload a caller-provided file stream to the SSH host."""
+    conn = _get_connection_or_404(conn_id)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="请选择要上传的文件")
+    try:
+        destination = SSHFileTransfer.upload_file_obj(
+            conn,
+            file.file,
+            remote_path,
+            file.filename,
+            overwrite=overwrite,
+        )
+        get_event_log().emit("ssh_file_upload", connection_id=conn_id, remote_path=destination)
+        return {"success": True, "file_name": file.filename, "remote_path": destination}
+    except Exception as exc:
+        _raise_transfer_error(exc)
+    finally:
+        file.file.close()
 
 
 @router.post("/ssh/{conn_id}/download")

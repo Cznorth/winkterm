@@ -303,14 +303,17 @@ GET /api/agent/events/stream?since_id=0&token=<token>
 无持久化，进程重启后清零。最多保留 500 条。
 
 ## SSH 文件传输
-文件传输的本地路径指 WinkTerm 后端所在机器的路径。
+JSON 文件传输接口的本地路径指 WinkTerm 后端所在机器的路径。CLI 的 `ssh.upload`
+会读取调用机本地文件并使用 multipart 上传。
 ```
 GET    /api/agent/ssh/{conn_id}/files?path=<远端目录>            列目录
 GET    /api/agent/ssh/{conn_id}/files/content?path=<远端文件>    读文本文件（≤1MB）
 PUT    /api/agent/ssh/{conn_id}/files/content                    写文本文件
        body: { "path": "...", "content": "...", "encoding": "utf-8" }
-POST   /api/agent/ssh/{conn_id}/upload                           本地→远端 上传
+POST   /api/agent/ssh/{conn_id}/upload                           后端本地→远端 上传
        body: { "local_path": "...", "remote_path": "...", "overwrite": false }
+POST   /api/agent/ssh/{conn_id}/upload-file                      调用方文件流→远端 上传
+       multipart: file, remote_path, overwrite
 POST   /api/agent/ssh/{conn_id}/download                         远端→本地 下载
        body: { "remote_path": "...", "local_path": "..." }
 POST   /api/agent/ssh/{conn_id}/directories                      创建远端目录
