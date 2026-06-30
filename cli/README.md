@@ -55,8 +55,8 @@ The WebSocket URL is derived from the base URL (`http→ws`, `https→wss`, path
 
 For MCP-capable agents, use `winkterm-mcp` instead of asking the agent to spawn CLI
 commands manually. It exposes common tools (`winkterm_ssh_run`, `winkterm_exec`,
-`winkterm_snapshot`, etc.) plus a generic `winkterm_call` tool for the full backend
-method surface.
+`winkterm_snapshot`, `winkterm_ssh_upload`, etc.) plus a generic `winkterm_call`
+tool for new or less common backend methods.
 
 Run `login` once first, or pass credentials through environment variables:
 
@@ -92,6 +92,20 @@ If installed globally, use:
   }
 }
 ```
+
+Common MCP tools:
+
+| Tool group | Tools |
+| --- | --- |
+| Generic | `winkterm_call` |
+| Terminals | `winkterm_list_terminals`, `winkterm_get_terminal`, `winkterm_create_terminal`, `winkterm_exec`, `winkterm_input`, `winkterm_snapshot`, `winkterm_delete_terminal` |
+| SSH connections | `winkterm_list_ssh_connections`, `winkterm_get_ssh_connection`, `winkterm_create_ssh_connection`, `winkterm_update_ssh_connection`, `winkterm_delete_ssh_connection`, `winkterm_import_electerm` |
+| SSH commands | `winkterm_ssh_run`, `winkterm_ssh_run_async` |
+| Jobs and events | `winkterm_list_jobs`, `winkterm_get_job`, `winkterm_cancel_job`, `winkterm_recent_events` |
+| SSH files | `winkterm_ssh_files_list`, `winkterm_ssh_files_read`, `winkterm_ssh_files_write`, `winkterm_ssh_upload`, `winkterm_ssh_download`, `winkterm_ssh_mkdir`, `winkterm_ssh_delete_paths` |
+
+`winkterm_ssh_upload` reads `local_path` on the machine running the MCP server.
+`winkterm_ssh_download` writes `local_path` on the WinkTerm backend machine.
 
 ## Usage
 

@@ -125,14 +125,24 @@ MCP 配置示例：
 
 | Tool | 用途 |
 |------|------|
+| `winkterm_call` | 通用方法调用，覆盖新接口/少用接口 |
 | `winkterm_list_ssh_connections` | 列 SSH 连接 |
+| `winkterm_get_ssh_connection` | 查看单个 SSH 连接 |
+| `winkterm_create_ssh_connection` / `winkterm_update_ssh_connection` / `winkterm_delete_ssh_connection` | 管理 SSH 连接 |
+| `winkterm_import_electerm` | 导入 electerm 书签 |
 | `winkterm_ssh_run` | 对某个 SSH 连接执行一次性命令 |
+| `winkterm_ssh_run_async` | 提交异步 SSH 命令 |
+| `winkterm_list_jobs` / `winkterm_get_job` / `winkterm_cancel_job` | 管理异步任务 |
 | `winkterm_create_terminal` | 创建本地/SSH 终端 |
+| `winkterm_get_terminal` | 查看单个终端 |
 | `winkterm_exec` | 在已有终端跑命令，适合长任务 |
 | `winkterm_input` | 发交互输入或控制键 |
 | `winkterm_snapshot` | 读取终端输出 |
 | `winkterm_delete_terminal` | 关闭终端 |
-| `winkterm_call` | 通用方法调用，覆盖新接口/少用接口 |
+| `winkterm_recent_events` | 查看近期 agent 事件 |
+| `winkterm_ssh_files_list` / `winkterm_ssh_files_read` / `winkterm_ssh_files_write` | SSH 远端文件读写 |
+| `winkterm_ssh_upload` / `winkterm_ssh_download` | SSH 文件传输；download 落在 WinkTerm 后端机器 |
+| `winkterm_ssh_mkdir` / `winkterm_ssh_delete_paths` | SSH 远端目录创建和路径删除 |
 
 如果 MCP 工具不可用，再退回 CLI。
 
