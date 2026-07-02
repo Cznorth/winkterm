@@ -590,7 +590,7 @@ def run_desktop_app(host: str, port: int, width: int, height: int):
     webview.start(debug=not IS_FROZEN)
 
 
-def _poll_backend_ready(host: str, port: int, attempts: int = 100) -> bool:
+def _poll_backend_ready(host: str, port: int, attempts: int = 600) -> bool:
     """Poll /health until the backend answers, returning True when ready.
 
     The local backend must always be reached directly. trust_env=False makes
