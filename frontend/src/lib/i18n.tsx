@@ -370,11 +370,28 @@ const translations = {
     en: "Download a JSON file with all settings including plaintext secrets. Keep it safe.",
   },
   "settings.about": { zh: "关于", en: "About" },
+  "settings.version": { zh: "当前版本", en: "Current Version" },
+  "settings.checkUpdate": { zh: "检查更新", en: "Check for Updates" },
+  "settings.checkingUpdate": { zh: "检查中...", en: "Checking..." },
+  "settings.updateAvailable": { zh: "发现新版本", en: "New version available" },
+  "settings.noUpdate": { zh: "当前已是最新版本", en: "You are up to date" },
+  "settings.installUpdate": { zh: "下载并打开安装包", en: "Download and Open Installer" },
+  "settings.downloadingUpdate": { zh: "下载中...", en: "Downloading..." },
+  "settings.viewRelease": { zh: "查看发布页", en: "View Release" },
+  "settings.skipUpdateVersion": { zh: "跳过当前版本", en: "Skip This Version" },
   "settings.githubProject": { zh: "GitHub 项目", en: "GitHub Repository" },
   "settings.githubProjectHelp": {
     zh: "查看源码、提交 Issue 或获取最新版本。",
     en: "View source code, report issues, or get the latest release.",
   },
+
+  // === Update Prompt ===
+  "update.available": { zh: "发现新版本", en: "Update available" },
+  "update.install": { zh: "一键更新", en: "Update" },
+  "update.downloading": { zh: "下载中...", en: "Downloading..." },
+  "update.viewRelease": { zh: "查看发布页", en: "View Release" },
+  "update.skipVersion": { zh: "跳过此版本", en: "Skip" },
+  "update.dismiss": { zh: "忽略本次更新提示", en: "Dismiss update prompt" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

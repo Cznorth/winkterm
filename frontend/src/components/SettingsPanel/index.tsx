@@ -24,6 +24,53 @@ interface Settings {
   theme: string;
 }
 
+interface UpdateInfo {
+  current_version: string;
+  latest_version: string;
+  update_available: boolean;
+  release_url: string;
+  release_notes: string;
+  asset_name: string;
+  asset_size: number;
+  platform_supported: boolean;
+  error?: string;
+}
+
+interface UpdateJob {
+  job_id: string;
+  status: string;
+  done: boolean;
+  downloaded: number;
+  total: number;
+  speed: number;
+  progress: number;
+  error?: string;
+}
+
+const summarizeReleaseNotes = (notes: string) => (
+  notes
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .slice(0, 6)
+);
+
+const isDesktopRuntime = () => (
+  typeof window !== "undefined" && !!window.pywebview?.api
+);
+
+const formatBytes = (bytes: number) => {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
+};
+
 const SettingsIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3" />
@@ -122,6 +169,11 @@ export default function SettingsPanel() {
   const [memoryMdSaved, setMemoryMdSaved] = useState(false);
   const [savingAgentsMd, setSavingAgentsMd] = useState(false);
   const [savingMemoryMd, setSavingMemoryMd] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateJob, setUpdateJob] = useState<UpdateJob | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   const copyToClipboard = (text: string) => {
     if (navigator.clipboard?.writeText) {
@@ -210,6 +262,12 @@ export default function SettingsPanel() {
     return () => {
       streamAbortRef.current?.abort();
     };
+  }, []);
+
+  useEffect(() => {
+    setIsDesktop(isDesktopRuntime());
+    const timer = window.setTimeout(() => setIsDesktop(isDesktopRuntime()), 300);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const testModel = settings.selected_model || settings.models?.[0]?.id || "";
@@ -388,6 +446,52 @@ export default function SettingsPanel() {
     } finally {
       setSavingMemoryMd(false);
     }
+  };
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const res = await axios.get("/api/app/update/check");
+      setUpdateInfo(res.data);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!updateInfo) return;
+    if (!updateInfo.platform_supported) {
+      window.open(updateInfo.release_url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setInstallingUpdate(true);
+    setUpdateJob(null);
+    try {
+      const res = await axios.post("/api/app/update/install");
+      const jobId = res.data?.job_id;
+      if (!jobId) {
+        setInstallingUpdate(false);
+        return;
+      }
+      const timer = window.setInterval(async () => {
+        const jobRes = await axios.get(`/api/app/update/install/${jobId}`);
+        const job = jobRes.data as UpdateJob;
+        setUpdateJob(job);
+        if (job.done) {
+          window.clearInterval(timer);
+          setInstallingUpdate(false);
+        }
+      }, 500);
+    } catch {
+      setInstallingUpdate(false);
+    }
+  };
+
+  const handleSkipUpdate = () => {
+    if (updateInfo?.latest_version) {
+      localStorage.setItem("winkterm-skip-update-version", updateInfo.latest_version);
+    }
+    setUpdateInfo(null);
   };
 
   const hasModels = (settings.models?.length ?? 0) > 0;
@@ -854,6 +958,102 @@ export default function SettingsPanel() {
               <line x1="12" y1="8" x2="12.01" y2="8" />
             </svg>
             {t("settings.about")}
+          </div>
+          <div className="settings-field">
+            <label className="settings-label">{t("settings.version")}</label>
+            <div className="settings-update-row">
+              <span className="settings-version">
+                {updateInfo?.current_version || "0.3.0"}
+              </span>
+              <button
+                className="settings-btn settings-btn-secondary"
+                onClick={handleCheckUpdate}
+                disabled={checkingUpdate}
+              >
+                {checkingUpdate ? (
+                  <>
+                    <span className="settings-spinner" />
+                    {t("settings.checkingUpdate")}
+                  </>
+                ) : (
+                  <>
+                    <RefreshIcon />
+                    {t("settings.checkUpdate")}
+                  </>
+                )}
+              </button>
+            </div>
+            {updateInfo && (
+              <div className={updateInfo.update_available ? "settings-update-available" : "settings-help"}>
+                {updateInfo.error ? (
+                  updateInfo.error
+                ) : updateInfo.update_available ? (
+                  <>
+                    {t("settings.updateAvailable")} {updateInfo.latest_version}
+                    <ul className="settings-update-notes">
+                      {summarizeReleaseNotes(updateInfo.release_notes).map((line) => (
+                        <li key={line}>{line.replace(/^- /, "")}</li>
+                      ))}
+                    </ul>
+                    {installingUpdate && (
+                      <div className="settings-update-progress">
+                        <div>
+                          <span>{updateJob?.progress || 0}%</span>
+                          <span>{updateJob?.status || "downloading"}</span>
+                        </div>
+                        <progress max={100} value={updateJob?.progress || 0} />
+                        <div>
+                          <span>
+                            {formatBytes(updateJob?.downloaded || 0)} / {formatBytes(updateJob?.total || updateInfo.asset_size || 0)}
+                          </span>
+                          <span>{formatBytes(updateJob?.speed || 0)}/s</span>
+                        </div>
+                      </div>
+                    )}
+                    {updateJob?.error && (
+                      <div className="settings-error" style={{ marginTop: "8px" }}>
+                        <span className="settings-error-icon"><ErrorIcon /></span>
+                        {updateJob.error}
+                      </div>
+                    )}
+                    {isDesktop ? (
+                      <button
+                        className="settings-btn settings-btn-primary settings-btn-full"
+                        onClick={handleInstallUpdate}
+                        disabled={installingUpdate}
+                        style={{ marginTop: "8px" }}
+                      >
+                        {installingUpdate ? (
+                          <>
+                            <span className="settings-spinner" />
+                            {t("settings.downloadingUpdate")}
+                          </>
+                        ) : (
+                          t("settings.installUpdate")
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        className="settings-btn settings-btn-primary settings-btn-full"
+                        onClick={() => window.open(updateInfo.release_url, "_blank", "noopener,noreferrer")}
+                        style={{ marginTop: "8px" }}
+                      >
+                        {t("settings.viewRelease")}
+                      </button>
+                    )}
+                    <button
+                      className="settings-btn settings-btn-secondary settings-btn-full"
+                      onClick={handleSkipUpdate}
+                      style={{ marginTop: "8px" }}
+                    >
+                      {t("settings.skipUpdateVersion")}
+                    </button>
+                  </>
+                ) : (
+                  t("settings.noUpdate")
+                )}
+              </div>
+            )}
           </div>
           <a
             className="settings-btn settings-btn-secondary settings-btn-full"

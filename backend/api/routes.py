@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import logging
+import os
+import platform
+import re
+import subprocess
+import threading
+import time
+import uuid
 import webbrowser
 import httpx
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Literal, Optional
 
 logger = logging.getLogger("routes")
@@ -21,6 +29,9 @@ from backend.agent.tools.terminal_legacy import get_terminal_context_raw
 from backend.config import UserConfig, AgentDocs, settings
 
 router = APIRouter()
+APP_VERSION = "0.3.0"
+GITHUB_RELEASES_API = "https://api.github.com/repos/Cznorth/winkterm/releases/latest"
+_update_jobs: dict[str, dict[str, Any]] = {}
 
 # In-memory analysis history (should be persisted to a database in production)
 _analysis_history: list[dict[str, Any]] = []
@@ -69,10 +80,171 @@ class StreamTestRequest(BaseModel):
     model: str = ""
 
 
+def _parse_version(version: str) -> tuple[int, ...]:
+    parts = re.findall(r"\d+", version.lstrip("v"))
+    return tuple(int(part) for part in parts[:3]) if parts else (0,)
+
+
+def _platform_asset_name() -> str | None:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system == "darwin":
+        return "WinkTerm-macOS-arm64.dmg" if "arm" in machine or "aarch64" in machine else "WinkTerm-macOS-x64.dmg"
+    if system == "windows":
+        return "WinkTerm-Windows-x64.msi"
+    return None
+
+
+async def _fetch_latest_release() -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, trust_env=False) as client:
+        resp = await client.get(GITHUB_RELEASES_API, headers={"Accept": "application/vnd.github+json"})
+        resp.raise_for_status()
+        return resp.json()
+
+
+def _open_path(path: Path) -> None:
+    system = platform.system().lower()
+    if system == "darwin":
+        subprocess.Popen(["open", str(path)])
+    elif system == "windows":
+        os.startfile(str(path))  # type: ignore[attr-defined]
+    else:
+        subprocess.Popen(["xdg-open", str(path)])
+
+
+def _run_update_download(job_id: str, url: str, target: Path, version: str, total: int) -> None:
+    job = _update_jobs[job_id]
+    try:
+        downloaded = 0
+        started_at = time.monotonic()
+        with httpx.stream("GET", url, timeout=120.0, follow_redirects=True, trust_env=False) as resp:
+            resp.raise_for_status()
+            actual_total = int(resp.headers.get("content-length") or total or 0)
+            job["total"] = actual_total
+            with target.open("wb") as fh:
+                for chunk in resp.iter_bytes():
+                    if not chunk:
+                        continue
+                    fh.write(chunk)
+                    downloaded += len(chunk)
+                    elapsed = max(time.monotonic() - started_at, 0.001)
+                    job["downloaded"] = downloaded
+                    job["speed"] = round(downloaded / elapsed)
+                    job["progress"] = round(downloaded / actual_total * 100) if actual_total else 0
+        job.update({
+            "status": "opening",
+            "downloaded": downloaded,
+            "speed": 0,
+            "progress": 100,
+            "path": str(target),
+        })
+        _open_path(target)
+        job.update({"status": "done", "done": True, "version": version})
+    except Exception as e:
+        logger.warning("Update download failed: %s", e)
+        job.update({"status": "error", "done": True, "error": str(e)})
+
+
 @router.get("/settings")
 async def get_settings() -> dict:
     """Return settings with API keys masked."""
     return UserConfig.get_masked()
+
+
+@router.get("/app/update/check")
+async def check_update() -> dict:
+    """Check GitHub Releases for a newer WinkTerm build."""
+    try:
+        release = await _fetch_latest_release()
+    except Exception as e:
+        logger.warning("Update check failed: %s", e)
+        return {
+            "current_version": APP_VERSION,
+            "latest_version": APP_VERSION,
+            "update_available": False,
+            "error": str(e),
+        }
+
+    tag = str(release.get("tag_name") or "")
+    latest_version = tag.lstrip("v") or APP_VERSION
+    asset_name = _platform_asset_name()
+    assets = release.get("assets") or []
+    asset = next((item for item in assets if item.get("name") == asset_name), None)
+
+    return {
+        "current_version": APP_VERSION,
+        "latest_version": latest_version,
+        "update_available": _parse_version(latest_version) > _parse_version(APP_VERSION),
+        "release_url": release.get("html_url") or "",
+        "release_notes": release.get("body") or "",
+        "asset_name": asset_name or "",
+        "asset_url": asset.get("browser_download_url") if asset else "",
+        "asset_size": asset.get("size") if asset else 0,
+        "platform_supported": asset is not None,
+    }
+
+
+@router.post("/app/update/install")
+async def install_update(request: Request) -> dict:
+    """Start downloading the latest platform package and open it when ready."""
+    from backend.api.auth_routes import is_local_request
+    if not is_local_request(request):
+        raise HTTPException(status_code=403, detail="仅本机桌面客户端可触发安装包打开")
+
+    release = await _fetch_latest_release()
+    asset_name = _platform_asset_name()
+    if not asset_name:
+        raise HTTPException(status_code=400, detail="当前平台暂不支持一键更新")
+
+    assets = release.get("assets") or []
+    asset = next((item for item in assets if item.get("name") == asset_name), None)
+    if not asset:
+        raise HTTPException(status_code=404, detail="未找到适用于当前平台的安装包")
+
+    tag = str(release.get("tag_name") or "latest")
+    url = asset.get("browser_download_url")
+    if not url:
+        raise HTTPException(status_code=404, detail="安装包下载地址不存在")
+
+    downloads = Path.home() / "Downloads"
+    downloads.mkdir(parents=True, exist_ok=True)
+    target = downloads / f"WinkTerm-{tag}-{asset_name}"
+
+    job_id = uuid.uuid4().hex
+    _update_jobs[job_id] = {
+        "job_id": job_id,
+        "status": "downloading",
+        "done": False,
+        "version": tag.lstrip("v"),
+        "asset_name": asset_name,
+        "downloaded": 0,
+        "total": int(asset.get("size") or 0),
+        "speed": 0,
+        "progress": 0,
+        "path": str(target),
+        "error": "",
+    }
+    threading.Thread(
+        target=_run_update_download,
+        args=(job_id, url, target, tag.lstrip("v"), int(asset.get("size") or 0)),
+        daemon=True,
+    ).start()
+
+    return {
+        "success": True,
+        "job_id": job_id,
+        "version": tag.lstrip("v"),
+        "message": "安装包开始下载。",
+    }
+
+
+@router.get("/app/update/install/{job_id}")
+async def get_update_install_job(job_id: str) -> dict:
+    """Return download progress for an update install job."""
+    job = _update_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="更新任务不存在")
+    return job
 
 
 @router.get("/settings/token/reveal")

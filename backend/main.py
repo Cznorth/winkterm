@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import settings
-from backend.api.routes import router as http_router
+from backend.api.routes import APP_VERSION, router as http_router
 from backend.api.ws_routes import router as ws_router
 from backend.api.ssh_routes import router as ssh_router
 from backend.api.agent_routes import router as agent_router, public_router as agent_public_router
@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="WinkTerm API",
     description="AI + Terminal human-machine unified operations tool",
-    version="0.3.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -71,7 +71,7 @@ app.include_router(sessions_router)
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "version": "0.3.0"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
 @app.post("/exit", dependencies=[Depends(require_web_auth)])
