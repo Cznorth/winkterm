@@ -14,8 +14,18 @@ from fastapi import WebSocket, WebSocketDisconnect
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.agent.factory import get_agent
+from backend.agent.codex_provider import stream_codex_response
+from backend.agent.codex_protocol import (
+    CodexStreamParser,
+    append_tool_round_trip,
+    codex_input_from_messages,
+    normalize_function_call_item,
+)
 from backend.agent.core.approval import cancel_all as cancel_all_approvals, resolve_approval
+from backend.agent.core.approval import request_approval
 from backend.agent.core.state import AgentState
+from backend.agent.registry.loader import AgentRegistry
+from backend.agent.tools import get_tools
 from backend.agent.tools.terminal_legacy import get_terminal_context_raw
 from backend.api import chat_store
 from backend.config import UserConfig, settings
@@ -25,6 +35,24 @@ if TYPE_CHECKING:
     from langgraph.graph import CompiledGraph
 
 logger = logging.getLogger("ws_chat")
+
+
+def _codex_tool_schema(tool: Any) -> dict:
+    schema = tool.args_schema.model_json_schema() if getattr(tool, "args_schema", None) else {
+        "type": "object",
+        "properties": {},
+    }
+    schema.pop("title", None)
+    schema.setdefault("type", "object")
+    schema.setdefault("properties", {})
+    schema.setdefault("required", [])
+    schema["additionalProperties"] = False
+    return {
+        "type": "function",
+        "name": tool.name,
+        "description": getattr(tool, "description", "") or tool.name,
+        "parameters": schema,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -348,87 +376,221 @@ class ChatWSHandler:
                 last_persist_len = len(collected_content)
 
         try:
-            async for event in agent.astream_events(state, config=config, version="v2"):
-                # Check the stop flag
-                if self._stop_requested:
-                    logger.info("[CHAT] 用户请求停止")
-                    await _broadcast(conv_id, {"type": "stopped"})
-                    break
+            user_config = UserConfig.load()
+            if user_config.get("api_format") == "codex":
+                model_name = user_config.get("selected_model") or settings.effective_model
+                agent_config = AgentRegistry().get(agent_key)
+                instructions = agent_config.load_prompt(lang="en") if agent_config else ""
+                if terminal_output:
+                    instructions += f"\n\nTERMINAL CONTEXT:\n{terminal_output}"
 
-                event_type = event.get("event", "")
+                codex_tool_list = get_tools(agent_config.tool_modules if agent_config else [])
+                codex_tool_map = {tool.name: tool for tool in codex_tool_list}
+                codex_tool_schemas = [_codex_tool_schema(tool) for tool in codex_tool_list]
+                codex_input = codex_input_from_messages(messages)
 
-                # LLM streaming output
-                if event_type == "on_chat_model_stream":
-                    chunk = event.get("data", {}).get("chunk")
-                    if chunk and hasattr(chunk, "content"):
-                        content = chunk.content
-                        # content may be a string or list[dict]
-                        if isinstance(content, str):
-                            await _on_text(content)
-                        elif isinstance(content, list):
-                            for part in content:
-                                if isinstance(part, dict):
-                                    part_type = part.get("type", "text")
-                                    if part_type == "thinking":
-                                        thinking_text = part.get("thinking", "")
-                                        if thinking_text:
-                                            stream["thinking"] += thinking_text
-                                            await _broadcast(conv_id, {"type": "thinking", "content": thinking_text})
-                                    elif part_type == "text":
-                                        await _on_text(part.get("text", ""))
-                                    else:
-                                        await _on_text(part.get("text", "") or part.get("content", ""))
-                                elif isinstance(part, str):
-                                    await _on_text(part)
+                for _ in range(settings.agent_recursion_limit):
+                    parser = CodexStreamParser()
+                    announced_tools: set[str] = set()
+                    async for event in stream_codex_response(
+                        instructions=instructions,
+                        input_items=codex_input,
+                        model=model_name or "gpt-5.5",
+                        tools=codex_tool_schemas,
+                    ):
+                        if self._stop_requested:
+                            logger.info("[CHAT] 用户请求停止")
+                            await _broadcast(conv_id, {"type": "stopped"})
+                            break
 
-                # Tool call
-                elif event_type == "on_tool_start":
-                    tool_name = event.get("name", "unknown")
-                    tool_args = event.get("data", {}).get("input", {})
-                    logger.debug(f"[TOOL_START] {tool_name}, args: {tool_args}")
-                    stream["blocks"].append({
-                        "type": "tool",
-                        "toolCall": {
+                        kind = event.get("type")
+                        if kind == "response.output_text.delta":
+                            await _on_text(str(event.get("delta") or ""))
+                        elif kind == "response.refusal.delta":
+                            await _on_text(str(event.get("delta") or ""))
+                        elif kind in (
+                            "response.output_item.added",
+                            "response.output_item.created",
+                        ):
+                            item = event.get("item") or {}
+                            if item.get("type") == "function_call":
+                                call = normalize_function_call_item(item)
+                                call_id = str(call.get("call_id") or "")
+                                if call_id and call_id not in announced_tools:
+                                    announced_tools.add(call_id)
+                                    raw_args = call.get("arguments") or "{}"
+                                    try:
+                                        tool_args = (
+                                            json.loads(raw_args)
+                                            if isinstance(raw_args, str)
+                                            else raw_args
+                                        )
+                                    except Exception:
+                                        tool_args = {}
+                                    await _broadcast(conv_id, {
+                                        "type": "tool_start",
+                                        "tool": call.get("name", ""),
+                                        "args": tool_args if isinstance(tool_args, dict) else {},
+                                    })
+                        parser.feed(event)
+
+                    if self._stop_requested:
+                        break
+
+                    stream_result = parser.result()
+                    tool_calls = stream_result.tool_calls
+                    if not tool_calls:
+                        break
+
+                    for call in tool_calls:
+                        tool_name = call.get("name", "")
+                        raw_args = call.get("arguments") or "{}"
+                        try:
+                            tool_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                        except Exception:
+                            tool_args = {}
+
+                        tool_func = codex_tool_map.get(tool_name)
+                        if tool_func is None:
+                            tool_result = f"Tool {tool_name} does not exist."
+                        else:
+                            approved = True
+                            if ask_mode:
+                                approved = await request_approval(_approval_emit, tool_name, tool_args)
+                            if not approved:
+                                tool_result = "Skipped: the user denied this tool call."
+                            else:
+                                stream["blocks"].append({
+                                    "type": "tool",
+                                    "toolCall": {
+                                        "tool": tool_name,
+                                        "args": tool_args,
+                                        "status": "running",
+                                    },
+                                })
+                                call_id = str(call.get("call_id") or "")
+                                if call_id not in announced_tools:
+                                    await _broadcast(conv_id, {
+                                        "type": "tool_start",
+                                        "tool": tool_name,
+                                        "args": tool_args,
+                                    })
+                                try:
+                                    raw_result = await tool_func.ainvoke(tool_args)
+                                except Exception as e:
+                                    raw_result = f"工具执行错误: {e}"
+                                    logger.exception(f"[TOOL] Codex tool failed: {tool_name}")
+                                if isinstance(raw_result, str):
+                                    tool_result = raw_result
+                                else:
+                                    try:
+                                        tool_result = json.dumps(raw_result, ensure_ascii=False, default=str)
+                                    except Exception:
+                                        tool_result = str(raw_result)
+                                if len(tool_result) > 5000:
+                                    tool_result = tool_result[:5000] + "...(已截断)"
+                                for block in stream["blocks"]:
+                                    if (
+                                        block.get("type") == "tool"
+                                        and block["toolCall"].get("tool") == tool_name
+                                        and block["toolCall"].get("status") == "running"
+                                    ):
+                                        block["toolCall"]["status"] = "done"
+                                        block["toolCall"]["result"] = tool_result
+                                        break
+                                await _broadcast(conv_id, {
+                                    "type": "tool_end",
+                                    "tool": tool_name,
+                                    "result": tool_result,
+                                })
+
+                        append_tool_round_trip(
+                            codex_input,
+                            function_call=call,
+                            output=tool_result,
+                        )
+            else:
+                async for event in agent.astream_events(state, config=config, version="v2"):
+                    # Check the stop flag
+                    if self._stop_requested:
+                        logger.info("[CHAT] 用户请求停止")
+                        await _broadcast(conv_id, {"type": "stopped"})
+                        break
+
+                    event_type = event.get("event", "")
+
+                    # LLM streaming output
+                    if event_type == "on_chat_model_stream":
+                        chunk = event.get("data", {}).get("chunk")
+                        if chunk and hasattr(chunk, "content"):
+                            content = chunk.content
+                            # content may be a string or list[dict]
+                            if isinstance(content, str):
+                                await _on_text(content)
+                            elif isinstance(content, list):
+                                for part in content:
+                                    if isinstance(part, dict):
+                                        part_type = part.get("type", "text")
+                                        if part_type == "thinking":
+                                            thinking_text = part.get("thinking", "")
+                                            if thinking_text:
+                                                stream["thinking"] += thinking_text
+                                                await _broadcast(conv_id, {"type": "thinking", "content": thinking_text})
+                                        elif part_type == "text":
+                                            await _on_text(part.get("text", ""))
+                                        else:
+                                            await _on_text(part.get("text", "") or part.get("content", ""))
+                                    elif isinstance(part, str):
+                                        await _on_text(part)
+
+                    # Tool call
+                    elif event_type == "on_tool_start":
+                        tool_name = event.get("name", "unknown")
+                        tool_args = event.get("data", {}).get("input", {})
+                        logger.debug(f"[TOOL_START] {tool_name}, args: {tool_args}")
+                        stream["blocks"].append({
+                            "type": "tool",
+                            "toolCall": {
+                                "tool": tool_name,
+                                "args": tool_args,
+                                "status": "running",
+                            },
+                        })
+                        await _broadcast(conv_id, {
+                            "type": "tool_start",
                             "tool": tool_name,
                             "args": tool_args,
-                            "status": "running",
-                        },
-                    })
-                    await _broadcast(conv_id, {
-                        "type": "tool_start",
-                        "tool": tool_name,
-                        "args": tool_args,
-                    })
+                        })
 
-                elif event_type == "on_tool_end":
-                    tool_name = event.get("name", "unknown")
-                    raw = event.get("data", {}).get("output", "")
-                    if hasattr(raw, "content"):
-                        tool_result = raw.content
-                    elif isinstance(raw, (dict, list)):
-                        try:
-                            tool_result = json.dumps(raw, ensure_ascii=False, default=str)
-                        except Exception:
-                            tool_result = str(raw)
-                    else:
-                        tool_result = str(raw) if raw is not None else ""
-                    if isinstance(tool_result, str) and len(tool_result) > 5000:
-                        tool_result = tool_result[:5000] + "...(已截断)"
-                    logger.debug(f"[TOOL_END] {tool_name}, result_len={len(tool_result) if isinstance(tool_result, str) else 'n/a'}")
-                    for b in stream["blocks"]:
-                        if (
-                            b.get("type") == "tool"
-                            and b["toolCall"].get("tool") == tool_name
-                            and b["toolCall"].get("status") == "running"
-                        ):
-                            b["toolCall"]["status"] = "done"
-                            b["toolCall"]["result"] = tool_result
-                            break
-                    await _broadcast(conv_id, {
-                        "type": "tool_end",
-                        "tool": tool_name,
-                        "result": tool_result,
-                    })
+                    elif event_type == "on_tool_end":
+                        tool_name = event.get("name", "unknown")
+                        raw = event.get("data", {}).get("output", "")
+                        if hasattr(raw, "content"):
+                            tool_result = raw.content
+                        elif isinstance(raw, (dict, list)):
+                            try:
+                                tool_result = json.dumps(raw, ensure_ascii=False, default=str)
+                            except Exception:
+                                tool_result = str(raw)
+                        else:
+                            tool_result = str(raw) if raw is not None else ""
+                        if isinstance(tool_result, str) and len(tool_result) > 5000:
+                            tool_result = tool_result[:5000] + "...(已截断)"
+                        logger.debug(f"[TOOL_END] {tool_name}, result_len={len(tool_result) if isinstance(tool_result, str) else 'n/a'}")
+                        for b in stream["blocks"]:
+                            if (
+                                b.get("type") == "tool"
+                                and b["toolCall"].get("tool") == tool_name
+                                and b["toolCall"].get("status") == "running"
+                            ):
+                                b["toolCall"]["status"] = "done"
+                                b["toolCall"]["result"] = tool_result
+                                break
+                        await _broadcast(conv_id, {
+                            "type": "tool_end",
+                            "tool": tool_name,
+                            "result": tool_result,
+                        })
 
             # Normal end: add the AI reply to the store
             if collected_content and not self._stop_requested:

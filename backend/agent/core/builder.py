@@ -11,6 +11,12 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langgraph.graph import END, StateGraph
 
+from backend.agent.codex_provider import stream_codex_response
+from backend.agent.codex_protocol import (
+    CodexStreamParser,
+    codex_input_from_messages,
+    tool_calls_to_ai_message,
+)
 from backend.agent.core.approval import request_approval
 from backend.agent.core.state import AgentState
 from backend.config import settings, UserConfig
@@ -84,6 +90,24 @@ def _render_user_docs() -> str:
     return out
 
 
+def _codex_tool_schema(tool) -> dict:
+    schema = tool.args_schema.model_json_schema() if getattr(tool, "args_schema", None) else {
+        "type": "object",
+        "properties": {},
+    }
+    schema.pop("title", None)
+    schema.setdefault("type", "object")
+    schema.setdefault("properties", {})
+    schema.setdefault("required", [])
+    schema["additionalProperties"] = False
+    return {
+        "type": "function",
+        "name": tool.name,
+        "description": getattr(tool, "description", "") or tool.name,
+        "parameters": schema,
+    }
+
+
 class AgentBuilder:
     """Agent builder, responsible for assembling and compiling the StateGraph."""
 
@@ -126,7 +150,8 @@ class AgentBuilder:
         return bound
 
     async def _llm_call(self, state: AgentState) -> AgentState:
-        llm = self._build_llm()
+        user_config = UserConfig.load()
+        api_format = user_config.get("api_format", "openai")
         messages = list(state["messages"])
 
         # Re-render the system prompt each round (terminal list refreshed live)
@@ -155,7 +180,27 @@ class AgentBuilder:
         else:
             messages = [SystemMessage(content=system_content)] + messages
 
-        response: AIMessage = await llm.ainvoke(messages)
+        if api_format == "codex":
+            selected_model = user_config.get("selected_model")
+            model_name = selected_model or (
+                settings.effective_model if self.model == "default" else self.model
+            )
+            parser = CodexStreamParser()
+            async for event in stream_codex_response(
+                instructions=system_content,
+                input_items=codex_input_from_messages(messages),
+                model=model_name or "gpt-5.5",
+                tools=[_codex_tool_schema(tool) for tool in self.tools],
+            ):
+                parser.feed(event)
+            stream_result = parser.result()
+            response = tool_calls_to_ai_message(
+                stream_result.text,
+                stream_result.tool_calls,
+            )
+        else:
+            llm = self._build_llm()
+            response: AIMessage = await llm.ainvoke(messages)
 
         logger.debug(
             f"[{self.name}] 响应: {response.content[:200] if response.content else '空'}"
