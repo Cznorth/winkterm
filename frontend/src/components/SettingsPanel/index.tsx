@@ -11,10 +11,19 @@ import "./SettingsPanel.css";
 interface ModelInfo {
   id: string;
   name: string;
+  provider?: string;
+}
+
+type CandidateStatus = "unknown" | "testing" | "ok" | "failed";
+
+interface CandidateModel extends ModelInfo {
+  selected: boolean;
+  status: CandidateStatus;
+  error?: string;
 }
 
 interface Settings {
-  api_format: "openai" | "anthropic";
+  api_format: "openai" | "anthropic" | "codex";
   base_url: string;
   api_key: string;
   models: ModelInfo[];
@@ -45,6 +54,18 @@ interface UpdateJob {
   speed: number;
   progress: number;
   error?: string;
+}
+
+interface CodexStatus {
+  installed: boolean;
+  logged_in: boolean;
+  message: string;
+  oauth?: {
+    active: boolean;
+    state: string;
+    message: string;
+    auth_url?: string;
+  };
 }
 
 const summarizeReleaseNotes = (notes: string) => (
@@ -154,6 +175,7 @@ export default function SettingsPanel() {
   const [newModelName, setNewModelName] = useState("");
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [candidateModels, setCandidateModels] = useState<CandidateModel[]>([]);
   const [saved, setSaved] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
@@ -174,6 +196,9 @@ export default function SettingsPanel() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
+  const [codexLoggingIn, setCodexLoggingIn] = useState(false);
+  const [codexAuthUrl, setCodexAuthUrl] = useState("");
 
   const copyToClipboard = (text: string) => {
     if (navigator.clipboard?.writeText) {
@@ -253,6 +278,33 @@ export default function SettingsPanel() {
     });
   }, []);
 
+  const refreshCodexStatus = async () => {
+    const res = await axios.get("/api/codex/status");
+    setCodexStatus(res.data);
+  };
+
+  useEffect(() => {
+    refreshCodexStatus().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!codexLoggingIn) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await axios.get("/api/codex/status");
+        const next = res.data as CodexStatus;
+        setCodexStatus(next);
+        if (next.logged_in || next.oauth?.state === "error") {
+          setCodexLoggingIn(false);
+          window.clearInterval(timer);
+        }
+      } catch {
+        /* keep polling while the auth window is active */
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [codexLoggingIn]);
+
   useEffect(() => {
     axios.get("/api/settings/agents-md").then((res) => setAgentsMd(res.data.content || "")).catch(() => {});
     axios.get("/api/settings/memory-md").then((res) => setMemoryMd(res.data.content || "")).catch(() => {});
@@ -271,9 +323,70 @@ export default function SettingsPanel() {
   }, []);
 
   const testModel = settings.selected_model || settings.models?.[0]?.id || "";
+  const isCodexMode = settings.api_format === "codex";
+  const providerLabel = settings.api_format === "codex" ? "codex" : settings.api_format;
+  const candidateStatusLabel = (status: CandidateStatus) => {
+    if (status === "testing") return t("settings.modelStatusTesting");
+    if (status === "ok") return t("settings.modelStatusOk");
+    if (status === "failed") return t("settings.modelStatusFailed");
+    return t("settings.modelStatusUnknown");
+  };
+
+  const testModelAvailability = async (modelId: string) => {
+    const baseUrl = getApiBaseUrl() || (typeof window !== "undefined" ? window.location.origin : "");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const accessKey = getAccessKey();
+    if (accessKey) headers["X-Access-Key"] = accessKey;
+
+    const resp = await fetch(`${baseUrl}/api/models/stream-test`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        base_url: settings.base_url,
+        api_key: settings.api_key,
+        api_format: settings.api_format,
+        model: modelId,
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+
+    const reader = resp.body?.getReader();
+    if (!reader) throw new Error("No response body");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let error = "";
+    let done = false;
+
+    while (true) {
+      const { done: streamDone, value } = await reader.read();
+      if (streamDone) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6)) as { type: string; message?: string };
+          if (data.type === "error") error = data.message || t("settings.streamTestFailed");
+          if (data.type === "done") done = true;
+        } catch {
+          /* ignore malformed SSE lines */
+        }
+      }
+    }
+
+    if (error) throw new Error(error);
+    if (!done) throw new Error(t("settings.streamTestFailed"));
+  };
 
   const handleStreamTest = async () => {
-    if (!settings.base_url || !settings.api_key) return;
+    if (!isCodexMode && (!settings.base_url || !settings.api_key)) return;
     if (!testModel) {
       setStreamError(t("settings.streamTestNeedModel"));
       setStreamSuccess(false);
@@ -366,7 +479,7 @@ export default function SettingsPanel() {
   };
 
   const handleFetchModels = async () => {
-    if (!settings.base_url || !settings.api_key) return;
+    if (!isCodexMode && (!settings.base_url || !settings.api_key)) return;
     setFetching(true);
     setFetchError("");
     try {
@@ -385,11 +498,12 @@ export default function SettingsPanel() {
         return;
       }
       const existingIds = new Set((settings.models || []).map(m => m.id));
-      const newModels = fetched.filter(m => !existingIds.has(m.id));
-      setSettings(prev => ({
-        ...prev,
-        models: [...(prev.models || []), ...newModels],
-      }));
+      setCandidateModels(fetched.map((m) => ({
+        ...m,
+        provider: m.provider || providerLabel,
+        selected: !existingIds.has(m.id),
+        status: "unknown",
+      })));
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
       setFetchError(err.response?.data?.detail || t("settings.fetchFailed"));
@@ -398,11 +512,30 @@ export default function SettingsPanel() {
     }
   };
 
+  const handleCodexLogin = async () => {
+    setCodexLoggingIn(true);
+    try {
+      const res = await axios.post("/api/codex/oauth/start", { open_browser: false });
+      const authUrl = res.data.auth_url || "";
+      setCodexAuthUrl(authUrl);
+      if (authUrl) {
+        window.open(authUrl, "_blank", "noopener,noreferrer");
+      }
+      await refreshCodexStatus().catch(() => {});
+    } catch {
+      setCodexLoggingIn(false);
+    }
+  };
+
   const handleAddModel = () => {
     if (!newModelId.trim()) return;
     setSettings(prev => ({
       ...prev,
-      models: [...(prev.models || []), { id: newModelId.trim(), name: newModelName.trim() || newModelId.trim() }],
+      models: [...(prev.models || []), {
+        id: newModelId.trim(),
+        name: newModelName.trim() || newModelId.trim(),
+        provider: providerLabel,
+      }],
     }));
     setNewModelId("");
     setNewModelName("");
@@ -412,7 +545,69 @@ export default function SettingsPanel() {
     setSettings(prev => ({
       ...prev,
       models: (prev.models || []).filter(m => m.id !== id),
+      selected_model: prev.selected_model === id ? "" : prev.selected_model,
     }));
+  };
+
+  const handleClearModels = () => {
+    setSettings(prev => ({ ...prev, models: [], selected_model: "" }));
+  };
+
+  const mergeModels = (models: ModelInfo[]) => {
+    setSettings(prev => {
+      const existing = new Set((prev.models || []).map(m => m.id));
+      const additions = models.filter(m => !existing.has(m.id));
+      return { ...prev, models: [...(prev.models || []), ...additions] };
+    });
+  };
+
+  const handleToggleCandidate = (id: string) => {
+    setCandidateModels(prev => prev.map(m => (
+      m.id === id ? { ...m, selected: !m.selected } : m
+    )));
+  };
+
+  const handleSelectAllCandidates = () => {
+    const allSelected = candidateModels.every(m => m.selected);
+    setCandidateModels(prev => prev.map(m => ({ ...m, selected: !allSelected })));
+  };
+
+  const handleTestCandidate = async (id: string) => {
+    setCandidateModels(prev => prev.map(m => (
+      m.id === id ? { ...m, status: "testing", error: "" } : m
+    )));
+    try {
+      await testModelAvailability(id);
+      setCandidateModels(prev => prev.map(m => (
+        m.id === id ? { ...m, status: "ok", error: "" } : m
+      )));
+    } catch (e: unknown) {
+      setCandidateModels(prev => prev.map(m => (
+        m.id === id ? { ...m, status: "failed", error: (e as Error).message } : m
+      )));
+    }
+  };
+
+  const handleTestCandidates = async () => {
+    for (const model of candidateModels.filter(m => m.selected)) {
+      await handleTestCandidate(model.id);
+    }
+  };
+
+  const handleAddSelectedCandidates = () => {
+    mergeModels(candidateModels.filter(m => m.selected).map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: m.provider,
+    })));
+  };
+
+  const handleAddAvailableCandidates = () => {
+    mergeModels(candidateModels.filter(m => m.status === "ok").map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider: m.provider,
+    })));
   };
 
   const handleSave = async () => {
@@ -515,45 +710,94 @@ export default function SettingsPanel() {
             <select
               className="settings-select"
               value={settings.api_format}
-              onChange={(e) => setSettings({ ...settings, api_format: e.target.value as "openai" | "anthropic" })}
+              onChange={(e) => setSettings({ ...settings, api_format: e.target.value as "openai" | "anthropic" | "codex" })}
             >
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
+              <option value="codex">Codex OAuth</option>
             </select>
           </div>
 
-          <div className="settings-field">
-            <label className="settings-label">{t("settings.baseUrl")}</label>
-            <input
-              type="text"
-              className="settings-input"
-              value={settings.base_url}
-              onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
-              placeholder={settings.api_format === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
-            />
-            <div className="settings-help">
-              {settings.api_format === "openai"
-                ? t("settings.openaiHelp")
-                : t("settings.anthropicHelp")}
+          {isCodexMode ? (
+            <div className="settings-field">
+              <label className="settings-label">{t("settings.codexLogin")}</label>
+              <div className={codexStatus?.logged_in ? "settings-success" : "settings-help"}>
+                {codexStatus
+                  ? codexStatus.oauth?.message || codexStatus.message || (codexStatus.logged_in ? t("settings.codexLoggedIn") : t("settings.codexNotLoggedIn"))
+                  : t("settings.fetching")}
+              </div>
+              {codexAuthUrl && codexLoggingIn && (
+                <a
+                  className="settings-help"
+                  href={codexAuthUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: "block", marginTop: "8px" }}
+                >
+                  {t("settings.codexOpenAuth")}
+                </a>
+              )}
+              <div className="settings-inline-actions" style={{ marginTop: "8px" }}>
+                <button
+                  className="settings-btn settings-btn-secondary settings-btn-full"
+                  onClick={refreshCodexStatus}
+                >
+                  <RefreshIcon />
+                  {t("settings.codexCheckStatus")}
+                </button>
+                <button
+                  className="settings-btn settings-btn-primary settings-btn-full"
+                  onClick={handleCodexLogin}
+                  disabled={codexLoggingIn}
+                >
+                  {codexLoggingIn ? (
+                    <>
+                      <span className="settings-spinner" />
+                      {t("settings.codexLoggingIn")}
+                    </>
+                  ) : (
+                    t("settings.codexLoginButton")
+                  )}
+                </button>
+              </div>
+              <div className="settings-help" style={{ marginTop: "8px" }}>{t("settings.codexHelp")}</div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="settings-field">
+                <label className="settings-label">{t("settings.baseUrl")}</label>
+                <input
+                  type="text"
+                  className="settings-input"
+                  value={settings.base_url}
+                  onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
+                  placeholder={settings.api_format === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
+                />
+                <div className="settings-help">
+                  {settings.api_format === "openai"
+                    ? t("settings.openaiHelp")
+                    : t("settings.anthropicHelp")}
+                </div>
+              </div>
 
-          <div className="settings-field">
-            <label className="settings-label">{t("settings.apiKey")}</label>
-            <input
-              type="password"
-              className="settings-input"
-              value={settings.api_key}
-              onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
-              placeholder="sk-..."
-            />
-          </div>
+              <div className="settings-field">
+                <label className="settings-label">{t("settings.apiKey")}</label>
+                <input
+                  type="password"
+                  className="settings-input"
+                  value={settings.api_key}
+                  onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
+                  placeholder="sk-..."
+                />
+              </div>
+            </>
+          )}
 
           <div className="settings-inline-actions">
             <button
               className="settings-btn settings-btn-secondary settings-btn-full"
               onClick={handleFetchModels}
-              disabled={fetching || !settings.base_url || !settings.api_key}
+              disabled={fetching || (!isCodexMode && (!settings.base_url || !settings.api_key))}
             >
               {fetching ? (
                 <>
@@ -571,7 +815,7 @@ export default function SettingsPanel() {
             <button
               className="settings-btn settings-btn-secondary settings-btn-full"
               onClick={handleStreamTest}
-              disabled={streamTesting || !settings.base_url || !settings.api_key || !testModel}
+              disabled={streamTesting || (!isCodexMode && (!settings.base_url || !settings.api_key)) || !testModel}
             >
               {streamTesting ? (
                 <>
@@ -623,6 +867,77 @@ export default function SettingsPanel() {
               {fetchError}
             </div>
           )}
+
+          {candidateModels.length > 0 && (
+            <div className="settings-field" style={{ marginTop: "16px" }}>
+              <label className="settings-label">
+                {t("settings.candidateModels")}
+                <span className="settings-label-hint">({candidateModels.length})</span>
+              </label>
+              <div className="settings-candidate-actions">
+                <button
+                  className="settings-btn settings-btn-secondary"
+                  onClick={handleSelectAllCandidates}
+                >
+                  {candidateModels.every(m => m.selected)
+                    ? t("settings.unselectAllModels")
+                    : t("settings.selectAllModels")}
+                </button>
+                <button
+                  className="settings-btn settings-btn-secondary"
+                  onClick={handleTestCandidates}
+                  disabled={candidateModels.some(m => m.status === "testing") || !candidateModels.some(m => m.selected)}
+                >
+                  {t("settings.testSelectedModels")}
+                </button>
+                <button
+                  className="settings-btn settings-btn-secondary"
+                  onClick={handleAddAvailableCandidates}
+                  disabled={!candidateModels.some(m => m.status === "ok")}
+                >
+                  {t("settings.addAvailableModels")}
+                </button>
+                <button
+                  className="settings-btn settings-btn-primary"
+                  onClick={handleAddSelectedCandidates}
+                  disabled={!candidateModels.some(m => m.selected)}
+                >
+                  {t("settings.addSelectedModels")}
+                </button>
+              </div>
+              <div className="settings-candidate-list">
+                {candidateModels.map((m) => (
+                  <div key={m.id} className="settings-candidate-item">
+                    <label className="settings-candidate-check">
+                      <input
+                        type="checkbox"
+                        checked={m.selected}
+                        onChange={() => handleToggleCandidate(m.id)}
+                      />
+                    </label>
+                    <div className="settings-model-info">
+                      <span className="settings-model-id">{m.id}</span>
+                      <span className="settings-model-name">
+                        {m.provider || providerLabel}
+                        {m.name && m.name !== m.id ? ` · ${m.name}` : ""}
+                      </span>
+                      {m.error && <span className="settings-model-error">{m.error}</span>}
+                    </div>
+                    <span className={`settings-model-status settings-model-status-${m.status}`}>
+                      {candidateStatusLabel(m.status)}
+                    </span>
+                    <button
+                      className="settings-model-remove"
+                      onClick={() => handleTestCandidate(m.id)}
+                      disabled={m.status === "testing"}
+                    >
+                      {t("settings.testModel")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="settings-group">
@@ -641,7 +956,9 @@ export default function SettingsPanel() {
               >
                 <option value="">{t("settings.selectModel")}</option>
                 {settings.models?.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name || m.id}</option>
+                  <option key={`${m.provider || "unknown"}:${m.id}`} value={m.id}>
+                    {m.name || m.id} ({m.provider || "unknown"})
+                  </option>
                 ))}
               </select>
             </div>
@@ -652,21 +969,32 @@ export default function SettingsPanel() {
               {t("settings.configuredModels")}
               {hasModels && <span className="settings-label-hint">({settings.models.length})</span>}
             </label>
+            {hasModels && (
+              <button
+                className="settings-btn settings-btn-secondary settings-btn-full"
+                onClick={handleClearModels}
+                style={{ marginBottom: "8px" }}
+              >
+                {t("settings.clearModels")}
+              </button>
+            )}
 
             {hasModels ? (
               <div className="settings-models-list">
                 {settings.models?.map((m) => (
-                  <div key={m.id} className="settings-model-item">
+                  <div key={`${m.provider || "unknown"}:${m.id}`} className="settings-model-item">
                     <div className="settings-model-info">
                       <span className="settings-model-id">{m.id}</span>
                       {m.name && m.name !== m.id && (
                         <span className="settings-model-name">{m.name}</span>
                       )}
+                      <span className="settings-model-provider">{m.provider || "unknown"}</span>
                     </div>
                     <button
-                      className="settings-model-remove"
+                      className="settings-model-remove settings-model-delete"
                       onClick={() => handleRemoveModel(m.id)}
                       title={t("settings.removeModel")}
+                      aria-label={t("settings.removeModel")}
                     >
                       <TrashIcon />
                     </button>
