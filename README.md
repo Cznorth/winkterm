@@ -31,6 +31,7 @@
 <p align="center">
   <a href="#-demo">Demo</a> •
   <a href="#-features">Features</a> •
+  <a href="#-codex-oauth-login">Codex OAuth</a> •
   <a href="#-agent-api-highlights">Agent API</a> •
   <a href="#-quick-start">Quick Start</a> •
   <a href="#-why-winkterm">Why WinkTerm?</a> •
@@ -80,8 +81,33 @@ The AI writes directly into your terminal's input line. You stay in control — 
 - **Settings Export & Secret-safe Saves** — Export `config.json` from Settings (`GET /api/settings/export`). Blank password or API key fields on save do not wipe stored secrets.
 - **Reliable Terminals** — Debounced PTY sizing fixes truncated PowerShell prompts; agent multi-tab creation no longer leaves empty panes; WebSocket reconnect is silent (no disconnect banner that breaks PSReadLine).
 - **Internationalization** — Built-in English / Chinese UI, with language selection on first launch.
-- **Multi-Model Support** — Bring your own LLM. OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint.
+- **Multi-Model Support** — Bring your own LLM (OpenAI, Anthropic, Ollama, any compatible endpoint), or sign in with **Codex OAuth** and use your ChatGPT / Codex subscription directly.
 - **Docker & Desktop** — Deploy instantly with `docker compose up` or package as a standalone desktop app (Windows/macOS).
+
+---
+
+## 🔐 Codex OAuth Login
+
+WinkTerm can talk to OpenAI **Codex** through an official OAuth flow — no API key, no third-party relay, no `codex exec` subprocess.
+
+**Why use it**
+
+| Advantage | What it means for you |
+|-----------|----------------------|
+| **ChatGPT / Codex subscription** | Use models like `gpt-5.5` with the account you already pay for — no separate OpenAI API billing. |
+| **Zero API config** | In **Settings → API format**, choose **Codex OAuth**, click login, pick a model. No `base_url` or `api_key` fields. |
+| **Official OAuth, local tokens** | Browser authorization; tokens land in `~/.codex/auth.json` on the machine running WinkTerm. |
+| **Native WebSocket transport** | Sidebar chat and the in-terminal `#` agent stream over Codex Responses — full tool calls (`list_terminals`, `ssh_run`, …), multi-turn history, no fallback to shelling out to the CLI. |
+| **Same human-in-the-loop UX** | Craft / chat / ask modes, streaming, queued follow-ups, and tool approval all work the same as with a BYO endpoint. |
+| **Desktop-friendly** | OAuth URL can be copied when the embedded WebView cannot open a browser tab automatically. |
+
+**Setup (30 seconds)**
+
+1. Open **Settings** → set **API format** to **Codex OAuth**.
+2. Click **Login with ChatGPT** (or copy the auth URL into your browser).
+3. Select a Codex model (e.g. `gpt-5.5`) and start chatting in the sidebar or with `#` in any terminal tab.
+
+You can switch back to OpenAI / Anthropic / a custom base URL anytime — Codex OAuth is an option, not a lock-in.
 
 ---
 
@@ -150,6 +176,7 @@ A real incident write-up: user said only "the 107.173 server's load is high," an
 | Shared PTY (AI types in your terminal) | ✅ | ❌ | ❌ | ❌ |
 | Open source | ✅ | ✅ | ✅ | ❌ |
 | Self-hosted / BYO LLM | ✅ | ❌ | ❌ | ✅ |
+| Codex OAuth (ChatGPT login) | ✅ | ❌ | ❌ | ❌ |
 | Web UI | ✅ | ✅ | ✅ | ❌ (CLI only) |
 | SSH + file transfer | ✅ | ❌ | ✅ | ❌ |
 | Desktop app | ✅ | ✅ | ✅ | ❌ |
@@ -205,6 +232,8 @@ Download the latest release for your platform from the [Releases page](https://g
 | `DEBUG` | Enable debug mode | `false` |
 
 > **Bring your own LLM**: WinkTerm uses the OpenAI-compatible protocol. Set `OPENAI_BASE_URL` to any provider (Ollama, vLLM, Groq, OpenRouter, etc.) and WinkTerm will use it.
+
+> **Codex OAuth (UI)**: No env vars required — enable **Codex OAuth** in Settings and complete browser login. Status: `GET /api/codex/status`; start login: `POST /api/codex/oauth/start`.
 
 ---
 

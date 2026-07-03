@@ -31,6 +31,7 @@
 <p align="center">
   <a href="#-demo">演示</a> •
   <a href="#-features">功能特性</a> •
+  <a href="#-codex-oauth-登录">Codex OAuth</a> •
   <a href="#-agent-api-亮点">Agent API</a> •
   <a href="#-quick-start">快速开始</a> •
   <a href="#-why-winkterm">为什么选择 WinkTerm？</a> •
@@ -80,8 +81,33 @@ AI 直接写入你的终端输入行。你始终掌控一切 — 按回车执行
 - **配置导出与安全保存** — 设置页可导出完整 `config.json`（`GET /api/settings/export`）。保存时密码/API Key 留空不会清空已有密钥。
 - **终端稳定性** — PTY 尺寸防抖修复 PowerShell prompt 截断；Agent 批量建 tab 不再空显示；WS 静默重连（不写断开提示行，避免 PSReadLine 光标错乱）。
 - **国际化** — 内置中英文界面，首次启动时选择语言。
-- **多模型支持** — 自带 LLM。OpenAI、Anthropic、Ollama 或任何兼容 OpenAI 协议的端点。
+- **多模型支持** — 自带 LLM（OpenAI、Anthropic、Ollama 等兼容端点），或通过 **Codex OAuth** 直接用 ChatGPT / Codex 订阅账号。
 - **Docker 与桌面应用** — 通过 `docker compose up` 一键部署，或打包为独立桌面应用（Windows/macOS）。
+
+---
+
+## 🔐 Codex OAuth 登录
+
+WinkTerm 支持通过官方 OAuth 直连 OpenAI **Codex** —— 无需 API Key、无需第三方中转、也不依赖 `codex exec` 子进程。
+
+**优势一览**
+
+| 优势 | 实际体验 |
+|------|----------|
+| **用已有 ChatGPT / Codex 订阅** | 直接使用 `gpt-5.5` 等模型，不必再单独开通 OpenAI API 计费。 |
+| **零 API 配置** | **设置 → API 格式** 选 **Codex OAuth**，点登录、选模型即可；不用填 `base_url` / `api_key`。 |
+| **官方 OAuth，令牌本地落盘** | 浏览器授权后，令牌写入运行 WinkTerm 的机器上的 `~/.codex/auth.json`。 |
+| **原生 WebSocket 传输** | 侧边栏对话与终端内 `#` Agent 走 Codex Responses 协议流式通信；完整 tool calls（`list_terminals`、`ssh_run` 等）、多轮上下文，不回落到 CLI 子进程。 |
+| **人机协同体验不变** | Craft / chat / ask 模式、流式输出、排队续问、工具审批与 BYO 端点完全一致。 |
+| **适配桌面 WebView** | 内嵌浏览器无法自动开标签时，可复制 OAuth 链接到系统浏览器完成登录。 |
+
+**上手（约 30 秒）**
+
+1. 打开 **设置** → **API 格式** 选 **Codex OAuth**。
+2. 点击 **使用 ChatGPT 登录**（或复制授权链接到浏览器）。
+3. 选择 Codex 模型（如 `gpt-5.5`），在侧边栏或任意终端 tab 用 `#` 开始对话。
+
+随时可切回 OpenAI / Anthropic / 自定义端点 —— Codex OAuth 是一种可选接入方式，不是绑定。
 
 ---
 
@@ -140,6 +166,7 @@ curl -s http://<your-winkterm-host>:8000/api/agent/skill.md > SKILL.md
 | 共享 PTY（AI 在终端中打字） | ✅ | ❌ | ❌ | ❌ |
 | 开源 | ✅ | ✅ | ✅ | ❌ |
 | 自托管 / 自带 LLM | ✅ | ❌ | ❌ | ✅ |
+| Codex OAuth（ChatGPT 登录） | ✅ | ❌ | ❌ | ❌ |
 | Web UI | ✅ | ✅ | ✅ | ❌（仅 CLI） |
 | SSH + 文件传输 | ✅ | ❌ | ✅ | ❌ |
 | 桌面应用 | ✅ | ✅ | ✅ | ❌ |
@@ -195,6 +222,8 @@ docker compose up -d
 | `DEBUG` | 启用调试模式 | `false` |
 
 > **自带 LLM**：WinkTerm 使用兼容 OpenAI 的协议。将 `OPENAI_BASE_URL` 设置为任意提供商（Ollama、vLLM、Groq、OpenRouter 等），WinkTerm 即可使用。
+
+> **Codex OAuth（界面配置）**：无需环境变量 —— 在设置中启用 **Codex OAuth** 并完成浏览器登录。状态：`GET /api/codex/status`；发起登录：`POST /api/codex/oauth/start`。
 
 ---
 
