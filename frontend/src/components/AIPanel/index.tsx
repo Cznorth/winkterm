@@ -114,6 +114,19 @@ const ToolIcon = () => (
   </svg>
 );
 
+/** Ignore Enter while IME composition is active (e.g. Chinese candidate selection). */
+function shouldIgnoreEnterForIme(
+  e: React.KeyboardEvent,
+  isComposingRef: React.MutableRefObject<boolean>,
+): boolean {
+  return (
+    isComposingRef.current
+    || e.nativeEvent.isComposing
+    || e.key === "Process"
+    || e.keyCode === 229
+  );
+}
+
 function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
@@ -376,6 +389,7 @@ export default function AIPanel({ onClose }: { onClose?: () => void }) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const modeDropdownRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const isComposingRef = useRef(false);
 
   const fetchModels = useCallback(() => {
     axios.get("/api/settings").then((res) => {
@@ -435,6 +449,7 @@ export default function AIPanel({ onClose }: { onClose?: () => void }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isComposingRef.current) return;
     const text = input.trim();
     if (!text) return;
 
@@ -641,8 +656,15 @@ export default function AIPanel({ onClose }: { onClose?: () => void }) {
             className="ai-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onCompositionStart={() => {
+              isComposingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              isComposingRef.current = false;
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
+                if (shouldIgnoreEnterForIme(e, isComposingRef)) return;
                 e.preventDefault();
                 handleSubmit(e);
               }
