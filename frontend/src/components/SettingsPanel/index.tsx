@@ -199,6 +199,9 @@ export default function SettingsPanel() {
   const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
   const [codexLoggingIn, setCodexLoggingIn] = useState(false);
   const [codexAuthUrl, setCodexAuthUrl] = useState("");
+  const [codexCallbackUrl, setCodexCallbackUrl] = useState("");
+  const [codexCallbackError, setCodexCallbackError] = useState("");
+  const [codexCallbackSubmitting, setCodexCallbackSubmitting] = useState(false);
 
   const copyToClipboard = (text: string) => {
     if (navigator.clipboard?.writeText) {
@@ -514,6 +517,8 @@ export default function SettingsPanel() {
 
   const handleCodexLogin = async () => {
     setCodexLoggingIn(true);
+    setCodexCallbackUrl("");
+    setCodexCallbackError("");
     try {
       const res = await axios.post("/api/codex/oauth/start", { open_browser: false });
       const authUrl = res.data.auth_url || "";
@@ -526,6 +531,29 @@ export default function SettingsPanel() {
       setCodexLoggingIn(false);
     }
   };
+
+  const handleCodexCallbackSubmit = async () => {
+    const callbackUrl = codexCallbackUrl.trim();
+    if (!callbackUrl) return;
+    setCodexCallbackSubmitting(true);
+    setCodexCallbackError("");
+    try {
+      await axios.post("/api/codex/oauth/callback", { callback_url: callbackUrl });
+      setCodexCallbackUrl("");
+      setCodexAuthUrl("");
+      setCodexLoggingIn(false);
+      await refreshCodexStatus();
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setCodexCallbackError(typeof detail === "string" ? detail : (e as Error).message || t("settings.codexCallbackFailed"));
+    } finally {
+      setCodexCallbackSubmitting(false);
+    }
+  };
+
+  const showCodexCallbackForm = isCodexMode
+    && !codexStatus?.logged_in
+    && (codexLoggingIn || codexStatus?.oauth?.active);
 
   const handleAddModel = () => {
     if (!newModelId.trim()) return;
@@ -760,6 +788,37 @@ export default function SettingsPanel() {
                   )}
                 </button>
               </div>
+              {showCodexCallbackForm && (
+                <div className="settings-field" style={{ marginTop: "12px" }}>
+                  <label className="settings-label">{t("settings.codexCallbackLabel")}</label>
+                  <textarea
+                    className="settings-input settings-textarea"
+                    value={codexCallbackUrl}
+                    onChange={(e) => setCodexCallbackUrl(e.target.value)}
+                    placeholder={t("settings.codexCallbackPlaceholder")}
+                    rows={3}
+                  />
+                  <div className="settings-help">{t("settings.codexCallbackHelp")}</div>
+                  {codexCallbackError && (
+                    <div className="settings-error" style={{ marginTop: "8px" }}>{codexCallbackError}</div>
+                  )}
+                  <button
+                    className="settings-btn settings-btn-primary settings-btn-full"
+                    style={{ marginTop: "8px" }}
+                    onClick={handleCodexCallbackSubmit}
+                    disabled={codexCallbackSubmitting || !codexCallbackUrl.trim()}
+                  >
+                    {codexCallbackSubmitting ? (
+                      <>
+                        <span className="settings-spinner" />
+                        {t("settings.codexCallbackSubmitting")}
+                      </>
+                    ) : (
+                      t("settings.codexCallbackSubmit")
+                    )}
+                  </button>
+                </div>
+              )}
               <div className="settings-help" style={{ marginTop: "8px" }}>{t("settings.codexHelp")}</div>
             </div>
           ) : (

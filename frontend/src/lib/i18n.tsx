@@ -69,9 +69,21 @@ const translations = {
   "settings.codexLoggingIn": { zh: "等待授权...", en: "Waiting for authorization..." },
   "settings.codexOpenAuth": { zh: "如果没有自动打开，点击这里继续授权", en: "If the browser did not open, continue authorization here" },
   "settings.codexHelp": {
-    zh: "Codex OAuth 直接使用 OpenAI 授权码 + PKCE 流程，授权后使用 ChatGPT/Codex 额度，无需 API Key。Token 只保存在本机 ~/.codex/auth.json。",
-    en: "Codex OAuth uses OpenAI authorization code + PKCE directly. After authorization it uses your ChatGPT/Codex quota without an API key. Tokens are stored only in local ~/.codex/auth.json.",
+    zh: "Codex OAuth 使用 OpenAI 授权码 + PKCE。授权后使用 ChatGPT/Codex 额度，无需 API Key。Token 保存在运行 WinkTerm 后端的机器 ~/.codex/auth.json。远程部署时浏览器会跳转到本机 localhost，请复制完整回调 URL 粘贴到下方。",
+    en: "Codex OAuth uses OpenAI authorization code + PKCE. After authorization it uses your ChatGPT/Codex quota without an API key. Tokens are stored in ~/.codex/auth.json on the machine running the WinkTerm backend. For remote deployments the browser redirects to localhost on your machine — paste the full callback URL below.",
   },
+  "settings.codexCallbackLabel": { zh: "回调 URL", en: "Callback URL" },
+  "settings.codexCallbackPlaceholder": {
+    zh: "http://localhost:1455/auth/callback?code=...&state=...",
+    en: "http://localhost:1455/auth/callback?code=...&state=...",
+  },
+  "settings.codexCallbackHelp": {
+    zh: "授权完成后，从浏览器地址栏复制完整 URL（即使页面打不开也没关系），粘贴到这里完成登录。",
+    en: "After authorization, copy the full URL from your browser address bar (even if the page fails to load) and paste it here to finish login.",
+  },
+  "settings.codexCallbackSubmit": { zh: "提交回调 URL", en: "Submit callback URL" },
+  "settings.codexCallbackSubmitting": { zh: "正在完成登录...", en: "Completing login..." },
+  "settings.codexCallbackFailed": { zh: "回调 URL 无效或已过期", en: "Invalid or expired callback URL" },
   "settings.openaiHelp": {
     zh: "OpenAI 兼容 API 地址（Ollama、Groq、OpenRouter 等）。通常需要包含 /v1，末尾不要加 /",
     en: "OpenAI-compatible API base URL (Ollama, Groq, OpenRouter, etc.). Usually needs /v1, no trailing /",

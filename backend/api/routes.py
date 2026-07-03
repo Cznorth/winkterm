@@ -24,7 +24,14 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 
-from backend.agent.codex_provider import CodexProviderError, codex_login, codex_status, run_codex, start_codex_oauth
+from backend.agent.codex_provider import (
+    CodexProviderError,
+    codex_login,
+    codex_status,
+    complete_codex_oauth_callback,
+    run_codex,
+    start_codex_oauth,
+)
 from backend.agent.graph import get_graph
 from backend.agent.tools.terminal_legacy import get_terminal_context_raw
 from backend.config import UserConfig, AgentDocs, settings
@@ -322,6 +329,19 @@ async def post_codex_oauth_start(req: CodexOAuthStartRequest) -> dict:
     """Start a direct OpenAI/Codex OAuth authorization-code flow."""
     try:
         return start_codex_oauth(open_browser=req.open_browser)
+    except CodexProviderError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class CodexOAuthCallbackRequest(BaseModel):
+    callback_url: str
+
+
+@router.post("/codex/oauth/callback")
+async def post_codex_oauth_callback(req: CodexOAuthCallbackRequest) -> dict:
+    """Complete OAuth by pasting the browser redirect URL (for remote deployments)."""
+    try:
+        return complete_codex_oauth_callback(req.callback_url)
     except CodexProviderError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

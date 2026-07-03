@@ -126,6 +126,14 @@ def _save_codex_tokens(id_token: str, access_token: str, refresh_token: str) -> 
     CODEX_AUTH_FILE.chmod(0o600)
 
 
+def _set_oauth_flow(state: str, message: str) -> None:
+    with _oauth_lock:
+        if _oauth_flow is not None:
+            _oauth_flow["state"] = state
+            _oauth_flow["message"] = message
+            _oauth_flow["completed_at"] = time.time()
+
+
 def _oauth_status() -> dict:
     with _oauth_lock:
         if not _oauth_flow:
@@ -137,6 +145,24 @@ def _oauth_status() -> dict:
             "auth_url": _oauth_flow.get("auth_url", ""),
             "started_at": _oauth_flow.get("started_at", 0),
         }
+
+
+def _parse_oauth_callback_params(callback_url: str) -> dict[str, str]:
+    """Parse query parameters from a pasted OAuth callback URL."""
+    text = callback_url.strip()
+    if not text:
+        raise CodexProviderError("Callback URL is empty.")
+
+    if "://" not in text:
+        if text.startswith("/"):
+            text = f"http://localhost{text}"
+        elif text.startswith("?"):
+            text = f"http://localhost/auth/callback{text}"
+        else:
+            text = f"http://localhost/auth/callback?{text}"
+
+    parsed = urllib.parse.urlparse(text)
+    return dict(urllib.parse.parse_qsl(parsed.query))
 
 
 def _build_authorize_url(redirect_uri: str, state: str, code_challenge: str) -> str:
@@ -215,11 +241,7 @@ class _CodexOAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
         self._finish(200, "WinkTerm Codex OAuth complete. You can close this tab.")
 
     def _set_flow(self, state: str, message: str) -> None:
-        with _oauth_lock:
-            if _oauth_flow is not None:
-                _oauth_flow["state"] = state
-                _oauth_flow["message"] = message
-                _oauth_flow["completed_at"] = time.time()
+        _set_oauth_flow(state, message)
 
     def _finish(self, status: int, message: str) -> None:
         body = (
@@ -276,6 +298,42 @@ def start_codex_oauth(open_browser: bool = False) -> dict:
     if open_browser:
         webbrowser.open(auth_url)
     return {"auth_url": auth_url, "redirect_uri": redirect_uri, "state": "pending"}
+
+
+def complete_codex_oauth_callback(callback_url: str) -> dict:
+    """Finish OAuth using a callback URL pasted from the user's browser."""
+    params = _parse_oauth_callback_params(callback_url)
+    if params.get("error"):
+        message = params.get("error_description") or params.get("error") or "OAuth error"
+        _set_oauth_flow("error", message)
+        raise CodexProviderError(message)
+
+    code = params.get("code")
+    state = params.get("state")
+    if not code:
+        raise CodexProviderError("Missing authorization code in callback URL.")
+    if not state:
+        raise CodexProviderError("Missing state in callback URL.")
+
+    with _oauth_lock:
+        flow = dict(_oauth_flow or {})
+
+    if not flow or flow.get("state") != "pending":
+        raise CodexProviderError("No pending Codex OAuth flow. Start authorization again.")
+    if state != flow.get("oauth_state"):
+        raise CodexProviderError("OAuth state mismatch. Start authorization again.")
+
+    try:
+        tokens = asyncio.run(
+            _exchange_oauth_code(code, flow["redirect_uri"], flow["code_verifier"])
+        )
+        _save_codex_tokens(tokens["id_token"], tokens["access_token"], tokens["refresh_token"])
+    except Exception as e:
+        _set_oauth_flow("error", str(e))
+        raise CodexProviderError(str(e)) from e
+
+    _set_oauth_flow("complete", "Logged in using ChatGPT")
+    return {"success": True, "message": "Logged in using ChatGPT"}
 
 
 def _codex_bin() -> str:
