@@ -24,6 +24,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 
+from backend.agent.codex_provider import CodexProviderError, codex_login, codex_status, run_codex, start_codex_oauth
 from backend.agent.graph import get_graph
 from backend.agent.tools.terminal_legacy import get_terminal_context_raw
 from backend.config import UserConfig, AgentDocs, settings
@@ -51,12 +52,13 @@ class AnalyzeResponse(BaseModel):
 class ModelInfo(BaseModel):
     id: str
     name: str = ""
+    provider: str = ""
 
 
 class SettingsModel(BaseModel):
     # All fields optional: only update fields explicitly provided in the request,
     # so partial saves (e.g. language only) do not clear other fields
-    api_format: Optional[Literal["openai", "anthropic"]] = None
+    api_format: Optional[Literal["openai", "anthropic", "codex"]] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     models: Optional[list[ModelInfo]] = None
@@ -70,13 +72,13 @@ class SettingsModel(BaseModel):
 class ModelsRequest(BaseModel):
     base_url: str
     api_key: str
-    api_format: Literal["openai", "anthropic"]
+    api_format: Literal["openai", "anthropic", "codex"]
 
 
 class StreamTestRequest(BaseModel):
     base_url: str
     api_key: str
-    api_format: Literal["openai", "anthropic"]
+    api_format: Literal["openai", "anthropic", "codex"]
     model: str = ""
 
 
@@ -292,6 +294,38 @@ async def save_settings(payload: SettingsModel) -> dict:
     return {"success": True}
 
 
+@router.get("/codex/status")
+async def get_codex_status() -> dict:
+    """Return local Codex CLI install and login state."""
+    return codex_status()
+
+
+class CodexLoginRequest(BaseModel):
+    device_auth: bool = True
+
+
+@router.post("/codex/login")
+async def post_codex_login(req: CodexLoginRequest) -> dict:
+    """Start Codex CLI login. Device auth is friendlier inside desktop webviews."""
+    try:
+        return codex_login(device_auth=req.device_auth)
+    except CodexProviderError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class CodexOAuthStartRequest(BaseModel):
+    open_browser: bool = False
+
+
+@router.post("/codex/oauth/start")
+async def post_codex_oauth_start(req: CodexOAuthStartRequest) -> dict:
+    """Start a direct OpenAI/Codex OAuth authorization-code flow."""
+    try:
+        return start_codex_oauth(open_browser=req.open_browser)
+    except CodexProviderError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 class DocContent(BaseModel):
     content: str
 
@@ -325,6 +359,14 @@ async def put_memory_md(payload: DocContent) -> dict:
 @router.post("/models/fetch")
 async def fetch_models(req: ModelsRequest) -> dict:
     """Fetch available model list from the API."""
+    if req.api_format == "codex":
+        return {
+            "models": [
+                {"id": "gpt-5.5", "name": "GPT-5.5 (Codex)", "provider": "codex"},
+                {"id": "gpt-5.4-mini", "name": "GPT-5.4 mini (Codex)", "provider": "codex"},
+            ]
+        }
+
     # If api_key contains ****, use the original key from the config file
     api_key = req.api_key
     if "****" in api_key:
@@ -354,7 +396,11 @@ async def fetch_models(req: ModelsRequest) -> dict:
         else:
             items = data.get("data", [])
 
-        models = [{"id": m["id"], "name": m.get("id")} for m in items if isinstance(m, dict) and "id" in m]
+        models = [
+            {"id": m["id"], "name": m.get("id"), "provider": req.api_format}
+            for m in items
+            if isinstance(m, dict) and "id" in m
+        ]
         return {"models": models}
     except Exception as e:
         return {"models": [], "error": str(e)}
@@ -373,11 +419,19 @@ async def stream_test(req: StreamTestRequest) -> StreamingResponse:
         user_config = UserConfig.load()
         model = user_config.get("selected_model") or settings.effective_model
 
-    if not api_key or not req.base_url or not model:
+    if req.api_format == "codex":
+        if not model:
+            model = "gpt-5.5"
+    elif not api_key or not req.base_url or not model:
         raise HTTPException(status_code=400, detail="缺少 base_url、api_key 或 model")
 
     async def gen():
         try:
+            if req.api_format == "codex":
+                content = await run_codex("Reply with exactly: OK", model=model)
+                yield f"data: {json.dumps({'type': 'token', 'content': content}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'chunks': 1}, ensure_ascii=False)}\n\n"
+                return
             if req.api_format == "anthropic":
                 llm = ChatAnthropic(
                     model=model,
@@ -475,10 +529,25 @@ async def generate_title(req: TitleRequest) -> dict:
     api_key = user_config.get("api_key") or settings.effective_api_key
     model = user_config.get("selected_model") or settings.effective_model
 
-    if not api_key or not model or not req.messages:
+    if not req.messages:
+        return {"title": ""}
+    if api_format != "codex" and (not api_key or not model):
         return {"title": ""}
 
     try:
+        if api_format == "codex":
+            recent = req.messages[:8]
+            history_text = "\n".join(
+                f"{m['role'].upper()}: {str(m.get('content', ''))[:300]}"
+                for m in recent
+            )
+            prompt = (
+                "Generate a very short title (3-5 words) summarizing the conversation below. "
+                "Return ONLY the title text, no quotes, no trailing punctuation.\n\n"
+                f"{history_text}"
+            )
+            title = (await run_codex(prompt, model=model or "gpt-5.5")).strip().strip('"')
+            return {"title": title}
         if api_format == "anthropic":
             llm = ChatAnthropic(
                 model=model,
@@ -534,7 +603,9 @@ async def generate_suggestions(req: SuggestionsRequest) -> dict:
     api_key = user_config.get("api_key") or settings.effective_api_key
     model = user_config.get("selected_model") or settings.effective_model
 
-    if not api_key or not model or not req.messages:
+    if not req.messages:
+        return {"suggestions": []}
+    if api_format != "codex" and (not api_key or not model):
         return {"suggestions": []}
 
     # Use recent turns as context (avoid excessive tokens)
@@ -545,6 +616,15 @@ async def generate_suggestions(req: SuggestionsRequest) -> dict:
     )
 
     try:
+        if api_format == "codex":
+            prompt = (
+                "Based on the conversation below, generate exactly 3 short follow-up messages "
+                "the user might send next. Return ONLY the 3 suggestions, one per line.\n\n"
+                f"{history_text}"
+            )
+            content = await run_codex(prompt, model=model or "gpt-5.5")
+            lines = [line.strip().lstrip("0123456789.-) ") for line in content.strip().splitlines() if line.strip()]
+            return {"suggestions": lines[:3]}
         if api_format == "anthropic":
             llm = ChatAnthropic(
                 model=model,
