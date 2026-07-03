@@ -17,8 +17,13 @@ output, run long-running jobs asynchronously, and move files over SSH.
 `winkterm_call`, while reusing the same WebSocket-first transport as the CLI. If MCP
 is unavailable, use the CLI. Both carry the agent surface over one WebSocket with a
 15s application-level heartbeat, so long commands (installs, builds, dumps) survive
-a reverse proxy's default ~60s idle read-timeout. When the WebSocket is unavailable
-they transparently fall back to the HTTP API.
+a reverse proxy's default ~60s idle read-timeout. CLI calls print live `progress`
+frames to stderr as remote terminal output arrives. MCP receives the same progress
+frames underneath, but the current MCP tools collect them and return `{result,
+progress}` only when the tool call finishes; do not assume MCP clients display
+remote terminal output live. When live human monitoring matters, use the CLI or
+subscribe to `terminal.stream`. When the WebSocket is unavailable they
+transparently fall back to the HTTP API.
 
 ```bash
 # Install from npm (no clone needed):
@@ -113,7 +118,8 @@ next session. Never overwrite silently — show a diff first.
   `GET /api/agent/jobs/{job_id}`. Use for installs, `mysqldump`, `docker build`,
   large copies — anything that can exceed a ~60s proxy timeout.
 - **Live stream**: `GET /api/agent/terminals/{id}/stream` (SSE) for `tail -f` /
-  long-command monitoring.
+  long-command monitoring. The equivalent WS method is `terminal.stream`; CLI
+  displays progress live, while MCP tool calls return collected progress at the end.
 - **Files over SSH**: `GET/PUT .../files`, `POST .../upload`, `POST .../download`,
   `POST .../directories`, `DELETE .../paths`.
 

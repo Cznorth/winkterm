@@ -188,8 +188,11 @@ WebSocket URL 自动从 base_url 推导（`http→ws`、`https→wss`，路径 `
 winkterm call <method> '<json-params>'
 ```
 
-`call` 直通后端，新增方法无需升级 CLI。结果 JSON 打到 **stdout**，
-实时输出（progress）打到 **stderr**，出错退出码非 0。
+`call` 直通后端，新增方法无需升级 CLI。CLI 的结果 JSON 打到 **stdout**，
+实时输出（progress）打到 **stderr**，出错退出码非 0。MCP 复用同一 WS
+长连接，底层会接收 progress，但当前 MCP 工具会先收集 progress，等命令结束后
+把 `{result, progress}` 一次性返回给调用方；不要假设 MCP 客户端会边跑边显示
+远端终端输出。需要实时肉眼监控时用 CLI，或订阅 `terminal.stream`。
 
 ### 可用方法（`call` 直通后端）
 
@@ -214,9 +217,11 @@ winkterm call <method> '<json-params>'
 | `ssh.mkdir` | 建远端目录 | conn_id, path |
 | `ssh.delete_paths` | 批量删远端路径 | conn_id, paths |
 
-> SSE 流（`terminal.stream` / `events.stream`）和异步 job（`ssh.run_async` / `job.*`）
-> 是 **HTTP 专属**：CLI 走 WS 不需要 job 轮询，长任务直接 `exec`/`ssh-run` 保活即可。
-> 真要流式订阅见 [HTTP_API.md](./HTTP_API.md)。
+> `terminal.exec` / `ssh.run` 在 WS 上会发 progress。CLI 会实时打印 progress；
+> MCP 会把 progress 收集后随最终结果返回。`terminal.stream` / `events.stream`
+> 可用于持续订阅；HTTP 侧也提供同名 SSE 端点。异步 job（`ssh.run_async` /
+> `job.*`）主要用于 HTTP/proxy 超时场景；CLI 走 WS 时通常直接用 `exec` /
+> `ssh-run` 保活即可。
 
 ### 便捷子命令
 
