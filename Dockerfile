@@ -1,8 +1,14 @@
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
 
+# Use system libvips so sharp (Next + @capacitor/assets) does not download from GitHub during npm ci.
+RUN apk add --no-cache python3 make g++ vips-dev fftw-dev
+
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json* ./
+ENV SHARP_IGNORE_GLOBAL_LIBVIPS=0
+ENV NPM_CONFIG_FETCH_TIMEOUT=300000
+ENV NPM_CONFIG_FETCH_RETRIES=5
 RUN npm ci --omit=optional
 # Pre-install SWC binary for Linux x64 musl
 RUN npm install --no-save @next/swc-linux-x64-musl
