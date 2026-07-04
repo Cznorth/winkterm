@@ -707,7 +707,7 @@ export default function AIPanel({ onClose }: { onClose?: () => void }) {
 
         <div className="ai-toolbar-divider" />
 
-        <div className="ai-mode-selector" ref={modelDropdownRef}>
+        <div className="ai-mode-selector ai-model-selector" ref={modelDropdownRef}>
           {modelDropdownOpen && models.length > 0 && (
             <div className="ai-mode-dropdown">
               {models.map((m) => (
