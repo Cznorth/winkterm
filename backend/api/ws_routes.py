@@ -68,7 +68,7 @@ async def agent_ws(
 ) -> None:
     """External agent WebSocket entry.
 
-    Carries the full agent surface (terminals, SSH, files, jobs, events) as JSON
+    Carries the full agent surface (terminals, SSH, files, managed runs, events) as JSON
     messages, with application-level heartbeats so long-running commands survive a
     reverse-proxy idle timeout. Auth is the agent token (``?token=``); the handler
     validates it after accept and closes with 4401 on failure.

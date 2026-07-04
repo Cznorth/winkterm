@@ -76,7 +76,7 @@ export function createServer() {
 
   server.tool(
     "winkterm_exec",
-    "Run one command in an existing terminal. Prefer this for normal shell commands and long tasks.",
+    "Run one short command in an existing terminal and wait for completion. For long tasks, prefer winkterm_run + winkterm_run_wait.",
     {
       terminal_id: z.string(),
       command: z.string().optional(),
@@ -86,6 +86,52 @@ export function createServer() {
       env: z.record(z.string()).optional(),
     },
     (params) => invoke("terminal.exec", clean(params)),
+  );
+
+  server.tool(
+    "winkterm_run",
+    "Start a long-running command in an existing terminal and return immediately with a run_id.",
+    {
+      terminal_id: z.string(),
+      command: z.string().optional(),
+      command_b64: z.string().optional(),
+      timeout: z.number().optional().describe("Run budget in seconds; <=0 means no run timeout."),
+      cancel_on_timeout: z.boolean().optional().describe("Send Ctrl+C if the run budget expires."),
+      cwd: z.string().optional(),
+      env: z.record(z.string()).optional(),
+    },
+    (params) => invoke("terminal.run", clean(params)),
+  );
+
+  server.tool(
+    "winkterm_run_status",
+    "Read a managed run's status and optional incremental output since a byte offset.",
+    {
+      run_id: z.string(),
+      since: z.number().optional(),
+    },
+    (params) => invoke("terminal.run_status", clean(params)),
+  );
+
+  server.tool(
+    "winkterm_run_wait",
+    "Wait until a managed run has new output, finishes, or the wait timeout expires. Prefer this over sleeping between status checks.",
+    {
+      run_id: z.string(),
+      since: z.number().optional(),
+      timeout: z.number().optional().describe("Wait timeout in seconds; does not affect the running command."),
+    },
+    (params) => invoke("terminal.run_wait", clean(params)),
+  );
+
+  server.tool(
+    "winkterm_run_cancel",
+    "Cancel a managed run, normally by sending Ctrl+C to its terminal.",
+    {
+      run_id: z.string(),
+      mode: z.enum(["ctrl_c", "close"]).optional().default("ctrl_c"),
+    },
+    (params) => invoke("terminal.run_cancel", clean(params)),
   );
 
   server.tool(
@@ -213,36 +259,6 @@ export function createServer() {
       env: z.record(z.string()).optional(),
     },
     (params) => invoke("ssh.run", clean(params)),
-  );
-
-  server.tool(
-    "winkterm_ssh_run_async",
-    "Start one SSH command as an async backend job. Use job tools to poll it.",
-    {
-      conn_id: z.string(),
-      command: z.string().optional(),
-      command_b64: z.string().optional(),
-      timeout: z.number().optional(),
-      cwd: z.string().optional(),
-      env: z.record(z.string()).optional(),
-    },
-    (params) => invoke("ssh.run_async", clean(params)),
-  );
-
-  server.tool("winkterm_list_jobs", "List backend async SSH jobs.", {}, () => invoke("job.list"));
-
-  server.tool(
-    "winkterm_get_job",
-    "Get one backend async SSH job.",
-    { job_id: z.string() },
-    (params) => invoke("job.get", params),
-  );
-
-  server.tool(
-    "winkterm_cancel_job",
-    "Cancel one backend async SSH job.",
-    { job_id: z.string() },
-    (params) => invoke("job.cancel", params),
   );
 
   server.tool(

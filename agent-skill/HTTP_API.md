@@ -17,40 +17,20 @@
 
 token 自动发现流程见 [SKILL.md](./SKILL.md#token-自动发现会话开始就做)。
 
-## 长任务：异步 job（**HTTP 专属，CLI 用不到**）
+## 长任务：managed run 与主动观察
 
-> ⚠️ job 轮询是为 **HTTP 网关超时**设计的兜底。CLI 走 WebSocket，长命令直接 `winkterm exec`
-> 全程保活，**不要在 CLI 里搞 job 轮询**——纯属浪费往返。只有被迫用 HTTP 时才用本节。
+> 长任务统一使用 managed run：`/terminals/{id}/run` 启动，`/runs/{run_id}/wait`
+> 等待新输出或状态变化。agent 不应盲等一个长阻塞调用；即使任务在后台跑，也要主动观察输出或状态，
+> 避免错误的 timeout、交互提示、卡住的安装器一直等待。
 
-`/run` 是同步的：HTTP 请求一直挂到命令结束。命令耗时超过反向代理网关超时
+`/ssh/{conn_id}/run` 是同步的：HTTP 请求一直挂到命令结束。命令耗时超过反向代理网关超时
 （常见 ~60s）时会 504，哪怕命令在主机上还在跑。**安装包、mysqldump、docker
-build、大文件拷贝等长命令，在 HTTP 模式下一律用异步版本。**
+build、大文件拷贝等长命令，不要用同步 SSH one-shot；先创建 SSH terminal，再用
+managed run。**
 
-提交立即返回 `job_id`，命令在后台**独立线程 + 专用 SSH 通道**里跑（不占事件
-循环、互不影响：某台主机卡住只拖住它自己的 job）。之后轮询 `/jobs/{id}` 取结果。
-
-```
-POST /api/agent/ssh/{conn_id}/run_async
-body: 同 /run（command / command_b64 / timeout / cwd / env）
-→ { "job_id": "...", "status": "running", "done": false, ... }   # 立即返回
-
-GET /api/agent/jobs/{job_id}
-→ {
-    "job_id": "...", "conn_id": "...", "command": "<预览>",
-    "status": "running|success|failed|timeout|error|canceled",
-    "done": true,
-    "exit_code": 0, "ok": true,
-    "stdout": "...",          # 已解码(UTF-8/GBK 自适应)+去 ANSI
-    "reason": null, "error": null,
-    "created_at": "...", "updated_at": "..."
-  }
-
-GET    /api/agent/jobs              列出所有 job
-DELETE /api/agent/jobs/{job_id}     取消（任务级取消；已在跑的远端进程不保证中止）
-```
-
-轮询节奏建议：长任务先 sleep 命令预估时长再查，别每秒打。`status != "running"`
-即 `done`。job 在内存里保留最近 200 条，进程重启清零。
+观察节奏建议：不要固定 sleep 很久后才查。先较快确认是否有错误/交互提示，之后根据任务性质
+拉长间隔；若可用 `terminal.run_wait` / CLI `run-wait`，优先用它等待“新输出、状态变化或等待超时”。
+`status != "running"` 即 `done`。run 状态在内存中，进程重启清零。
 
 ## 查看 SSH 列表
 ```
@@ -140,12 +120,54 @@ body: {
 → { "ok": false, "reason": "timeout", "stdout": "<已收到>", "size": ..., "alive": ... }
 ```
 
+注意：`timeout` 表示本次 `/exec` 最多等待多久返回；当前实现不保证自动终止已经发到 PTY
+里的命令。长命令不要只把 timeout 设很大后盲等，应使用 `/terminals/{id}/run` 启动、
+`/runs/{run_id}/wait` 观察，或使用 `/input` + `/snapshot?since=...`。
+
 **为什么用 `command_b64`**：当命令含多层引号嵌套（awk 单引号包双引号、jq 过滤器、HEREDOC 等），
 在 JSON body 里写 `command` 要做三层转义（shell → JSON → POSIX shell）极易出错。
 把命令 base64 编码后塞 `command_b64` 完全绕开转义，最稳。
 
 实现细节：服务端在命令后追加 `; printf '\n__WT_EXEC_<id>__%d\n' "$?"` sentinel，
 读到 sentinel 即返回。仅支持 POSIX shell（bash/zsh/sh/dash 等）。Windows cmd.exe 走 `/input`。
+
+## 可观察长任务 —— `/run` + `/runs/{id}/wait`
+
+长命令优先用 managed run：启动立即返回 `run_id`，之后用 wait/status 主动观察。
+这适合 MCP/CLI agent，因为工具调用可以在“有新输出或状态变化”时及时返回，而不是自己固定 sleep。
+
+```
+POST /api/agent/terminals/{id}/run
+body: {
+  "command": "npm install",
+  "command_b64": "<base64>",
+  "timeout": 3600.0,              # 运行预算；<=0 表示不设运行超时
+  "cancel_on_timeout": false,     # 超过运行预算后是否发送 Ctrl+C
+  "cwd": "/app",
+  "env": { "K": "v" }
+}
+→ {
+  "run_id": "...",
+  "terminal_id": "...",
+  "status": "running",
+  "done": false,
+  "output": "",
+  "size": 12345
+}
+
+GET /api/agent/runs/{run_id}?since=12345
+→ 当前状态 + since 之后的增量输出
+
+POST /api/agent/runs/{run_id}/wait
+body: { "since": 12345, "timeout": 30.0 }
+→ 有新输出 / 状态变化 / 等待超时才返回
+
+POST /api/agent/runs/{run_id}/cancel
+body: { "mode": "ctrl_c" }        # 或 "close"
+```
+
+`run_wait.timeout` 只是本次等待新事件的最长时间，不影响命令运行；`run.timeout`
+才是命令运行预算。返回的 `size` 作为下一次 `since`。
 
 ## 发送命令 / 控制键 —— `/input`
 

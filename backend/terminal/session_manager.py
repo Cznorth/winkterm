@@ -11,6 +11,7 @@ import asyncio
 import logging
 import re
 import shlex
+import sys
 import threading
 import time
 import uuid
@@ -33,6 +34,10 @@ logger = logging.getLogger("session_manager")
 _MAX_RAW = 256 * 1024
 DEFAULT_TTL_SECONDS = 1800.0
 _JANITOR_INTERVAL = 60.0
+
+
+def _ps_quote(value: str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 @dataclass
@@ -362,27 +367,43 @@ class TerminalSession:
         if not command:
             return {"ok": False, "reason": "empty_command"}
 
-        export_clause = ""
-        if env:
-            exports: list[str] = []
-            for k, v in env.items():
-                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k):
-                    raise ValueError(f"非法环境变量名: {k!r}")
-                exports.append(f"export {k}={shlex.quote(v)}")
-            export_clause = "; ".join(exports) + "; "
-
-        if cwd or env:
-            user_cmd = command.replace("\n", "; ")
-            cd_clause = f"cd {shlex.quote(cwd)}; " if cwd else ""
-            core = f"( {cd_clause}{export_clause}{user_cmd} )"
-        else:
-            core = command
-
         sentinel = f"__WT_EXEC_{uuid.uuid4().hex[:12]}__"
-        wrapped = (
-            f"{core}; "
-            f"printf '\\n{sentinel}%d:%s\\n' \"$?\" \"$PWD\"\r"
-        )
+        if sys.platform == "win32" and self.type == "local":
+            env_clause = ""
+            if env:
+                exports: list[str] = []
+                for k, v in env.items():
+                    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k):
+                        raise ValueError(f"非法环境变量名: {k!r}")
+                    exports.append(f"$env:{k}={_ps_quote(v)}")
+                env_clause = "; ".join(exports) + "; "
+            cd_clause = f"Set-Location {_ps_quote(cwd)}; " if cwd else ""
+            core = f"{cd_clause}{env_clause}{command}"
+            wrapped = (
+                f"{core}; "
+                "$__wt_ec = if ($?) { 0 } elseif ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 1 }; "
+                f"Write-Output ''; Write-Output \"{sentinel}${{__wt_ec}}:$((Get-Location).Path)\"\r"
+            )
+        else:
+            export_clause = ""
+            if env:
+                exports: list[str] = []
+                for k, v in env.items():
+                    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k):
+                        raise ValueError(f"非法环境变量名: {k!r}")
+                    exports.append(f"export {k}={shlex.quote(v)}")
+                export_clause = "; ".join(exports) + "; "
+
+            if cwd or env:
+                user_cmd = command.replace("\n", "; ")
+                cd_clause = f"cd {shlex.quote(cwd)}; " if cwd else ""
+                core = f"( {cd_clause}{export_clause}{user_cmd} )"
+            else:
+                core = command
+            wrapped = (
+                f"{core}; "
+                f"printf '\\n{sentinel}%d:%s\\n' \"$?\" \"$PWD\"\r"
+            )
 
         with self._lock:
             start_offset = self._total

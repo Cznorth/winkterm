@@ -9,6 +9,12 @@ connection cut at 60s. The WebSocket transport sends an application-level heartb
 every 15s, so the socket never goes idle long enough to trip a proxy timeout — long
 installs/builds/dumps run to completion.
 
+The CLI is intended for agents that cannot use MCP. Do not rely on live stderr
+streaming as the only progress channel: many agent shell tools return stdout/stderr
+only after the process exits. For long-running work, use an observable workflow:
+start the command, then query snapshots/job status or a wait-for-event API when
+available, so the agent can catch prompts, errors, and stuck commands early.
+
 ## Install
 
 Published to npm — no clone needed:
@@ -98,10 +104,10 @@ Common MCP tools:
 | Tool group | Tools |
 | --- | --- |
 | Generic | `winkterm_call` |
-| Terminals | `winkterm_list_terminals`, `winkterm_get_terminal`, `winkterm_create_terminal`, `winkterm_exec`, `winkterm_input`, `winkterm_snapshot`, `winkterm_delete_terminal` |
+| Terminals | `winkterm_list_terminals`, `winkterm_get_terminal`, `winkterm_create_terminal`, `winkterm_exec`, `winkterm_run`, `winkterm_run_status`, `winkterm_run_wait`, `winkterm_run_cancel`, `winkterm_input`, `winkterm_snapshot`, `winkterm_delete_terminal` |
 | SSH connections | `winkterm_list_ssh_connections`, `winkterm_get_ssh_connection`, `winkterm_create_ssh_connection`, `winkterm_update_ssh_connection`, `winkterm_delete_ssh_connection`, `winkterm_import_electerm` |
-| SSH commands | `winkterm_ssh_run`, `winkterm_ssh_run_async` |
-| Jobs and events | `winkterm_list_jobs`, `winkterm_get_job`, `winkterm_cancel_job`, `winkterm_recent_events` |
+| SSH commands | `winkterm_ssh_run` |
+| Events | `winkterm_recent_events` |
 | SSH files | `winkterm_ssh_files_list`, `winkterm_ssh_files_read`, `winkterm_ssh_files_write`, `winkterm_ssh_upload`, `winkterm_ssh_download`, `winkterm_ssh_mkdir`, `winkterm_ssh_delete_paths` |
 
 `winkterm_ssh_upload` reads `local_path` on the machine running the MCP server.
@@ -117,7 +123,11 @@ winkterm call terminal.exec '{"terminal_id":"t1","command":"ls -la"}'
 # Convenience sugar:
 winkterm list
 winkterm create --type ssh --connection-id ab12cd34 --name fix
-winkterm exec <terminal_id> "sleep 300 && echo done"   # long task, WS keeps it alive
+winkterm exec <terminal_id> "uptime"                   # short command, waits for result
+winkterm run <terminal_id> "npm install"               # agent-friendly long task
+winkterm run-wait <run_id> --since <size> --timeout 30 # wait for next output/status
+winkterm run-status <run_id> --since <size>
+winkterm run-cancel <run_id>
 winkterm input <terminal_id> ":q!" --no-enter
 winkterm snapshot <terminal_id> --since 1024 --pattern ERROR
 winkterm delete <terminal_id>
@@ -126,8 +136,9 @@ winkterm ssh-run <conn_id> "uptime; df -h" --timeout 120
 winkterm call ssh.upload '{"conn_id":"<conn_id>","local_path":"./app.log","remote_path":"/tmp/","overwrite":true}'
 ```
 
-Result payload prints as JSON to **stdout**; live streaming output and diagnostics go
-to **stderr**; exit code is non-zero on error.
+Result payload prints as JSON to **stdout**; live progress and diagnostics may be
+printed to **stderr**, but agent callers must not depend on seeing stderr before the
+CLI process exits. Exit code is non-zero on error.
 
 For `ssh.upload`, `local_path` is resolved on the machine running the CLI, then
 sent to the WinkTerm backend as multipart file content.

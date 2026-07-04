@@ -1,7 +1,7 @@
 ---
 name: winkterm-remote
-description: Drive a running WinkTerm backend — prefer the `winkterm-mcp` MCP server when available; otherwise use the `winkterm` CLI (WebSocket long-connection, so long-running commands aren't cut by a reverse proxy's idle timeout) with HTTP as fallback. Manage SSH connections (create/read/update/delete), open local/SSH terminals, send commands and read output, take snapshots, run async SSH jobs, and transfer files via SSH. Use when you need to run shell commands on remote servers or inside a controlled terminal. Requires a reachable WinkTerm backend.
-version: 8
+description: Drive a running WinkTerm backend — prefer the `winkterm-mcp` MCP server when available; otherwise use the `winkterm` CLI (WebSocket long-connection, so long-running commands aren't cut by a reverse proxy's idle timeout) with HTTP as fallback. Manage SSH connections (create/read/update/delete), open local/SSH terminals, send commands and read output, take snapshots, run managed long commands, and transfer files via SSH. Use when you need to run shell commands on remote servers or inside a controlled terminal. Requires a reachable WinkTerm backend.
+version: 9
 license: MIT
 homepage: https://github.com/Cznorth/winkterm
 ---
@@ -10,7 +10,7 @@ homepage: https://github.com/Cznorth/winkterm
 
 Operate WinkTerm's terminals over MCP, CLI, or HTTP fallback. The backend keeps a
 dedicated PTY per terminal; you can open local or SSH terminals, run commands, read
-output, run long-running jobs asynchronously, and move files over SSH.
+output, run managed long commands, and move files over SSH.
 
 **Prefer MCP when the client supports it.** `winkterm-mcp` exposes tools such as
 `winkterm_ssh_run`, `winkterm_exec`, `winkterm_snapshot`, and generic
@@ -25,6 +25,13 @@ remote terminal output live. When live human monitoring matters, use the CLI or
 subscribe to `terminal.stream`. When the WebSocket is unavailable they
 transparently fall back to the HTTP API.
 
+Important: WebSocket keepalive prevents connection timeouts; it does not guarantee
+that the current agent runtime can see CLI stderr/progress while a process is still
+running. For long tasks, do not blindly wait on one huge timeout. Start the work,
+then actively observe it with `run_wait` or snapshots.
+Background work still needs
+inspection so prompts, errors, and stuck installs are caught early.
+
 ```bash
 # Install from npm (no clone needed):
 npx winkterm help          # run without installing; or: npm install -g winkterm
@@ -38,7 +45,7 @@ npx -y winkterm mcp
 
 # Generic call (covers every method) — long task stays alive over WS:
 npx winkterm exec <terminal_id> "sleep 300 && echo done"
-npx winkterm call ssh.run_async '{"conn_id":"ab12","command":"docker build ."}'
+npx winkterm run <terminal_id> "docker build ."
 ```
 
 This skill is a thin bootstrap. The authoritative, always-current reference (full CLI
@@ -113,10 +120,10 @@ next session. Never overwrite silently — show a diff first.
   an SSH terminal against its `id`.
 - **One-shot SSH**: `POST /api/agent/ssh/{conn_id}/run` runs a single command on a
   connection without manual create/exec/delete.
-- **Async SSH job** (long tasks, survives gateway timeouts):
-  `POST /api/agent/ssh/{conn_id}/run_async` → `{job_id}`, then poll
-  `GET /api/agent/jobs/{job_id}`. Use for installs, `mysqldump`, `docker build`,
-  large copies — anything that can exceed a ~60s proxy timeout.
+- **Observe background work**: even after starting an async/background task, check
+  progress with `run_wait` or terminal snapshots. Prefer wait-for-event
+  calls instead of fixed long sleeps; handle prompts/errors or cancel with `ctrl+c`
+  when needed.
 - **Live stream**: `GET /api/agent/terminals/{id}/stream` (SSE) for `tail -f` /
   long-command monitoring. The equivalent WS method is `terminal.stream`; CLI
   displays progress live, while MCP tool calls return collected progress at the end.

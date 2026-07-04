@@ -1,7 +1,7 @@
 ---
 name: winkterm-remote
-version: 9
-description: 远程操作 WinkTerm —— 默认用 winkterm CLI（WebSocket 长连接，长任务不被反代超时切断），HTTP 仅在 CLI 不可用时兜底。管理 SSH 连接（增删改查）、新建本地/SSH 终端、发命令并读输出、获取终端快照、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
+version: 10
+description: 远程操作 WinkTerm —— 默认用 MCP 或 winkterm CLI（WebSocket 长连接，长任务不被反代超时切断），HTTP 仅在 CLI 不可用时兜底。管理 SSH 连接（增删改查）、新建本地/SSH 终端、发命令并读输出、获取终端快照、SSH 文件传输。当需要远程执行 shell 命令、运维服务器、或在受控终端里跑命令时使用。
 ---
 
 # WinkTerm 远程终端 Skill
@@ -18,7 +18,9 @@ description: 远程操作 WinkTerm —— 默认用 winkterm CLI（WebSocket 长
 
 - **`winkterm` CLI（默认，几乎总是用它）** —— 走 WebSocket 长连接，应用层心跳每 15s 一次，
   长命令（安装、build、dump）不会被 nginx 等反向代理的默认 60s 空闲超时切断。
-  覆盖全部操作，长任务直接 `exec` 全程保活，**无需 job 轮询**。见下方 [CLI](#cli默认).
+  覆盖全部操作。注意：CLI/MCP 的 WebSocket 保活只保证连接不断，不保证当前 agent 能看到
+  stderr 的实时流式过程；agent 需要可控观察长任务时，应启动后台任务后主动用
+  `run_wait` / `snapshot` 查看进度。见下方 [CLI](#cli默认).
 - **HTTP 接口（兜底，实在没办法才用）** —— 原有 REST/SSE 接口全部保留，CLI 连不上时
   auto 模式自动 fallback。**只有目标机跑不了 Node、或需要 SSE 流式订阅时才手动碰 HTTP。**
   细节单独放在 [HTTP_API.md](./HTTP_API.md)（远程 agent 用 `curl ${WINKTERM_BASE_URL}/api/agent/http.md` 取），
@@ -131,11 +133,10 @@ MCP 配置示例：
 | `winkterm_create_ssh_connection` / `winkterm_update_ssh_connection` / `winkterm_delete_ssh_connection` | 管理 SSH 连接 |
 | `winkterm_import_electerm` | 导入 electerm 书签 |
 | `winkterm_ssh_run` | 对某个 SSH 连接执行一次性命令 |
-| `winkterm_ssh_run_async` | 提交异步 SSH 命令 |
-| `winkterm_list_jobs` / `winkterm_get_job` / `winkterm_cancel_job` | 管理异步任务 |
 | `winkterm_create_terminal` | 创建本地/SSH 终端 |
 | `winkterm_get_terminal` | 查看单个终端 |
-| `winkterm_exec` | 在已有终端跑命令，适合长任务 |
+| `winkterm_exec` | 在已有终端跑短命令并等待结果 |
+| `winkterm_run` / `winkterm_run_wait` / `winkterm_run_status` / `winkterm_run_cancel` | 长任务启动、等待新输出、查状态、取消 |
 | `winkterm_input` | 发交互输入或控制键 |
 | `winkterm_snapshot` | 读取终端输出 |
 | `winkterm_delete_terminal` | 关闭终端 |
@@ -145,6 +146,22 @@ MCP 配置示例：
 | `winkterm_ssh_mkdir` / `winkterm_ssh_delete_paths` | SSH 远端目录创建和路径删除 |
 
 如果 MCP 工具不可用，再退回 CLI。
+
+### 长任务观察原则（重要）
+
+不要让 agent 盲等一个长时间阻塞的工具调用。即使任务已经在后台运行，也要主动查看执行过程：
+
+- 短命令可以用 `winkterm_exec` / `winkterm_ssh_run` 等待结果。
+- 长命令、安装、build、迁移、dump、`tail -f`、可能卡交互提示的命令，不要只把 `timeout`
+  调很大然后等待。优先使用可观察的后台模式：启动命令后用 `winkterm_snapshot`
+  增量读取终端，或直接用 `winkterm_run` + `winkterm_run_wait`。
+- 长任务优先用 `winkterm_run` 启动，再循环 `winkterm_run_wait`；它会阻塞到“有新输出、
+  状态变化或等待超时”再返回。不要自己写固定 `sleep 10`。
+- 每次观察都检查错误提示、确认提示、密码/yes/no 交互、卡住的进度条和实际 exit/status。
+  发现卡住时用 `winkterm_input` 发送所需输入或 `ctrl+c`，不要让错误 timeout 一直挂着。
+
+记住：WebSocket 保活解决的是“连接不被反代切断”，不是“agent 自动理解长命令当前进展”。
+agent 必须主动观察。
 
 ## CLI（MCP 不可用时）
 
@@ -205,30 +222,35 @@ winkterm call <method> '<json-params>'
 | `terminal.list` | 列终端 | — |
 | `terminal.get` | 终端信息 | terminal_id |
 | `terminal.delete` | 关闭终端 | terminal_id |
-| `terminal.exec` | 跑命令（带退出码，长任务首选） | terminal_id, command/command_b64, timeout, cwd, env |
+| `terminal.exec` | 跑短命令（带退出码，阻塞等待） | terminal_id, command/command_b64, timeout, cwd, env |
+| `terminal.run` | 启动长任务并立即返回 run_id | terminal_id, command/command_b64, timeout, cancel_on_timeout |
+| `terminal.run_wait` | 等待长任务新输出/状态变化 | run_id, since, timeout |
+| `terminal.run_status` | 查询长任务状态/增量输出 | run_id, since |
+| `terminal.run_cancel` | 取消长任务 | run_id, mode |
 | `terminal.input` | 发输入/控制键 | terminal_id, data/keys, enter, wait |
 | `terminal.snapshot` | 读终端内容 | terminal_id, since, pattern |
 | `ssh.connections.list/get/create/update/delete` | SSH 连接增删改查 | conn_id, host, username, … |
 | `ssh.import_electerm` | 导入 electerm 书签 | bookmarks |
-| `ssh.run` | 一次性 SSH 执行（WS 全程保活） | conn_id, command, timeout |
+| `ssh.run` | 一次性 SSH 短命令执行 | conn_id, command, timeout |
 | `events.recent` | 操作事件流 | since_id, limit |
 | `ssh.files.list/read/write` | SSH 文件读写 | conn_id, path, content |
 | `ssh.upload` / `ssh.download` | SSH 文件传输；CLI 上传读取调用机 `local_path` | conn_id, local_path, remote_path |
 | `ssh.mkdir` | 建远端目录 | conn_id, path |
 | `ssh.delete_paths` | 批量删远端路径 | conn_id, paths |
 
-> `terminal.exec` / `ssh.run` 在 WS 上会发 progress。CLI 会实时打印 progress；
-> MCP 会把 progress 收集后随最终结果返回。`terminal.stream` / `events.stream`
-> 可用于持续订阅；HTTP 侧也提供同名 SSE 端点。异步 job（`ssh.run_async` /
-> `job.*`）主要用于 HTTP/proxy 超时场景；CLI 走 WS 时通常直接用 `exec` /
-> `ssh-run` 保活即可。
+> `terminal.exec` / `ssh.run` 在 WS 上会发 progress。CLI 可能实时打印 progress，
+> 但 agent shell 工具不一定能在进程退出前看到 stderr；MCP 会把 progress 收集后随最终结果返回。
+> agent 长任务优先用 `terminal.run` / `terminal.run_wait`。`terminal.stream` / `events.stream`
+> 可用于持续订阅，HTTP 侧也提供同名 SSE 端点，详见 [HTTP_API.md](./HTTP_API.md)。
 
 ### 便捷子命令
 
 ```bash
 winkterm list                                  # 列终端
 winkterm create --type ssh --connection-id ab12cd34 --name fix
-winkterm exec <terminal_id> "sleep 300 && echo done"   # 长任务，WS 全程保活
+winkterm exec <terminal_id> "uptime"                   # 短命令，等待结果
+winkterm run <terminal_id> "sleep 300 && echo done"    # 长任务，立即返回 run_id
+winkterm run-wait <run_id> --since <size> --timeout 30 # 等新输出/状态变化
 winkterm input <terminal_id> ":q!" --no-enter
 winkterm snapshot <terminal_id> --since 1024 --pattern ERROR
 winkterm delete <terminal_id>
@@ -238,12 +260,16 @@ winkterm ssh-run <conn_id> "uptime; df -h" --timeout 120
 
 ### 长任务怎么办
 
-- **直接 `winkterm exec` / `winkterm ssh-run`**：WS 心跳保活，命令跑多久都不断，输出实时回流。
-  装包、build、mysqldump、大文件拷贝——全都这么跑，**不需要 job、不需要轮询**。
-- 把 `--timeout` 调到够大（默认偏小），命令才不会被客户端提前判超时。
+- **不要把 CLI stderr streaming 当成 agent 协议保证。** 有些 agent 的 shell 工具只在进程退出后
+  才返回 stdout/stderr；即使 CLI 内部实时收到 progress，agent 也可能看不到中间过程。
+- 短命令可直接 `winkterm exec` / `winkterm ssh-run`。长命令应采用“启动后主动观察”的模式：
+  用 `winkterm input <terminal_id> "<cmd>"` 或后续非阻塞 run 接口启动，再用
+  `winkterm run-wait <run_id> --since <size>` 等待增量输出；也可用
+  `winkterm snapshot <terminal_id> --since <size>` 查看终端。
+- 把 `--timeout` 调到够大只能避免客户端提前返回 timeout，不能替代观察过程；当前 `exec`
+  timeout 只是等待超时，不等于一定终止远端命令。
 - 只有 CLI 彻底连不上（旧后端无 `/ws/agent`、WS 被网络阻断）才退回 HTTP；
-  那种情况下长命令才需要 HTTP 的异步 job（见 [HTTP_API.md](./HTTP_API.md)）躲网关超时。
-  正常用 CLI 时**永远用不到 job**。
+  那种情况下仍可用 HTTP 的 `/run` + `/wait` 路径躲网关超时。
 
 ## 选 input 还是 exec
 
@@ -283,6 +309,8 @@ winkterm ssh-run <conn_id> "uptime; df -h" --timeout 120
   （`winkterm call terminal.exec '{"terminal_id":"t","command_b64":"<base64>"}'`）。
 - 交互式命令（分页器、确认提示）先发命令再 `snapshot` 查看，再用 `call terminal.input` 带 `keys` 字段发对应按键。
 - 命令运行慢时把 `--timeout` 调大；WS 全程保活，不用怕断。
+- 长任务和后台任务都要主动查看过程：用 `run-wait` 或 `snapshot --since`。
+  不要只等待一个超长 timeout；发现错误提示或交互卡住时及时处理。
 - SSH 终端启动后首屏可能是登录横幅；发命令前可先 `snapshot` 确认 shell 就绪。
 - 终端是有状态的：`cd`、环境变量在同一终端内保持，跨命令复用同一终端 id。
 - `exec` 会在 shell 历史里留下 sentinel 包装的命令；若要避免，先 `exec "export HISTFILE=/dev/null"`。
@@ -305,8 +333,9 @@ winkterm exec "$TID" "tail -n 50 syslog"
 CMD=$(echo -n "ps aux | awk '\$3>0 {print \$2}'" | base64 -w0)
 winkterm call terminal.exec "{\"terminal_id\":\"$TID\",\"command_b64\":\"$CMD\"}"
 
-# 长任务：WS 心跳保活，跑多久都不断，无需 job 轮询
+# 长任务：启动后主动观察，不要盲等超长 timeout
 winkterm exec "$TID" "apt-get install -y nginx && systemctl restart nginx" --timeout 600
+winkterm snapshot "$TID" --since 0 --pattern "error|failed|waiting|confirm"
 
 # 打断卡死命令（控制键走通用 call；input 子命令只发文本）
 winkterm call terminal.input "{\"terminal_id\":\"$TID\",\"keys\":[\"ctrl+c\"],\"enter\":false}"

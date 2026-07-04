@@ -81,6 +81,7 @@ a = Analysis(
         "backend.api.ws_chat",
         "backend.terminal.pty_manager",
         "backend.terminal.session_manager",
+        "backend.terminal.run_manager",
         "backend.terminal.ws_handler",
         "backend.agent",
         "backend.agent.graph",

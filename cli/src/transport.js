@@ -166,6 +166,10 @@ function restRoute(method, params) {
     case "terminal.snapshot": return { verb: "GET", path: `/api/agent/terminals/${take("terminal_id")}/snapshot`, query: p };
     case "terminal.input": return { verb: "POST", path: `/api/agent/terminals/${take("terminal_id")}/input`, body: p };
     case "terminal.exec": return { verb: "POST", path: `/api/agent/terminals/${take("terminal_id")}/exec`, body: p };
+    case "terminal.run": return { verb: "POST", path: `/api/agent/terminals/${take("terminal_id")}/run`, body: p };
+    case "terminal.run_status": return { verb: "GET", path: `/api/agent/runs/${take("run_id")}`, query: p };
+    case "terminal.run_wait": return { verb: "POST", path: `/api/agent/runs/${take("run_id")}/wait`, body: p };
+    case "terminal.run_cancel": return { verb: "POST", path: `/api/agent/runs/${take("run_id")}/cancel`, body: p };
     case "ssh.connections.list": return { verb: "GET", path: `/api/agent/ssh/connections` };
     case "ssh.connections.create": return { verb: "POST", path: `/api/agent/ssh/connections`, body: p };
     case "ssh.connections.get": return { verb: "GET", path: `/api/agent/ssh/connections/${take("conn_id")}`, query: p };
@@ -173,10 +177,6 @@ function restRoute(method, params) {
     case "ssh.connections.delete": return { verb: "DELETE", path: `/api/agent/ssh/connections/${take("conn_id")}` };
     case "ssh.import_electerm": return { verb: "POST", path: `/api/agent/ssh/import/electerm`, body: p };
     case "ssh.run": return { verb: "POST", path: `/api/agent/ssh/${take("conn_id")}/run`, body: p };
-    case "ssh.run_async": return { verb: "POST", path: `/api/agent/ssh/${take("conn_id")}/run_async`, body: p };
-    case "job.list": return { verb: "GET", path: `/api/agent/jobs` };
-    case "job.get": return { verb: "GET", path: `/api/agent/jobs/${take("job_id")}` };
-    case "job.cancel": return { verb: "DELETE", path: `/api/agent/jobs/${take("job_id")}` };
     case "events.recent": return { verb: "GET", path: `/api/agent/events/recent`, query: p };
     case "ssh.files.list": return { verb: "GET", path: `/api/agent/ssh/${take("conn_id")}/files`, query: p };
     case "ssh.files.read": return { verb: "GET", path: `/api/agent/ssh/${take("conn_id")}/files/content`, query: p };

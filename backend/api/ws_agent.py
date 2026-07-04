@@ -38,7 +38,6 @@ from typing import Any, Awaitable, Callable, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.api.agent_routes import _resolve_agent_token
-from backend.ssh.command_exec import build_command, run_command
 from backend.ssh.connection_manager import SSHConnectionManager
 from backend.ssh.file_transfer import (
     SSHFileExistsError,
@@ -47,9 +46,9 @@ from backend.ssh.file_transfer import (
     SSHFileTransferError,
     SSHInvalidPathError,
 )
-from backend.ssh.run_jobs import RunJob, RunJobManager
 from backend.terminal._term_utils import UnknownKeyError
 from backend.terminal.agent_events import get_event_log, make_request_id, short_text
+from backend.terminal.run_manager import get_run_manager
 from backend.terminal.session_manager import get_session_manager
 
 logger = logging.getLogger("ws_agent")
@@ -389,6 +388,47 @@ class AgentWSHandler:
         )
         await self._result(req_id, result)
 
+    async def _m_terminal_run(self, req_id: str, p: dict) -> None:
+        result = await get_run_manager().start(
+            terminal_id=p.get("terminal_id", ""),
+            command=p.get("command", ""),
+            command_b64=p.get("command_b64"),
+            timeout=float(p.get("timeout", 3600.0)),
+            cancel_on_timeout=bool(p.get("cancel_on_timeout", False)),
+            cwd=p.get("cwd"),
+            env=p.get("env"),
+        )
+        get_event_log().emit(
+            "terminal_run_start",
+            terminal_id=p.get("terminal_id", ""),
+            run_id=result.get("run_id"),
+            command=short_text(p.get("command") or "(b64)"),
+        )
+        await self._result(req_id, result)
+
+    async def _m_terminal_run_status(self, req_id: str, p: dict) -> None:
+        await self._result(req_id, await get_run_manager().status(p.get("run_id", ""), p.get("since")))
+
+    async def _m_terminal_run_wait(self, req_id: str, p: dict) -> None:
+        await self._result(
+            req_id,
+            await get_run_manager().wait(
+                p.get("run_id", ""),
+                since=p.get("since"),
+                timeout=float(p.get("timeout", 30.0)),
+            ),
+        )
+
+    async def _m_terminal_run_cancel(self, req_id: str, p: dict) -> None:
+        result = await get_run_manager().cancel(p.get("run_id", ""), mode=p.get("mode", "ctrl_c"))
+        get_event_log().emit(
+            "terminal_run_cancel",
+            terminal_id=result.get("terminal_id"),
+            run_id=p.get("run_id", ""),
+            mode=p.get("mode", "ctrl_c"),
+        )
+        await self._result(req_id, result)
+
     async def _m_terminal_stream(self, req_id: str, p: dict) -> None:
         """Subscribe to live terminal output. Emits ``progress`` frames until the
         terminal closes or the request is cancelled."""
@@ -511,52 +551,6 @@ class AgentWSHandler:
         result["request_id"] = rid
         await self._result(req_id, result)
 
-    async def _m_ssh_run_async(self, req_id: str, p: dict) -> None:
-        conn_id = p.get("conn_id", "")
-        conn = self._connection_or_raise(conn_id)
-        timeout = float(p.get("timeout", 60.0))
-        try:
-            final_command = build_command(p.get("command", ""), p.get("command_b64"), p.get("cwd"), p.get("env"))
-        except ValueError as exc:
-            raise AgentError(400, str(exc)) from exc
-        preview = short_text(p.get("command") or "(b64)")
-
-        async def worker(job: RunJob) -> None:
-            result = await asyncio.to_thread(run_command, conn, final_command, timeout)
-            job.finish(result)
-            get_event_log().emit(
-                "ssh_run_async_done",
-                job_id=job.id,
-                connection_id=conn_id,
-                exit_code=job.exit_code,
-                ok=job.ok,
-            )
-
-        job = RunJobManager.submit(conn_id, preview, worker)
-        get_event_log().emit(
-            "ssh_run_async_start",
-            job_id=job["job_id"],
-            connection_id=conn_id,
-            command=preview,
-        )
-        await self._result(req_id, job)
-
-    async def _m_job_list(self, req_id: str, p: dict) -> None:
-        await self._result(req_id, {"jobs": RunJobManager.list()})
-
-    async def _m_job_get(self, req_id: str, p: dict) -> None:
-        job = RunJobManager.get(p.get("job_id", ""))
-        if not job:
-            raise AgentError(404, "任务不存在")
-        await self._result(req_id, job)
-
-    async def _m_job_cancel(self, req_id: str, p: dict) -> None:
-        job = RunJobManager.cancel(p.get("job_id", ""))
-        if not job:
-            raise AgentError(404, "任务不存在")
-        get_event_log().emit("ssh_run_async_cancel", job_id=p.get("job_id", ""))
-        await self._result(req_id, job)
-
     # ------------------------------------------------------------------
     # Events
     # ------------------------------------------------------------------
@@ -668,6 +662,10 @@ class AgentWSHandler:
         "terminal.snapshot": _m_terminal_snapshot,
         "terminal.input": _m_terminal_input,
         "terminal.exec": _m_terminal_exec,
+        "terminal.run": _m_terminal_run,
+        "terminal.run_status": _m_terminal_run_status,
+        "terminal.run_wait": _m_terminal_run_wait,
+        "terminal.run_cancel": _m_terminal_run_cancel,
         "terminal.stream": _m_terminal_stream,
         "ssh.connections.list": _m_ssh_connections_list,
         "ssh.connections.create": _m_ssh_connections_create,
@@ -676,10 +674,6 @@ class AgentWSHandler:
         "ssh.connections.delete": _m_ssh_connections_delete,
         "ssh.import_electerm": _m_ssh_import_electerm,
         "ssh.run": _m_ssh_run,
-        "ssh.run_async": _m_ssh_run_async,
-        "job.list": _m_job_list,
-        "job.get": _m_job_get,
-        "job.cancel": _m_job_cancel,
         "events.recent": _m_events_recent,
         "events.stream": _m_events_stream,
         "ssh.files.list": _m_ssh_files_list,

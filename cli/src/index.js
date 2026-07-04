@@ -89,19 +89,24 @@ Convenience:
   winkterm list                                   # list terminals
   winkterm create [--type local|ssh] [--connection-id id] [--name n]
   winkterm exec <terminal_id> <command...> [--timeout n] [--cwd dir]
+  winkterm run <terminal_id> <command...> [--timeout n] [--cancel-on-timeout] [--cwd dir]
+  winkterm run-status <run_id> [--since n]
+  winkterm run-wait <run_id> [--since n] [--timeout n]
+  winkterm run-cancel <run_id> [--mode ctrl_c|close]
   winkterm input <terminal_id> <data...> [--no-enter] [--wait]
   winkterm snapshot <terminal_id> [--since n] [--pattern p]
   winkterm delete <terminal_id>
   winkterm ssh-list                               # list SSH connections
   winkterm ssh-run <conn_id> <command...> [--timeout n]
 
-Long tasks: just use exec/ssh-run. The WebSocket heartbeat keeps the call
-alive for as long as the command runs, so there is no job/polling layer here —
-async jobs are an HTTP-only workaround for proxy timeouts the CLI doesn't hit.
+Long tasks: prefer run + run-wait. WebSocket heartbeat keeps the transport alive,
+but many agent shell tools do not expose stderr while the CLI process is running.
+run-wait returns when new output/status is available, avoiding blind sleeps.
 
 Examples:
-  winkterm exec t1 "sleep 600 && echo done"       # 10-min task: WS keeps it alive, output streams live
-  winkterm ssh-run ab12cd34 "apt-get install -y nginx"   # long install, no polling needed
+  winkterm run t1 "sleep 600 && echo done"        # start, return run_id immediately
+  winkterm run-wait <run_id> --since <size> --timeout 30
+  winkterm ssh-run ab12cd34 "uptime; df -h"       # simple one-shot SSH command
 `;
 
 /** Build (method, params) from a parsed command. Returns null for meta commands. */
@@ -143,6 +148,39 @@ function buildCall(cmd, _, flags) {
         method: "terminal.exec",
         params: clean({ terminal_id: tid, command, timeout: numFlag(flags.timeout), cwd: flags.cwd }),
       };
+    }
+    case "run": {
+      const tid = rest[0];
+      const command = rest.slice(1).join(" ");
+      if (!tid || !command) throw new UsageError("run 需要 <terminal_id> <command...>");
+      return {
+        method: "terminal.run",
+        params: clean({
+          terminal_id: tid,
+          command,
+          timeout: numFlag(flags.timeout),
+          cancel_on_timeout: flags["cancel-on-timeout"] ? true : undefined,
+          cwd: flags.cwd,
+        }),
+      };
+    }
+    case "run-status": {
+      const runId = rest[0];
+      if (!runId) throw new UsageError("run-status 需要 <run_id>");
+      return { method: "terminal.run_status", params: clean({ run_id: runId, since: numFlag(flags.since) }) };
+    }
+    case "run-wait": {
+      const runId = rest[0];
+      if (!runId) throw new UsageError("run-wait 需要 <run_id>");
+      return {
+        method: "terminal.run_wait",
+        params: clean({ run_id: runId, since: numFlag(flags.since), timeout: numFlag(flags.timeout) }),
+      };
+    }
+    case "run-cancel": {
+      const runId = rest[0];
+      if (!runId) throw new UsageError("run-cancel 需要 <run_id>");
+      return { method: "terminal.run_cancel", params: clean({ run_id: runId, mode: flags.mode }) };
     }
     case "input": {
       const tid = rest[0];
