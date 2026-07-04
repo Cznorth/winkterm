@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
@@ -158,6 +158,27 @@ const CheckIcon = () => (
 
 const GITHUB_REPO_URL = "https://github.com/Cznorth/winkterm";
 
+type SettingsSectionId =
+  | "ai-setup"
+  | "models"
+  | "agent-behavior"
+  | "security"
+  | "appearance"
+  | "about";
+
+type DocEditorId = "agents" | "memory" | null;
+
+type AiSetupStatus = "not-configured" | "needs-auth" | "testing" | "ready" | "error";
+
+const SECTION_IDS: SettingsSectionId[] = [
+  "ai-setup",
+  "models",
+  "agent-behavior",
+  "security",
+  "appearance",
+  "about",
+];
+
 export default function SettingsPanel() {
   const { t, locale, setLocale } = useI18n();
   const { themeMode, setThemeMode } = useTheme();
@@ -179,12 +200,15 @@ export default function SettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [fetchError, setFetchError] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [authUrlCopied, setAuthUrlCopied] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [streamTesting, setStreamTesting] = useState(false);
   const [streamOutput, setStreamOutput] = useState("");
   const [streamError, setStreamError] = useState("");
   const [streamSuccess, setStreamSuccess] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const streamTestFingerprintRef = useRef<string>("");
+  const [tokenEditing, setTokenEditing] = useState(false);
   const [agentsMd, setAgentsMd] = useState("");
   const [memoryMd, setMemoryMd] = useState("");
   const [agentsMdSaved, setAgentsMdSaved] = useState(false);
@@ -202,6 +226,10 @@ export default function SettingsPanel() {
   const [codexCallbackUrl, setCodexCallbackUrl] = useState("");
   const [codexCallbackError, setCodexCallbackError] = useState("");
   const [codexCallbackSubmitting, setCodexCallbackSubmitting] = useState(false);
+  const [codexOAuthError, setCodexOAuthError] = useState("");
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>("ai-setup");
+  const [editingDoc, setEditingDoc] = useState<DocEditorId>(null);
+  const [modelsAdvancedOpen, setModelsAdvancedOpen] = useState(false);
 
   const copyToClipboard = (text: string) => {
     if (navigator.clipboard?.writeText) {
@@ -241,6 +269,9 @@ export default function SettingsPanel() {
   const installPrompt = `${t("settings.agentAccessPrompt")}${installGuideUrl}`;
 
   const handleGenerateToken = () => {
+    if (settings.agent_api_token && !window.confirm(t("settings.regenerateTokenConfirm"))) {
+      return;
+    }
     const bytes = crypto.getRandomValues(new Uint8Array(24));
     const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
     setSettings((prev) => ({ ...prev, agent_api_token: token }));
@@ -283,30 +314,31 @@ export default function SettingsPanel() {
 
   const refreshCodexStatus = async () => {
     const res = await axios.get("/api/codex/status");
-    setCodexStatus(res.data);
+    const next = res.data as CodexStatus;
+    setCodexStatus(next);
+  };
+
+  const openCodexAuthInBrowser = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    const pyApi = window.pywebview?.api as { open_external_url?: (u: string) => boolean } | undefined;
+    if (pyApi?.open_external_url) {
+      pyApi.open_external_url(trimmed);
+      return;
+    }
+    window.open(trimmed, "_blank", "noopener,noreferrer");
+  };
+
+  const handleCopyCodexAuthUrl = async (url: string) => {
+    if (!url.trim()) return;
+    await copyToClipboard(url.trim());
+    setAuthUrlCopied(true);
+    setTimeout(() => setAuthUrlCopied(false), 2000);
   };
 
   useEffect(() => {
     refreshCodexStatus().catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!codexLoggingIn) return;
-    const timer = window.setInterval(async () => {
-      try {
-        const res = await axios.get("/api/codex/status");
-        const next = res.data as CodexStatus;
-        setCodexStatus(next);
-        if (next.logged_in || next.oauth?.state === "error") {
-          setCodexLoggingIn(false);
-          window.clearInterval(timer);
-        }
-      } catch {
-        /* keep polling while the auth window is active */
-      }
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [codexLoggingIn]);
 
   useEffect(() => {
     axios.get("/api/settings/agents-md").then((res) => setAgentsMd(res.data.content || "")).catch(() => {});
@@ -327,6 +359,64 @@ export default function SettingsPanel() {
 
   const testModel = settings.selected_model || settings.models?.[0]?.id || "";
   const isCodexMode = settings.api_format === "codex";
+
+  useEffect(() => {
+    if (!isCodexMode || codexStatus?.logged_in) return;
+    const shouldPoll = codexLoggingIn
+      || !!codexAuthUrl.trim()
+      || codexStatus?.oauth?.state === "pending"
+      || codexStatus?.oauth?.active;
+    if (!shouldPoll) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await axios.get("/api/codex/status");
+        const next = res.data as CodexStatus;
+        setCodexStatus(next);
+        if (next.logged_in) {
+          setCodexLoggingIn(false);
+          setCodexAuthUrl("");
+          setCodexCallbackUrl("");
+          setCodexCallbackError("");
+        } else if (next.oauth?.state === "error") {
+          setCodexLoggingIn(false);
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [
+    isCodexMode,
+    codexLoggingIn,
+    codexAuthUrl,
+    codexStatus?.logged_in,
+    codexStatus?.oauth?.state,
+    codexStatus?.oauth?.active,
+  ]);
+
+  const buildStreamTestFingerprint = useCallback(() => (
+    [
+      settings.api_format,
+      settings.base_url.trim(),
+      settings.api_key,
+      settings.selected_model,
+      codexStatus?.logged_in ? "1" : "0",
+    ].join("")
+  ), [settings.api_format, settings.base_url, settings.api_key, settings.selected_model, codexStatus?.logged_in]);
+
+  useEffect(() => {
+    const fp = buildStreamTestFingerprint();
+    if (streamTestFingerprintRef.current && streamTestFingerprintRef.current !== fp) {
+      streamAbortRef.current?.abort();
+      setStreamTesting(false);
+      setStreamOutput("");
+      setStreamError("");
+      setStreamSuccess(false);
+      streamTestFingerprintRef.current = "";
+    }
+  }, [buildStreamTestFingerprint]);
+
+  const streamResultMatchesConfig = streamTestFingerprintRef.current === buildStreamTestFingerprint();
   const providerLabel = settings.api_format === "codex" ? "codex" : settings.api_format;
   const candidateStatusLabel = (status: CandidateStatus) => {
     if (status === "testing") return t("settings.modelStatusTesting");
@@ -400,6 +490,7 @@ export default function SettingsPanel() {
     streamAbortRef.current?.abort();
     const controller = new AbortController();
     streamAbortRef.current = controller;
+    streamTestFingerprintRef.current = buildStreamTestFingerprint();
 
     setStreamTesting(true);
     setStreamOutput("");
@@ -519,15 +610,28 @@ export default function SettingsPanel() {
     setCodexLoggingIn(true);
     setCodexCallbackUrl("");
     setCodexCallbackError("");
+    setCodexOAuthError("");
+    setAuthUrlCopied(false);
     try {
       const res = await axios.post("/api/codex/oauth/start", { open_browser: false });
-      const authUrl = res.data.auth_url || "";
-      setCodexAuthUrl(authUrl);
-      if (authUrl) {
-        window.open(authUrl, "_blank", "noopener,noreferrer");
+      let authUrl = (res.data?.auth_url as string) || "";
+      if (!authUrl) {
+        const st = await axios.get("/api/codex/status");
+        authUrl = (st.data?.oauth?.auth_url as string) || "";
       }
-      await refreshCodexStatus().catch(() => {});
-    } catch {
+      if (!authUrl) {
+        setCodexOAuthError(t("settings.codexGenerateLinkFailed"));
+        setCodexAuthUrl("");
+        return;
+      }
+      setCodexAuthUrl(authUrl);
+      const st = await axios.get("/api/codex/status");
+      setCodexStatus(st.data as CodexStatus);
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setCodexOAuthError(typeof detail === "string" ? detail : t("settings.codexGenerateLinkFailed"));
+      setCodexAuthUrl("");
+    } finally {
       setCodexLoggingIn(false);
     }
   };
@@ -538,7 +642,10 @@ export default function SettingsPanel() {
     setCodexCallbackSubmitting(true);
     setCodexCallbackError("");
     try {
-      await axios.post("/api/codex/oauth/callback", { callback_url: callbackUrl });
+      const res = await axios.post("/api/codex/oauth/callback", { callback_url: callbackUrl });
+      if (res.data?.already_logged_in) {
+        setCodexCallbackError("");
+      }
       setCodexCallbackUrl("");
       setCodexAuthUrl("");
       setCodexLoggingIn(false);
@@ -551,9 +658,17 @@ export default function SettingsPanel() {
     }
   };
 
+  const displayedCodexAuthUrl = codexAuthUrl.trim();
+  const codexStaleRemotePending = Boolean(
+    !displayedCodexAuthUrl
+    && !codexLoggingIn
+    && codexStatus?.oauth?.state === "pending"
+    && codexStatus?.oauth?.active,
+  );
+  const showCodexAuthUrlPanel = isCodexMode && (!codexStatus?.logged_in || !!displayedCodexAuthUrl);
   const showCodexCallbackForm = isCodexMode
-    && !codexStatus?.logged_in
-    && (codexLoggingIn || codexStatus?.oauth?.active);
+    && (!codexStatus?.logged_in || !!displayedCodexAuthUrl)
+    && !!displayedCodexAuthUrl;
 
   const handleAddModel = () => {
     if (!newModelId.trim()) return;
@@ -719,144 +834,279 @@ export default function SettingsPanel() {
 
   const hasModels = (settings.models?.length ?? 0) > 0;
 
-  return (
-    <div className="settings-panel">
-      <div className="settings-header">
-        <span className="settings-header-icon"><SettingsIcon /></span>
-        <span className="settings-header-title">{t("settings.title")}</span>
+  const aiSetupStatus: AiSetupStatus = (() => {
+    if (streamTesting) return "testing";
+    if (streamResultMatchesConfig && streamError) return "error";
+    if (isCodexMode) {
+      if (!codexStatus?.logged_in) return "needs-auth";
+      if (!testModel) return "needs-auth";
+      if (streamResultMatchesConfig && streamSuccess) return "ready";
+      return "needs-auth";
+    }
+    if (!settings.base_url?.trim() && !settings.api_key?.trim()) return "not-configured";
+    if (!settings.base_url?.trim() || !settings.api_key?.trim()) return "needs-auth";
+    if (streamResultMatchesConfig && streamSuccess) return "ready";
+    return "needs-auth";
+  })();
+
+  const aiStatusMessage = () => {
+    if (aiSetupStatus === "testing") return t("settings.aiStatusTesting");
+    if (aiSetupStatus === "ready") return t("settings.aiStatusReady");
+    if (aiSetupStatus === "error") return streamError || t("settings.aiStatusError");
+    if (aiSetupStatus === "not-configured") return t("settings.aiStatusNotConfigured");
+    if (isCodexMode && codexStatus?.logged_in && !testModel) {
+      return t("settings.aiSetupNeedModelHint");
+    }
+    return isCodexMode
+      ? (codexStatus?.oauth?.message || codexStatus?.message || t("settings.aiStatusNeedsAuth"))
+      : t("settings.aiStatusNeedsAuth");
+  };
+
+  const canFetchModelsInSetup = isCodexMode
+    ? !!codexStatus?.logged_in
+    : !!(settings.base_url?.trim() && settings.api_key?.trim());
+
+  const handleFetchModelsFromSetup = async () => {
+    await handleFetchModels();
+    setActiveSection("models");
+  };
+
+  const sectionTitle = (id: SettingsSectionId) => {
+    const map: Record<SettingsSectionId, string> = {
+      "ai-setup": t("settings.navAiSetup"),
+      models: t("settings.navModels"),
+      "agent-behavior": t("settings.navAgentBehavior"),
+      security: t("settings.navSecurity"),
+      appearance: t("settings.navAppearance"),
+      about: t("settings.navAbout"),
+    };
+    return map[id];
+  };
+
+  const setProviderFormat = (format: Settings["api_format"]) => {
+    setSettings((prev) => ({ ...prev, api_format: format }));
+  };
+
+  const maskToken = (token: string) => {
+    if (!token) return "";
+    if (token.length <= 8) return "••••••••";
+    return `${token.slice(0, 4)}••••••••${token.slice(-4)}`;
+  };
+
+  const renderSaveBar = () => (
+    <>
+      {saved && (
+        <div className="settings-success" style={{ marginBottom: "12px" }}>
+          <CheckIcon />
+          {t("settings.saved")}
+        </div>
+      )}
+      <button
+        className="settings-btn settings-btn-primary settings-btn-full"
+        onClick={handleSave}
+        disabled={loading}
+      >
+        {loading ? (
+          <>
+            <span className="settings-spinner" />
+            {t("settings.saving")}
+          </>
+        ) : (
+          t("settings.save")
+        )}
+      </button>
+    </>
+  );
+
+  const renderAiSetupSection = () => (
+    <div className="settings-section-body">
+      <div className={`settings-status-banner ${
+        aiSetupStatus === "ready" ? "ready" : aiSetupStatus === "error" ? "error" : "warn"
+      }`}>
+        <span className="settings-status-dot-lg" />
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: "4px" }}>{t("settings.aiStatusTitle")}</div>
+          <div style={{ color: "var(--fg-secondary)", fontSize: "12px" }}>{aiStatusMessage()}</div>
+        </div>
       </div>
 
-      <div className="settings-content">
-        <div className="settings-group">
-          <div className="settings-group-title">
-            <ApiIcon />
-            {t("settings.apiConfig")}
-          </div>
-
-          <div className="settings-field">
-            <label className="settings-label">{t("settings.apiFormat")}</label>
-            <select
-              className="settings-select"
-              value={settings.api_format}
-              onChange={(e) => setSettings({ ...settings, api_format: e.target.value as "openai" | "anthropic" | "codex" })}
+      <div className="settings-field">
+        <label className="settings-label">{t("settings.apiFormat")}</label>
+        <div className="settings-provider-cards">
+          {([
+            { id: "codex" as const, title: t("settings.providerCodex"), badge: "recommended" as const },
+            { id: "openai" as const, title: t("settings.providerOpenAI"), badge: "advanced" as const },
+            { id: "anthropic" as const, title: t("settings.providerAnthropic"), badge: "advanced" as const },
+          ]).map((p) => (
+            <label
+              key={p.id}
+              className={`settings-provider-card ${settings.api_format === p.id ? "selected" : ""}`}
             >
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="codex">Codex OAuth</option>
-            </select>
+              <input
+                type="radio"
+                name="api_format"
+                checked={settings.api_format === p.id}
+                onChange={() => setProviderFormat(p.id)}
+              />
+              <div className="settings-provider-card-main">
+                <span className="settings-provider-card-title">
+                  {p.title}
+                  <span className={`settings-provider-card-badge ${p.badge === "advanced" ? "muted" : ""}`}>
+                    {p.badge === "recommended" ? t("settings.providerRecommended") : t("settings.providerAdvanced")}
+                  </span>
+                </span>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {isCodexMode ? (
+        <div className="settings-field">
+          <label className="settings-label">{t("settings.codexLogin")}</label>
+          <div className={codexStatus?.logged_in ? "settings-success" : "settings-help"}>
+            {codexStatus
+              ? codexStatus.logged_in
+                ? t("settings.codexLoggedIn")
+                : codexStaleRemotePending
+                  ? t("settings.codexStaleOAuth")
+                  : displayedCodexAuthUrl
+                    ? t("settings.codexLinkReady")
+                    : codexLoggingIn
+                      ? t("settings.codexLoggingIn")
+                      : codexStatus.oauth?.state === "pending"
+                        ? (codexStatus.oauth?.message || t("settings.codexLoggingIn"))
+                        : codexStatus.message || t("settings.codexNotLoggedIn")
+              : t("settings.fetching")}
           </div>
-
-          {isCodexMode ? (
-            <div className="settings-field">
-              <label className="settings-label">{t("settings.codexLogin")}</label>
-              <div className={codexStatus?.logged_in ? "settings-success" : "settings-help"}>
-                {codexStatus
-                  ? codexStatus.oauth?.message || codexStatus.message || (codexStatus.logged_in ? t("settings.codexLoggedIn") : t("settings.codexNotLoggedIn"))
-                  : t("settings.fetching")}
-              </div>
-              {codexAuthUrl && codexLoggingIn && (
-                <a
-                  className="settings-help"
-                  href={codexAuthUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ display: "block", marginTop: "8px" }}
-                >
-                  {t("settings.codexOpenAuth")}
-                </a>
-              )}
-              <div className="settings-inline-actions" style={{ marginTop: "8px" }}>
-                <button
-                  className="settings-btn settings-btn-secondary settings-btn-full"
-                  onClick={refreshCodexStatus}
-                >
-                  <RefreshIcon />
-                  {t("settings.codexCheckStatus")}
-                </button>
-                <button
-                  className="settings-btn settings-btn-primary settings-btn-full"
-                  onClick={handleCodexLogin}
-                  disabled={codexLoggingIn}
-                >
-                  {codexLoggingIn ? (
-                    <>
-                      <span className="settings-spinner" />
-                      {t("settings.codexLoggingIn")}
-                    </>
-                  ) : (
-                    t("settings.codexLoginButton")
-                  )}
-                </button>
-              </div>
-              {showCodexCallbackForm && (
-                <div className="settings-field" style={{ marginTop: "12px" }}>
-                  <label className="settings-label">{t("settings.codexCallbackLabel")}</label>
-                  <textarea
-                    className="settings-input settings-textarea"
-                    value={codexCallbackUrl}
-                    onChange={(e) => setCodexCallbackUrl(e.target.value)}
-                    placeholder={t("settings.codexCallbackPlaceholder")}
-                    rows={3}
-                  />
-                  <div className="settings-help">{t("settings.codexCallbackHelp")}</div>
-                  {codexCallbackError && (
-                    <div className="settings-error" style={{ marginTop: "8px" }}>{codexCallbackError}</div>
-                  )}
-                  <button
-                    className="settings-btn settings-btn-primary settings-btn-full"
-                    style={{ marginTop: "8px" }}
-                    onClick={handleCodexCallbackSubmit}
-                    disabled={codexCallbackSubmitting || !codexCallbackUrl.trim()}
-                  >
-                    {codexCallbackSubmitting ? (
-                      <>
-                        <span className="settings-spinner" />
-                        {t("settings.codexCallbackSubmitting")}
-                      </>
-                    ) : (
-                      t("settings.codexCallbackSubmit")
-                    )}
-                  </button>
-                </div>
-              )}
-              <div className="settings-help" style={{ marginTop: "8px" }}>{t("settings.codexHelp")}</div>
-            </div>
-          ) : (
-            <>
-              <div className="settings-field">
-                <label className="settings-label">{t("settings.baseUrl")}</label>
-                <input
-                  type="text"
-                  className="settings-input"
-                  value={settings.base_url}
-                  onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
-                  placeholder={settings.api_format === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
-                />
-                <div className="settings-help">
-                  {settings.api_format === "openai"
-                    ? t("settings.openaiHelp")
-                    : t("settings.anthropicHelp")}
-                </div>
-              </div>
-
-              <div className="settings-field">
-                <label className="settings-label">{t("settings.apiKey")}</label>
-                <input
-                  type="password"
-                  className="settings-input"
-                  value={settings.api_key}
-                  onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
-                  placeholder="sk-..."
-                />
-              </div>
-            </>
+          {codexOAuthError && (
+            <div className="settings-error" style={{ marginTop: "8px" }}>{codexOAuthError}</div>
           )}
-
-          <div className="settings-inline-actions">
+          <div className="settings-inline-actions" style={{ marginTop: "8px" }}>
+            <button className="settings-btn settings-btn-secondary settings-btn-full" onClick={refreshCodexStatus}>
+              <RefreshIcon />
+              {t("settings.codexCheckStatus")}
+            </button>
             <button
-              className="settings-btn settings-btn-secondary settings-btn-full"
-              onClick={handleFetchModels}
-              disabled={fetching || (!isCodexMode && (!settings.base_url || !settings.api_key))}
+              className="settings-btn settings-btn-primary settings-btn-full"
+              onClick={handleCodexLogin}
+              disabled={codexLoggingIn}
+            >
+              {codexLoggingIn ? (
+                <>
+                  <span className="settings-spinner" />
+                  {t("settings.codexLoggingIn")}
+                </>
+              ) : (
+                t("settings.codexLoginButton")
+              )}
+            </button>
+          </div>
+          {showCodexAuthUrlPanel && (
+            <div className="settings-codex-auth-panel">
+              <label className="settings-label">{t("settings.codexAuthUrlLabel")}</label>
+              <div className="settings-help">
+                {displayedCodexAuthUrl
+                  ? t("settings.codexLinkReady")
+                  : t("settings.codexAuthUrlHelpPending")}
+              </div>
+              <input
+                type="text"
+                className="settings-input settings-codex-auth-url"
+                value={displayedCodexAuthUrl}
+                readOnly
+                placeholder={t("settings.codexAuthUrlHelpPending")}
+                onFocus={(e) => e.target.select()}
+                style={{ marginTop: "6px", fontSize: "12px" }}
+              />
+              <div className="settings-codex-auth-actions">
+                <button
+                  type="button"
+                  className="settings-btn settings-btn-secondary"
+                  onClick={() => handleCopyCodexAuthUrl(displayedCodexAuthUrl)}
+                  disabled={!displayedCodexAuthUrl.trim()}
+                >
+                  {authUrlCopied ? t("settings.codexAuthUrlCopied") : t("settings.codexCopyAuthUrl")}
+                </button>
+                <button
+                  type="button"
+                  className="settings-btn settings-btn-secondary"
+                  onClick={() => openCodexAuthInBrowser(displayedCodexAuthUrl)}
+                  disabled={!displayedCodexAuthUrl.trim()}
+                >
+                  {t("settings.codexOpenInBrowser")}
+                </button>
+              </div>
+            </div>
+          )}
+          {showCodexCallbackForm && (
+            <div className="settings-field" style={{ marginTop: "12px" }}>
+              <label className="settings-label">{t("settings.codexCallbackLabel")}</label>
+              <textarea
+                className="settings-input settings-textarea"
+                value={codexCallbackUrl}
+                onChange={(e) => setCodexCallbackUrl(e.target.value)}
+                placeholder={t("settings.codexCallbackPlaceholder")}
+                rows={3}
+              />
+              <div className="settings-help">{t("settings.codexCallbackHelp")}</div>
+              {codexCallbackError && (
+                <div className="settings-error" style={{ marginTop: "8px" }}>{codexCallbackError}</div>
+              )}
+              <button
+                className="settings-btn settings-btn-primary settings-btn-full"
+                style={{ marginTop: "8px" }}
+                onClick={handleCodexCallbackSubmit}
+                disabled={codexCallbackSubmitting || !codexCallbackUrl.trim()}
+              >
+                {codexCallbackSubmitting ? (
+                  <>
+                    <span className="settings-spinner" />
+                    {t("settings.codexCallbackSubmitting")}
+                  </>
+                ) : (
+                  t("settings.codexCallbackSubmit")
+                )}
+              </button>
+            </div>
+          )}
+          <div className="settings-help" style={{ marginTop: "8px" }}>{t("settings.codexHelp")}</div>
+        </div>
+      ) : (
+        <>
+          <div className="settings-field">
+            <label className="settings-label">{t("settings.baseUrl")}</label>
+            <input
+              type="text"
+              className="settings-input"
+              value={settings.base_url}
+              onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
+              placeholder={settings.api_format === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
+            />
+            <div className="settings-help">
+              {settings.api_format === "openai" ? t("settings.openaiHelp") : t("settings.anthropicHelp")}
+            </div>
+          </div>
+          <div className="settings-field">
+            <label className="settings-label">{t("settings.apiKey")}</label>
+            <input
+              type="password"
+              className="settings-input"
+              value={settings.api_key}
+              onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
+              placeholder="sk-..."
+            />
+          </div>
+        </>
+      )}
+
+      <div className="settings-inline-actions">
+        {!testModel ? (
+          <>
+            <button
+              className="settings-btn settings-btn-primary settings-btn-full"
+              onClick={handleFetchModelsFromSetup}
+              disabled={fetching || !canFetchModelsInSetup}
             >
               {fetching ? (
                 <>
@@ -866,209 +1116,257 @@ export default function SettingsPanel() {
               ) : (
                 <>
                   <RefreshIcon />
-                  {t("settings.autoFetch")}
+                  {t("settings.fetchModelsGoModels")}
                 </>
               )}
             </button>
-
             <button
+              type="button"
               className="settings-btn settings-btn-secondary settings-btn-full"
-              onClick={handleStreamTest}
-              disabled={streamTesting || (!isCodexMode && (!settings.base_url || !settings.api_key)) || !testModel}
+              onClick={() => setActiveSection("models")}
             >
-              {streamTesting ? (
-                <>
-                  <span className="settings-spinner" />
-                  {t("settings.streamTesting")}
-                </>
-              ) : (
-                t("settings.streamTest")
-              )}
+              {t("settings.goToModelsSection")}
             </button>
-          </div>
+          </>
+        ) : (
+          <button
+            className="settings-btn settings-btn-secondary settings-btn-full"
+            onClick={handleStreamTest}
+            disabled={streamTesting || (!isCodexMode && (!settings.base_url || !settings.api_key))}
+          >
+            {streamTesting ? (
+              <>
+                <span className="settings-spinner" />
+                {t("settings.aiStatusTesting")}
+              </>
+            ) : (
+              t("settings.testConnection")
+            )}
+          </button>
+        )}
+      </div>
 
-          {streamTesting && (
-            <button
-              className="settings-btn settings-btn-secondary settings-btn-full"
-              onClick={handleStopStreamTest}
-              style={{ marginTop: "8px" }}
-            >
-              {t("settings.streamTestStop")}
-            </button>
-          )}
+      {!testModel && (
+        <div className="settings-help" style={{ marginTop: "8px" }}>
+          {canFetchModelsInSetup ? t("settings.aiSetupNeedModelHint") : t("settings.aiSetupCompleteAuthFirst")}
+        </div>
+      )}
 
-          {(streamOutput || streamError || streamSuccess) && (
-            <div className="settings-stream-result" style={{ marginTop: "12px" }}>
-              {streamError ? (
-                <div className="settings-error">
-                  <span className="settings-error-icon"><ErrorIcon /></span>
-                  {streamError}
-                </div>
-              ) : (
-                <>
-                  {streamSuccess && (
-                    <div className="settings-success">
-                      <CheckIcon />
-                      {t("settings.streamTestSuccess")}
-                    </div>
-                  )}
-                  {streamOutput && (
-                    <pre className="settings-stream-output">{streamOutput}</pre>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+      {streamTesting && (
+        <button
+          className="settings-btn settings-btn-secondary settings-btn-full"
+          onClick={handleStopStreamTest}
+          style={{ marginTop: "8px" }}
+        >
+          {t("settings.streamTestStop")}
+        </button>
+      )}
 
-          {fetchError && (
-            <div className="settings-error" style={{ marginTop: "12px" }}>
+      {(streamResultMatchesConfig && (streamOutput || streamError || streamSuccess)) && (
+        <div className="settings-stream-result" style={{ marginTop: "12px" }}>
+          {streamError ? (
+            <div className="settings-error">
               <span className="settings-error-icon"><ErrorIcon /></span>
-              {fetchError}
+              {streamError}
             </div>
-          )}
-
-          {candidateModels.length > 0 && (
-            <div className="settings-field" style={{ marginTop: "16px" }}>
-              <label className="settings-label">
-                {t("settings.candidateModels")}
-                <span className="settings-label-hint">({candidateModels.length})</span>
-              </label>
-              <div className="settings-candidate-actions">
-                <button
-                  className="settings-btn settings-btn-secondary"
-                  onClick={handleSelectAllCandidates}
-                >
-                  {candidateModels.every(m => m.selected)
-                    ? t("settings.unselectAllModels")
-                    : t("settings.selectAllModels")}
-                </button>
-                <button
-                  className="settings-btn settings-btn-secondary"
-                  onClick={handleTestCandidates}
-                  disabled={candidateModels.some(m => m.status === "testing") || !candidateModels.some(m => m.selected)}
-                >
-                  {t("settings.testSelectedModels")}
-                </button>
-                <button
-                  className="settings-btn settings-btn-secondary"
-                  onClick={handleAddAvailableCandidates}
-                  disabled={!candidateModels.some(m => m.status === "ok")}
-                >
-                  {t("settings.addAvailableModels")}
-                </button>
-                <button
-                  className="settings-btn settings-btn-primary"
-                  onClick={handleAddSelectedCandidates}
-                  disabled={!candidateModels.some(m => m.selected)}
-                >
-                  {t("settings.addSelectedModels")}
-                </button>
-              </div>
-              <div className="settings-candidate-list">
-                {candidateModels.map((m) => (
-                  <div key={m.id} className="settings-candidate-item">
-                    <label className="settings-candidate-check">
-                      <input
-                        type="checkbox"
-                        checked={m.selected}
-                        onChange={() => handleToggleCandidate(m.id)}
-                      />
-                    </label>
-                    <div className="settings-model-info">
-                      <span className="settings-model-id">{m.id}</span>
-                      <span className="settings-model-name">
-                        {m.provider || providerLabel}
-                        {m.name && m.name !== m.id ? ` · ${m.name}` : ""}
-                      </span>
-                      {m.error && <span className="settings-model-error">{m.error}</span>}
-                    </div>
-                    <span className={`settings-model-status settings-model-status-${m.status}`}>
-                      {candidateStatusLabel(m.status)}
-                    </span>
-                    <button
-                      className="settings-model-remove"
-                      onClick={() => handleTestCandidate(m.id)}
-                      disabled={m.status === "testing"}
-                    >
-                      {t("settings.testModel")}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+          ) : (
+            <>
+              {streamSuccess && (
+                <div className="settings-success">
+                  <CheckIcon />
+                  {t("settings.streamTestSuccess")}
+                </div>
+              )}
+              {streamOutput && <pre className="settings-stream-output">{streamOutput}</pre>}
+            </>
           )}
         </div>
+      )}
 
-        <div className="settings-group">
-          <div className="settings-group-title">
-            <ModelIcon />
-            {t("settings.modelConfig")}
-          </div>
+      <div style={{ marginTop: "20px" }}>{renderSaveBar()}</div>
+    </div>
+  );
 
-          {hasModels && (
-            <div className="settings-field">
-              <label className="settings-label">{t("settings.activeModel")}</label>
-              <select
-                className="settings-select"
-                value={settings.selected_model}
-                onChange={(e) => setSettings({ ...settings, selected_model: e.target.value })}
-              >
-                <option value="">{t("settings.selectModel")}</option>
-                {settings.models?.map((m) => (
-                  <option key={`${m.provider || "unknown"}:${m.id}`} value={m.id}>
-                    {m.name || m.id} ({m.provider || "unknown"})
-                  </option>
-                ))}
-              </select>
-            </div>
+  const renderModelsSection = () => (
+    <div className="settings-section-body">
+      <p className="settings-section-desc" style={{ padding: 0, marginBottom: "16px" }}>
+        {t("settings.modelsIntro")}
+      </p>
+
+      <div className="settings-inline-actions">
+        <button
+          className="settings-btn settings-btn-secondary settings-btn-full"
+          onClick={handleFetchModels}
+          disabled={fetching || (!isCodexMode && (!settings.base_url || !settings.api_key))}
+        >
+          {fetching ? (
+            <>
+              <span className="settings-spinner" />
+              {t("settings.fetching")}
+            </>
+          ) : (
+            <>
+              <RefreshIcon />
+              {t("settings.autoFetch")}
+            </>
           )}
+        </button>
+        <button
+          className="settings-btn settings-btn-secondary settings-btn-full"
+          onClick={handleStreamTest}
+          disabled={streamTesting || (!isCodexMode && (!settings.base_url || !settings.api_key)) || !testModel}
+        >
+          {streamTesting ? (
+            <>
+              <span className="settings-spinner" />
+              {t("settings.streamTesting")}
+            </>
+          ) : (
+            t("settings.streamTest")
+          )}
+        </button>
+      </div>
 
-          <div className="settings-field">
-            <label className="settings-label">
-              {t("settings.configuredModels")}
-              {hasModels && <span className="settings-label-hint">({settings.models.length})</span>}
-            </label>
-            {hasModels && (
-              <button
-                className="settings-btn settings-btn-secondary settings-btn-full"
-                onClick={handleClearModels}
-                style={{ marginBottom: "8px" }}
-              >
-                {t("settings.clearModels")}
-              </button>
-            )}
+      {fetchError && (
+        <div className="settings-error" style={{ marginTop: "12px" }}>
+          <span className="settings-error-icon"><ErrorIcon /></span>
+          {fetchError}
+        </div>
+      )}
 
-            {hasModels ? (
-              <div className="settings-models-list">
-                {settings.models?.map((m) => (
-                  <div key={`${m.provider || "unknown"}:${m.id}`} className="settings-model-item">
-                    <div className="settings-model-info">
-                      <span className="settings-model-id">{m.id}</span>
-                      {m.name && m.name !== m.id && (
-                        <span className="settings-model-name">{m.name}</span>
-                      )}
-                      <span className="settings-model-provider">{m.provider || "unknown"}</span>
-                    </div>
-                    <button
-                      className="settings-model-remove settings-model-delete"
-                      onClick={() => handleRemoveModel(m.id)}
-                      title={t("settings.removeModel")}
-                      aria-label={t("settings.removeModel")}
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="settings-empty">
-                <div className="settings-empty-icon"><ModelIcon /></div>
-                <div>{t("settings.noModels")}</div>
-                <div style={{ fontSize: "11px", marginTop: "4px" }}>{t("settings.noModelsHint")}</div>
-              </div>
-            )}
+      {candidateModels.length > 0 && (
+        <div className="settings-field" style={{ marginTop: "16px" }}>
+          <label className="settings-label">
+            {t("settings.candidateModels")}
+            <span className="settings-label-hint">({candidateModels.length})</span>
+          </label>
+          <div className="settings-candidate-actions">
+            <button className="settings-btn settings-btn-secondary" onClick={handleSelectAllCandidates}>
+              {candidateModels.every(m => m.selected) ? t("settings.unselectAllModels") : t("settings.selectAllModels")}
+            </button>
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={handleTestCandidates}
+              disabled={candidateModels.some(m => m.status === "testing") || !candidateModels.some(m => m.selected)}
+            >
+              {t("settings.testSelectedModels")}
+            </button>
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={handleAddAvailableCandidates}
+              disabled={!candidateModels.some(m => m.status === "ok")}
+            >
+              {t("settings.addAvailableModels")}
+            </button>
+            <button
+              className="settings-btn settings-btn-primary"
+              onClick={handleAddSelectedCandidates}
+              disabled={!candidateModels.some(m => m.selected)}
+            >
+              {t("settings.addSelectedModels")}
+            </button>
           </div>
+          <div className="settings-candidate-list">
+            {candidateModels.map((m) => (
+              <div key={m.id} className="settings-candidate-item">
+                <label className="settings-candidate-check">
+                  <input type="checkbox" checked={m.selected} onChange={() => handleToggleCandidate(m.id)} />
+                </label>
+                <div className="settings-model-info">
+                  <span className="settings-model-id">{m.id}</span>
+                  <span className="settings-model-name">
+                    {m.provider || providerLabel}
+                    {m.name && m.name !== m.id ? ` · ${m.name}` : ""}
+                  </span>
+                  {m.error && <span className="settings-model-error">{m.error}</span>}
+                </div>
+                <span className={`settings-model-status settings-model-status-${m.status}`}>
+                  {candidateStatusLabel(m.status)}
+                </span>
+                <button
+                  className="settings-model-remove"
+                  onClick={() => handleTestCandidate(m.id)}
+                  disabled={m.status === "testing"}
+                >
+                  {t("settings.testModel")}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
+      {hasModels && (
+        <div className="settings-field" style={{ marginTop: "16px" }}>
+          <label className="settings-label">{t("settings.activeModel")}</label>
+          <select
+            className="settings-select"
+            value={settings.selected_model}
+            onChange={(e) => setSettings({ ...settings, selected_model: e.target.value })}
+          >
+            <option value="">{t("settings.selectModel")}</option>
+            {settings.models?.map((m) => (
+              <option key={`${m.provider || "unknown"}:${m.id}`} value={m.id}>
+                {m.name || m.id} ({m.provider || "unknown"})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="settings-field" style={{ marginTop: "16px" }}>
+        <label className="settings-label">
+          {t("settings.configuredModels")}
+          {hasModels && <span className="settings-label-hint">({settings.models.length})</span>}
+        </label>
+        {hasModels && (
+          <button
+            className="settings-btn settings-btn-secondary settings-btn-full"
+            onClick={handleClearModels}
+            style={{ marginBottom: "8px" }}
+          >
+            {t("settings.clearModels")}
+          </button>
+        )}
+        {hasModels ? (
+          <div className="settings-models-list">
+            {settings.models?.map((m) => (
+              <div key={`${m.provider || "unknown"}:${m.id}`} className="settings-model-item">
+                <div className="settings-model-info">
+                  <span className="settings-model-id">{m.id}</span>
+                  {m.name && m.name !== m.id && <span className="settings-model-name">{m.name}</span>}
+                  <span className="settings-model-provider">{m.provider || "unknown"}</span>
+                </div>
+                <button
+                  className="settings-model-remove settings-model-delete"
+                  onClick={() => handleRemoveModel(m.id)}
+                  title={t("settings.removeModel")}
+                  aria-label={t("settings.removeModel")}
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="settings-empty">
+            <div className="settings-empty-icon"><ModelIcon /></div>
+            <div>{t("settings.noModels")}</div>
+            <div style={{ fontSize: "11px", marginTop: "4px" }}>{t("settings.noModelsHint")}</div>
+          </div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        className="settings-advanced-toggle"
+        onClick={() => setModelsAdvancedOpen((o) => !o)}
+      >
+        {t("settings.advanced")}
+        <span>{modelsAdvancedOpen ? "−" : "+"}</span>
+      </button>
+      {modelsAdvancedOpen && (
+        <div className="settings-advanced-body">
           <div className="settings-field">
             <label className="settings-label">{t("settings.addManually")}</label>
             <div className="settings-add-model">
@@ -1099,361 +1397,358 @@ export default function SettingsPanel() {
             </div>
           </div>
         </div>
+      )}
 
-        <div className="settings-group">
-          <div className="settings-group-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="8" y1="13" x2="16" y2="13" />
-              <line x1="8" y1="17" x2="16" y2="17" />
-            </svg>
-            {t("settings.agentDocs")}
-          </div>
+      <div style={{ marginTop: "20px" }}>{renderSaveBar()}</div>
+    </div>
+  );
 
-          <div className="settings-field">
-            <label className="settings-label">{t("settings.agentsMd")}</label>
-            <textarea
-              className="settings-textarea"
-              value={agentsMd}
-              onChange={(e) => setAgentsMd(e.target.value)}
-            />
-            <div className="settings-help">{t("settings.agentsMdHelp")}</div>
-            <button
-              className="settings-btn settings-btn-secondary settings-btn-full"
-              onClick={handleSaveAgentsMd}
-              disabled={savingAgentsMd}
-            >
-              {agentsMdSaved ? t("settings.docSaved") : t("settings.saveDoc")}
-            </button>
-          </div>
-
-          <div className="settings-field">
-            <label className="settings-label">{t("settings.memoryMd")}</label>
-            <textarea
-              className="settings-textarea"
-              value={memoryMd}
-              onChange={(e) => setMemoryMd(e.target.value)}
-            />
-            <div className="settings-help">{t("settings.memoryMdHelp")}</div>
-            <button
-              className="settings-btn settings-btn-secondary settings-btn-full"
-              onClick={handleSaveMemoryMd}
-              disabled={savingMemoryMd}
-            >
-              {memoryMdSaved ? t("settings.docSaved") : t("settings.saveDoc")}
-            </button>
-          </div>
-        </div>
-
-        <div className="settings-group">
-          <div className="settings-group-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-            {t("settings.language")}
-          </div>
-          <div className="settings-field">
-            <select
-              className="settings-select"
-              value={locale}
-              onChange={(e) => {
-                const lang = e.target.value as "zh" | "en";
-                setLocale(lang);
-                axios.post("/api/settings", { language: lang }).catch(() => {});
-              }}
-            >
-              <option value="zh">中文</option>
-              <option value="en">English</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="settings-group">
-          <div className="settings-group-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 2a10 10 0 0 1 0 20 10 10 0 0 1 0-20z" />
-              <path d="M12 2v20" />
-            </svg>
-            {t("settings.appearance")}
-          </div>
-          <div className="settings-field">
-            <label className="settings-label">{t("settings.theme")}</label>
-            <select
-              className="settings-select"
-              value={themeMode}
-              onChange={(e) => {
-                const mode = e.target.value as "system" | "dark" | "light";
-                setThemeMode(mode);
-                setSettings((prev) => ({ ...prev, theme: mode }));
-                axios.post("/api/settings", { theme: mode }).catch(() => {});
-              }}
-            >
-              <option value="system">{t("settings.themeSystem")}</option>
-              <option value="dark">{t("settings.themeDark")}</option>
-              <option value="light">{t("settings.themeLight")}</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="settings-group">
-          <div className="settings-group-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
-            {t("settings.agentAccess")}
-          </div>
-          <div className="settings-field">
-            <label className="settings-label">{t("settings.agentApiToken")}</label>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input
-                type="text"
-                className="settings-input"
-                value={settings.agent_api_token}
-                onChange={(e) => setSettings({ ...settings, agent_api_token: e.target.value })}
-                placeholder="token..."
-                style={{ flex: 1 }}
-              />
-              <button
-                className="settings-btn settings-btn-secondary"
-                onClick={handleCopyToken}
-                type="button"
-                disabled={!settings.agent_api_token}
-              >
-                {tokenCopied ? t("settings.copied") : t("settings.copy")}
-              </button>
-              <button
-                className="settings-btn settings-btn-secondary"
-                onClick={handleGenerateToken}
-                type="button"
-              >
-                {t("settings.agentApiTokenGenerate")}
-              </button>
-            </div>
-            <div className="settings-help">{t("settings.agentApiTokenHelp")}</div>
-          </div>
-
-          <div className="settings-field">
-            <div className="settings-help" style={{ marginBottom: "8px" }}>
-              {t("settings.agentAccessDesc")}
-            </div>
-            <textarea
-              className="settings-input"
-              value={installPrompt}
-              readOnly
-              rows={2}
-              onFocus={(e) => e.target.select()}
-              style={{ resize: "none", fontFamily: "monospace" }}
-            />
-            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-              <button
-                className="settings-btn settings-btn-primary"
-                onClick={handleCopyInstallPrompt}
-                style={{ flex: 1 }}
-              >
-                {linkCopied ? t("settings.agentAccessCopied") : t("settings.agentAccessCopy")}
-              </button>
-              <a
-                className="settings-btn settings-btn-secondary"
-                href={installGuideUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{ flex: 1, textDecoration: "none", textAlign: "center" }}
-              >
-                {t("settings.agentAccessOpen")}
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <div className="settings-group">
-          <div className="settings-group-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-            {t("settings.webAccess")}
-          </div>
-          <div className="settings-field">
-            <label className="settings-label">{t("settings.webAccessKey")}</label>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input
-                type="text"
-                className="settings-input"
-                value={settings.web_access_key}
-                onChange={(e) => setSettings({ ...settings, web_access_key: e.target.value })}
-                placeholder="key..."
-                style={{ flex: 1 }}
-              />
-              <button
-                className="settings-btn settings-btn-secondary"
-                onClick={handleGenerateWebKey}
-                type="button"
-              >
-                {t("settings.agentApiTokenGenerate")}
-              </button>
-            </div>
-            <div className="settings-help">{t("settings.webAccessKeyHelp")}</div>
-          </div>
-        </div>
-
-        <div className="settings-group">
-          {saved && (
-            <div className="settings-success" style={{ marginBottom: "12px" }}>
-              <CheckIcon />
-              {t("settings.saved")}
-            </div>
-          )}
-          <button
-            className="settings-btn settings-btn-primary settings-btn-full"
-            onClick={handleSave}
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <span className="settings-spinner" />
-                {t("settings.saving")}
-              </>
-            ) : (
-              t("settings.save")
-            )}
-          </button>
-          <div style={{ marginTop: "12px" }}>
-            <a
-              className="settings-btn settings-btn-secondary settings-btn-full"
-              href={`${getApiBaseUrl() || (typeof window !== "undefined" ? window.location.origin : "")}/api/settings/export`}
-              download="winkterm-config.json"
-              style={{ textDecoration: "none", textAlign: "center", display: "block" }}
-            >
-              {t("settings.exportConfig")}
-            </a>
-            <div className="settings-help" style={{ marginTop: "6px" }}>
-              {t("settings.exportConfigHelp")}
-            </div>
-          </div>
-        </div>
-
-        <div className="settings-group">
-          <div className="settings-group-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-            {t("settings.about")}
-          </div>
-          <div className="settings-field">
-            <label className="settings-label">{t("settings.version")}</label>
-            <div className="settings-update-row">
-              <span className="settings-version">
-                {updateInfo?.current_version || "0.3.0"}
-              </span>
-              <button
-                className="settings-btn settings-btn-secondary"
-                onClick={handleCheckUpdate}
-                disabled={checkingUpdate}
-              >
-                {checkingUpdate ? (
-                  <>
-                    <span className="settings-spinner" />
-                    {t("settings.checkingUpdate")}
-                  </>
-                ) : (
-                  <>
-                    <RefreshIcon />
-                    {t("settings.checkUpdate")}
-                  </>
-                )}
-              </button>
-            </div>
-            {updateInfo && (
-              <div className={updateInfo.update_available ? "settings-update-available" : "settings-help"}>
-                {updateInfo.error ? (
-                  updateInfo.error
-                ) : updateInfo.update_available ? (
-                  <>
-                    {t("settings.updateAvailable")} {updateInfo.latest_version}
-                    <ul className="settings-update-notes">
-                      {summarizeReleaseNotes(updateInfo.release_notes).map((line) => (
-                        <li key={line}>{line.replace(/^- /, "")}</li>
-                      ))}
-                    </ul>
-                    {installingUpdate && (
-                      <div className="settings-update-progress">
-                        <div>
-                          <span>{updateJob?.progress || 0}%</span>
-                          <span>{updateJob?.status || "downloading"}</span>
-                        </div>
-                        <progress max={100} value={updateJob?.progress || 0} />
-                        <div>
-                          <span>
-                            {formatBytes(updateJob?.downloaded || 0)} / {formatBytes(updateJob?.total || updateInfo.asset_size || 0)}
-                          </span>
-                          <span>{formatBytes(updateJob?.speed || 0)}/s</span>
-                        </div>
-                      </div>
-                    )}
-                    {updateJob?.error && (
-                      <div className="settings-error" style={{ marginTop: "8px" }}>
-                        <span className="settings-error-icon"><ErrorIcon /></span>
-                        {updateJob.error}
-                      </div>
-                    )}
-                    {isDesktop ? (
-                      <button
-                        className="settings-btn settings-btn-primary settings-btn-full"
-                        onClick={handleInstallUpdate}
-                        disabled={installingUpdate}
-                        style={{ marginTop: "8px" }}
-                      >
-                        {installingUpdate ? (
-                          <>
-                            <span className="settings-spinner" />
-                            {t("settings.downloadingUpdate")}
-                          </>
-                        ) : (
-                          t("settings.installUpdate")
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        className="settings-btn settings-btn-primary settings-btn-full"
-                        onClick={() => window.open(updateInfo.release_url, "_blank", "noopener,noreferrer")}
-                        style={{ marginTop: "8px" }}
-                      >
-                        {t("settings.viewRelease")}
-                      </button>
-                    )}
-                    <button
-                      className="settings-btn settings-btn-secondary settings-btn-full"
-                      onClick={handleSkipUpdate}
-                      style={{ marginTop: "8px" }}
-                    >
-                      {t("settings.skipUpdateVersion")}
-                    </button>
-                  </>
-                ) : (
-                  t("settings.noUpdate")
-                )}
+  const renderAgentBehaviorSection = () => (
+    <div className="settings-section-body">
+      {!editingDoc ? (
+        <>
+          <p className="settings-section-desc" style={{ padding: 0, marginBottom: "12px" }}>
+            {t("settings.docListIntro")}
+          </p>
+          <div className="settings-doc-list">
+            <div className="settings-doc-row">
+              <div>
+                <div className="settings-doc-row-title">{t("settings.agentsMd")}</div>
+                <div className="settings-doc-row-meta">agents.md</div>
               </div>
-            )}
+              <button className="settings-btn settings-btn-secondary" onClick={() => setEditingDoc("agents")}>
+                {t("settings.editDoc")}
+              </button>
+            </div>
+            <div className="settings-doc-row">
+              <div>
+                <div className="settings-doc-row-title">{t("settings.memoryMd")}</div>
+                <div className="settings-doc-row-meta">memory.md</div>
+              </div>
+              <button className="settings-btn settings-btn-secondary" onClick={() => setEditingDoc("memory")}>
+                {t("settings.editDoc")}
+              </button>
+            </div>
           </div>
+        </>
+      ) : editingDoc === "agents" ? (
+        <div className="settings-field">
+          <button className="settings-btn settings-btn-secondary" style={{ marginBottom: "12px" }} onClick={() => setEditingDoc(null)}>
+            {t("settings.closeEditor")}
+          </button>
+          <label className="settings-label">{t("settings.agentsMd")}</label>
+          <textarea className="settings-textarea" value={agentsMd} onChange={(e) => setAgentsMd(e.target.value)} />
+          <div className="settings-help">{t("settings.agentsMdHelp")}</div>
+          <button className="settings-btn settings-btn-primary settings-btn-full" onClick={handleSaveAgentsMd} disabled={savingAgentsMd}>
+            {agentsMdSaved ? t("settings.docSaved") : t("settings.saveDoc")}
+          </button>
+        </div>
+      ) : (
+        <div className="settings-field">
+          <button className="settings-btn settings-btn-secondary" style={{ marginBottom: "12px" }} onClick={() => setEditingDoc(null)}>
+            {t("settings.closeEditor")}
+          </button>
+          <label className="settings-label">{t("settings.memoryMd")}</label>
+          <textarea className="settings-textarea" value={memoryMd} onChange={(e) => setMemoryMd(e.target.value)} />
+          <div className="settings-help">{t("settings.memoryMdHelp")}</div>
+          <button className="settings-btn settings-btn-primary settings-btn-full" onClick={handleSaveMemoryMd} disabled={savingMemoryMd}>
+            {memoryMdSaved ? t("settings.docSaved") : t("settings.saveDoc")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderSecuritySection = () => (
+    <div className="settings-section-body">
+      <div className="settings-field">
+        <label className="settings-label">{t("settings.agentApiToken")}</label>
+        <div className="settings-help" style={{ marginBottom: "8px" }}>{t("settings.agentApiTokenHelp")}</div>
+        <input
+          type="text"
+          className="settings-input"
+          value={tokenEditing ? settings.agent_api_token : (settings.agent_api_token ? maskToken(settings.agent_api_token) : "")}
+          readOnly={!tokenEditing}
+          onChange={(e) => setSettings({ ...settings, agent_api_token: e.target.value })}
+          placeholder="token..."
+        />
+        <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+          <button
+            className="settings-btn settings-btn-secondary"
+            onClick={() => setTokenEditing((v) => !v)}
+            type="button"
+          >
+            {tokenEditing ? t("settings.doneEditingToken") : t("settings.editToken")}
+          </button>
+          <button className="settings-btn settings-btn-secondary" onClick={handleCopyToken} type="button" disabled={!settings.agent_api_token}>
+            {tokenCopied ? t("settings.copied") : t("settings.revealToken")}
+          </button>
+          <button className="settings-btn settings-btn-secondary" onClick={handleGenerateToken} type="button">
+            {t("settings.agentApiTokenGenerate")}
+          </button>
+        </div>
+        {tokenEditing && (
+          <div className="settings-help" style={{ marginTop: "6px" }}>{t("settings.tokenManualEditHelp")}</div>
+        )}
+      </div>
+
+      <div className="settings-field">
+        <label className="settings-label">{t("settings.agentAccess")}</label>
+        <div className="settings-help" style={{ marginBottom: "8px" }}>{t("settings.agentAccessDesc")}</div>
+        <textarea
+          className="settings-input"
+          value={installPrompt}
+          readOnly
+          rows={2}
+          onFocus={(e) => e.target.select()}
+          style={{ resize: "none", fontFamily: "monospace" }}
+        />
+        <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+          <button className="settings-btn settings-btn-primary" onClick={handleCopyInstallPrompt} style={{ flex: 1 }}>
+            {linkCopied ? t("settings.agentAccessCopied") : t("settings.agentAccessCopy")}
+          </button>
           <a
-            className="settings-btn settings-btn-secondary settings-btn-full"
-            href={GITHUB_REPO_URL}
+            className="settings-btn settings-btn-secondary"
+            href={installGuideUrl}
             target="_blank"
             rel="noreferrer"
-            style={{ textDecoration: "none", textAlign: "center", display: "block" }}
+            style={{ flex: 1, textDecoration: "none", textAlign: "center" }}
           >
-            {t("settings.githubProject")}
+            {t("settings.agentAccessOpen")}
           </a>
-          <div className="settings-help" style={{ marginTop: "6px" }}>
-            {t("settings.githubProjectHelp")}
+        </div>
+      </div>
+
+      <div className="settings-field">
+        <label className="settings-label">{t("settings.webAccessKey")}</label>
+        <div className="settings-help" style={{ marginBottom: "8px" }}>{t("settings.webAccessKeyHelp")}</div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            type="text"
+            className="settings-input"
+            value={settings.web_access_key}
+            onChange={(e) => setSettings({ ...settings, web_access_key: e.target.value })}
+            placeholder="key..."
+            style={{ flex: 1 }}
+          />
+          <button className="settings-btn settings-btn-secondary" onClick={handleGenerateWebKey} type="button">
+            {t("settings.agentApiTokenGenerate")}
+          </button>
+        </div>
+      </div>
+
+      <a
+        className="settings-btn settings-btn-secondary settings-btn-full"
+        href={`${getApiBaseUrl() || (typeof window !== "undefined" ? window.location.origin : "")}/api/settings/export`}
+        download="winkterm-config.json"
+        style={{ textDecoration: "none", textAlign: "center", display: "block", marginTop: "8px" }}
+      >
+        {t("settings.exportConfig")}
+      </a>
+      <div className="settings-help" style={{ marginTop: "6px" }}>{t("settings.exportConfigHelp")}</div>
+
+      <div style={{ marginTop: "20px" }}>{renderSaveBar()}</div>
+    </div>
+  );
+
+  const renderAppearanceSection = () => (
+    <div className="settings-section-body">
+      <div className="settings-field">
+        <label className="settings-label">{t("settings.language")}</label>
+        <select
+          className="settings-select"
+          value={locale}
+          onChange={(e) => {
+            const lang = e.target.value as "zh" | "en";
+            setLocale(lang);
+            axios.post("/api/settings", { language: lang }).catch(() => {});
+          }}
+        >
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <div className="settings-field">
+        <label className="settings-label">{t("settings.theme")}</label>
+        <select
+          className="settings-select"
+          value={themeMode}
+          onChange={(e) => {
+            const mode = e.target.value as "system" | "dark" | "light";
+            setThemeMode(mode);
+            setSettings((prev) => ({ ...prev, theme: mode }));
+            axios.post("/api/settings", { theme: mode }).catch(() => {});
+          }}
+        >
+          <option value="system">{t("settings.themeSystem")}</option>
+          <option value="dark">{t("settings.themeDark")}</option>
+          <option value="light">{t("settings.themeLight")}</option>
+        </select>
+      </div>
+    </div>
+  );
+
+  const renderAboutSection = () => (
+    <div className="settings-section-body">
+      <div className="settings-field">
+        <label className="settings-label">{t("settings.version")}</label>
+        <div className="settings-update-row">
+          <span className="settings-version">{updateInfo?.current_version || "0.3.0"}</span>
+          <button className="settings-btn settings-btn-secondary" onClick={handleCheckUpdate} disabled={checkingUpdate}>
+            {checkingUpdate ? (
+              <>
+                <span className="settings-spinner" />
+                {t("settings.checkingUpdate")}
+              </>
+            ) : (
+              <>
+                <RefreshIcon />
+                {t("settings.checkUpdate")}
+              </>
+            )}
+          </button>
+        </div>
+        {updateInfo && (
+          <div className={updateInfo.update_available ? "settings-update-available" : "settings-help"}>
+            {updateInfo.error ? (
+              updateInfo.error
+            ) : updateInfo.update_available ? (
+              <>
+                {t("settings.updateAvailable")} {updateInfo.latest_version}
+                <ul className="settings-update-notes">
+                  {summarizeReleaseNotes(updateInfo.release_notes).map((line) => (
+                    <li key={line}>{line.replace(/^- /, "")}</li>
+                  ))}
+                </ul>
+                {installingUpdate && (
+                  <div className="settings-update-progress">
+                    <div>
+                      <span>{updateJob?.progress || 0}%</span>
+                      <span>{updateJob?.status || "downloading"}</span>
+                    </div>
+                    <progress max={100} value={updateJob?.progress || 0} />
+                    <div>
+                      <span>
+                        {formatBytes(updateJob?.downloaded || 0)} / {formatBytes(updateJob?.total || updateInfo.asset_size || 0)}
+                      </span>
+                      <span>{formatBytes(updateJob?.speed || 0)}/s</span>
+                    </div>
+                  </div>
+                )}
+                {updateJob?.error && (
+                  <div className="settings-error" style={{ marginTop: "8px" }}>
+                    <span className="settings-error-icon"><ErrorIcon /></span>
+                    {updateJob.error}
+                  </div>
+                )}
+                {isDesktop ? (
+                  <button
+                    className="settings-btn settings-btn-primary settings-btn-full"
+                    onClick={handleInstallUpdate}
+                    disabled={installingUpdate}
+                    style={{ marginTop: "8px" }}
+                  >
+                    {installingUpdate ? (
+                      <>
+                        <span className="settings-spinner" />
+                        {t("settings.downloadingUpdate")}
+                      </>
+                    ) : (
+                      t("settings.installUpdate")
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    className="settings-btn settings-btn-primary settings-btn-full"
+                    onClick={() => window.open(updateInfo.release_url, "_blank", "noopener,noreferrer")}
+                    style={{ marginTop: "8px" }}
+                  >
+                    {t("settings.viewRelease")}
+                  </button>
+                )}
+                <button
+                  className="settings-btn settings-btn-secondary settings-btn-full"
+                  onClick={handleSkipUpdate}
+                  style={{ marginTop: "8px" }}
+                >
+                  {t("settings.skipUpdateVersion")}
+                </button>
+              </>
+            ) : (
+              t("settings.noUpdate")
+            )}
           </div>
+        )}
+      </div>
+      <a
+        className="settings-btn settings-btn-secondary settings-btn-full"
+        href={GITHUB_REPO_URL}
+        target="_blank"
+        rel="noreferrer"
+        style={{ textDecoration: "none", textAlign: "center", display: "block" }}
+      >
+        {t("settings.githubProject")}
+      </a>
+      <div className="settings-help" style={{ marginTop: "6px" }}>{t("settings.githubProjectHelp")}</div>
+    </div>
+  );
+
+  const renderActiveSection = () => {
+    switch (activeSection) {
+      case "ai-setup": return renderAiSetupSection();
+      case "models": return renderModelsSection();
+      case "agent-behavior": return renderAgentBehaviorSection();
+      case "security": return renderSecuritySection();
+      case "appearance": return renderAppearanceSection();
+      case "about": return renderAboutSection();
+      default: return null;
+    }
+  };
+
+  const NavIcon = ({ section }: { section: SettingsSectionId }) => {
+    if (section === "ai-setup") return <ApiIcon />;
+    if (section === "models") return <ModelIcon />;
+    return <SettingsIcon />;
+  };
+
+  return (
+    <div className="settings-panel">
+      <div className="settings-header">
+        <span className="settings-header-icon"><SettingsIcon /></span>
+        <span className="settings-header-title">{t("settings.title")}</span>
+      </div>
+
+      <div className="settings-mobile-tabs">
+        {SECTION_IDS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            className={`settings-mobile-tab ${activeSection === id ? "active" : ""}`}
+            onClick={() => setActiveSection(id)}
+          >
+            {sectionTitle(id)}
+          </button>
+        ))}
+      </div>
+
+      <div className="settings-shell">
+        <nav className="settings-nav" aria-label={t("settings.title")}>
+          {SECTION_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={`settings-nav-item ${activeSection === id ? "active" : ""}`}
+              onClick={() => setActiveSection(id)}
+            >
+              <NavIcon section={id} />
+              {sectionTitle(id)}
+            </button>
+          ))}
+        </nav>
+
+        <div className="settings-section-panel">
+          <h2 className="settings-section-title">{sectionTitle(activeSection)}</h2>
+          {renderActiveSection()}
         </div>
       </div>
     </div>

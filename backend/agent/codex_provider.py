@@ -33,6 +33,10 @@ CODEX_WS_URL = "wss://chatgpt.com/backend-api/codex/responses"
 CODEX_DEFAULT_MODEL = "gpt-5.5"
 CODEX_HOME = Path.home() / ".codex"
 CODEX_AUTH_FILE = CODEX_HOME / "auth.json"
+CODEX_OAUTH_FLOW_FILE = CODEX_HOME / "oauth_flow.json"
+CODEX_OAUTH_HISTORY_FILE = CODEX_HOME / "oauth_flow_history.json"
+CODEX_OAUTH_FLOW_TTL_SECONDS = 30 * 60
+CODEX_OAUTH_HISTORY_MAX = 20
 CODEX_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 CODEX_OAUTH_ISSUER = "https://auth.openai.com"
 CODEX_OAUTH_PORTS = (1455, 1457)
@@ -126,25 +130,180 @@ def _save_codex_tokens(id_token: str, access_token: str, refresh_token: str) -> 
     CODEX_AUTH_FILE.chmod(0o600)
 
 
+def _oauth_flow_snapshot(flow: dict) -> dict:
+    return {
+        k: flow[k]
+        for k in ("state", "oauth_state", "code_verifier", "redirect_uri", "auth_url", "started_at", "message")
+        if k in flow
+    }
+
+
+def _append_oauth_flow_history(flow: dict) -> None:
+    if not flow.get("code_verifier") or not flow.get("oauth_state"):
+        return
+    CODEX_HOME.mkdir(parents=True, exist_ok=True)
+    history: list = []
+    if CODEX_OAUTH_HISTORY_FILE.exists():
+        try:
+            raw = json.loads(CODEX_OAUTH_HISTORY_FILE.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                history = raw
+        except Exception:
+            history = []
+    entry = _oauth_flow_snapshot(flow)
+    entry["state"] = "pending"
+    history = [h for h in history if h.get("oauth_state") != entry.get("oauth_state")]
+    history.append(entry)
+    history = history[-CODEX_OAUTH_HISTORY_MAX:]
+    CODEX_OAUTH_HISTORY_FILE.write_text(json.dumps(history, indent=2), encoding="utf-8")
+    CODEX_OAUTH_HISTORY_FILE.chmod(0o600)
+
+
+def _remove_oauth_flow_from_history(oauth_state: str) -> None:
+    if not CODEX_OAUTH_HISTORY_FILE.exists():
+        return
+    try:
+        raw = json.loads(CODEX_OAUTH_HISTORY_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    if not isinstance(raw, list):
+        return
+    trimmed = [h for h in raw if h.get("oauth_state") != oauth_state]
+    if len(trimmed) == len(raw):
+        return
+    if trimmed:
+        CODEX_OAUTH_HISTORY_FILE.write_text(json.dumps(trimmed, indent=2), encoding="utf-8")
+    else:
+        CODEX_OAUTH_HISTORY_FILE.unlink(missing_ok=True)
+
+
+def _find_oauth_flow_for_state(oauth_state: str) -> dict:
+    active = _get_active_oauth_flow()
+    if active.get("oauth_state") == oauth_state and active.get("code_verifier"):
+        return active
+    if not CODEX_OAUTH_HISTORY_FILE.exists():
+        return {}
+    try:
+        history = json.loads(CODEX_OAUTH_HISTORY_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(history, list):
+        return {}
+    now = time.time()
+    for entry in reversed(history):
+        if entry.get("oauth_state") != oauth_state:
+            continue
+        if not entry.get("code_verifier"):
+            continue
+        started = float(entry.get("started_at") or 0)
+        if started and now - started > CODEX_OAUTH_FLOW_TTL_SECONDS:
+            continue
+        return dict(entry)
+    return {}
+
+
+def _persist_oauth_flow(flow: dict | None) -> None:
+    CODEX_HOME.mkdir(parents=True, exist_ok=True)
+    if not flow or flow.get("state") != "pending":
+        if CODEX_OAUTH_FLOW_FILE.exists():
+            try:
+                stale = json.loads(CODEX_OAUTH_FLOW_FILE.read_text(encoding="utf-8"))
+                if isinstance(stale, dict) and stale.get("state") == "pending":
+                    _append_oauth_flow_history(stale)
+            except Exception:
+                pass
+        try:
+            CODEX_OAUTH_FLOW_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return
+    CODEX_OAUTH_FLOW_FILE.write_text(json.dumps(flow, indent=2), encoding="utf-8")
+    CODEX_OAUTH_FLOW_FILE.chmod(0o600)
+
+
+def _load_persisted_oauth_flow() -> dict | None:
+    if not CODEX_OAUTH_FLOW_FILE.exists():
+        return None
+    try:
+        data = json.loads(CODEX_OAUTH_FLOW_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict) or data.get("state") != "pending":
+        return None
+    started = float(data.get("started_at") or 0)
+    if started and time.time() - started > CODEX_OAUTH_FLOW_TTL_SECONDS:
+        _persist_oauth_flow(None)
+        return None
+    return data
+
+
 def _set_oauth_flow(state: str, message: str) -> None:
     with _oauth_lock:
+        global _oauth_flow
         if _oauth_flow is not None:
             _oauth_flow["state"] = state
             _oauth_flow["message"] = message
             _oauth_flow["completed_at"] = time.time()
+        if state != "pending":
+            _persist_oauth_flow(None)
+        elif _oauth_flow is not None:
+            _persist_oauth_flow(dict(_oauth_flow))
+
+
+def _get_active_oauth_flow() -> dict:
+    global _oauth_flow
+    with _oauth_lock:
+        flow = dict(_oauth_flow or {})
+    if flow.get("state") == "pending" and flow.get("code_verifier"):
+        return flow
+    disk = _load_persisted_oauth_flow()
+    if disk:
+        with _oauth_lock:
+            _oauth_flow = disk
+        return dict(disk)
+    return {}
+
+
+def _oauth_already_logged_in_message() -> str | None:
+    if not CODEX_AUTH_FILE.exists():
+        return None
+    try:
+        data = json.loads(CODEX_AUTH_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    tokens = data.get("tokens") or {}
+    if tokens.get("access_token"):
+        return "Logged in using ChatGPT"
+    return None
 
 
 def _oauth_status() -> dict:
-    with _oauth_lock:
-        if not _oauth_flow:
-            return {"active": False, "state": "idle", "message": ""}
+    flow = _get_active_oauth_flow()
+    if not flow:
+        with _oauth_lock:
+            if _oauth_flow:
+                flow = dict(_oauth_flow)
+    if not flow:
+        return {"active": False, "state": "idle", "message": ""}
+    return {
+        "active": flow.get("state") == "pending",
+        "state": flow.get("state", "idle"),
+        "message": flow.get("message", ""),
+        "auth_url": flow.get("auth_url", ""),
+        "started_at": flow.get("started_at", 0),
+    }
+
+
+def _oauth_status_public(*, logged_in: bool) -> dict:
+    if logged_in:
         return {
-            "active": _oauth_flow.get("state") == "pending",
-            "state": _oauth_flow.get("state", "idle"),
-            "message": _oauth_flow.get("message", ""),
-            "auth_url": _oauth_flow.get("auth_url", ""),
-            "started_at": _oauth_flow.get("started_at", 0),
+            "active": False,
+            "state": "complete",
+            "message": "Logged in using ChatGPT",
+            "auth_url": "",
+            "started_at": 0,
         }
+    return _oauth_status()
 
 
 def _parse_oauth_callback_params(callback_url: str) -> dict[str, str]:
@@ -212,8 +371,7 @@ class _CodexOAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
             return
 
         params = dict(urllib.parse.parse_qsl(parsed.query))
-        with _oauth_lock:
-            flow = dict(_oauth_flow or {})
+        flow = _find_oauth_flow_for_state(params.get("state") or "")
 
         if not flow or params.get("state") != flow.get("oauth_state"):
             self._finish(400, "WinkTerm Codex OAuth failed: state mismatch.")
@@ -238,6 +396,7 @@ class _CodexOAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
             return
 
         self._set_flow("complete", "Logged in using ChatGPT")
+        _remove_oauth_flow_from_history(flow.get("oauth_state") or "")
         self._finish(200, "WinkTerm Codex OAuth complete. You can close this tab.")
 
     def _set_flow(self, state: str, message: str) -> None:
@@ -286,6 +445,11 @@ def start_codex_oauth(open_browser: bool = False) -> dict:
 
     with _oauth_lock:
         global _oauth_flow
+        if _oauth_flow and _oauth_flow.get("state") == "pending":
+            _append_oauth_flow_history(dict(_oauth_flow))
+        disk_pending = _load_persisted_oauth_flow()
+        if disk_pending:
+            _append_oauth_flow_history(disk_pending)
         _oauth_flow = {
             "state": "pending",
             "message": "Waiting for browser authorization.",
@@ -295,6 +459,7 @@ def start_codex_oauth(open_browser: bool = False) -> dict:
             "auth_url": auth_url,
             "started_at": time.time(),
         }
+        _persist_oauth_flow(dict(_oauth_flow))
     if open_browser:
         webbrowser.open(auth_url)
     return {"auth_url": auth_url, "redirect_uri": redirect_uri, "state": "pending"}
@@ -302,6 +467,11 @@ def start_codex_oauth(open_browser: bool = False) -> dict:
 
 def complete_codex_oauth_callback(callback_url: str) -> dict:
     """Finish OAuth using a callback URL pasted from the user's browser."""
+    existing = _oauth_already_logged_in_message()
+    if existing:
+        _set_oauth_flow("complete", existing)
+        return {"success": True, "message": existing, "already_logged_in": True}
+
     params = _parse_oauth_callback_params(callback_url)
     if params.get("error"):
         message = params.get("error_description") or params.get("error") or "OAuth error"
@@ -315,13 +485,17 @@ def complete_codex_oauth_callback(callback_url: str) -> dict:
     if not state:
         raise CodexProviderError("Missing state in callback URL.")
 
-    with _oauth_lock:
-        flow = dict(_oauth_flow or {})
-
-    if not flow or flow.get("state") != "pending":
-        raise CodexProviderError("No pending Codex OAuth flow. Start authorization again.")
-    if state != flow.get("oauth_state"):
-        raise CodexProviderError("OAuth state mismatch. Start authorization again.")
+    flow = _find_oauth_flow_for_state(state)
+    if not flow or not flow.get("code_verifier"):
+        existing = _oauth_already_logged_in_message()
+        if existing:
+            return {"success": True, "message": existing, "already_logged_in": True}
+        raise CodexProviderError(
+            "未找到对应的 Codex 登录会话（可能已过期）。请先点击「生成授权链接」，"
+            "在浏览器完成授权后立刻粘贴回调 URL，不要再次点击生成以免 state 失效。"
+        )
+    if flow.get("state") != "pending":
+        flow = {**flow, "state": "pending"}
 
     try:
         tokens = asyncio.run(
@@ -329,9 +503,21 @@ def complete_codex_oauth_callback(callback_url: str) -> dict:
         )
         _save_codex_tokens(tokens["id_token"], tokens["access_token"], tokens["refresh_token"])
     except Exception as e:
-        _set_oauth_flow("error", str(e))
-        raise CodexProviderError(str(e)) from e
+        err = str(e)
+        existing = _oauth_already_logged_in_message()
+        if existing and ("invalid_grant" in err.lower() or "authorization code" in err.lower()):
+            _set_oauth_flow("complete", existing)
+            _remove_oauth_flow_from_history(state)
+            return {"success": True, "message": existing, "already_logged_in": True}
+        if "invalid_grant" in err.lower() or "authorization code" in err.lower():
+            err = (
+                f"{err} 授权码可能已被本机 localhost 回调用过。"
+                "请先点「检查状态」；若仍未登录，再点「生成授权链接」重新授权并粘贴新的回调 URL。"
+            )
+        _set_oauth_flow("error", err)
+        raise CodexProviderError(err) from e
 
+    _remove_oauth_flow_from_history(state)
     _set_oauth_flow("complete", "Logged in using ChatGPT")
     return {"success": True, "message": "Logged in using ChatGPT"}
 
@@ -344,11 +530,11 @@ def _codex_bin() -> str:
 
 
 def codex_status() -> dict:
-    oauth = _oauth_status()
+    has_tokens = CODEX_AUTH_FILE.exists() and bool(_oauth_already_logged_in_message())
+    oauth = _oauth_status_public(logged_in=has_tokens)
     try:
         binary = _codex_bin()
     except CodexProviderError as e:
-        has_tokens = CODEX_AUTH_FILE.exists()
         return {
             "installed": False,
             "logged_in": has_tokens,
@@ -365,13 +551,14 @@ def codex_status() -> dict:
         timeout=15,
     )
     output = (proc.stdout or proc.stderr or "").strip()
-    transport = "websocket" if CODEX_AUTH_FILE.exists() else "cli"
+    logged_in = has_tokens or proc.returncode == 0
+    transport = "websocket" if has_tokens else "cli"
     return {
         "installed": True,
-        "logged_in": proc.returncode == 0 or CODEX_AUTH_FILE.exists(),
-        "message": output,
+        "logged_in": logged_in,
+        "message": "Logged in using ChatGPT" if logged_in and has_tokens else output,
         "transport": transport,
-        "oauth": oauth,
+        "oauth": _oauth_status_public(logged_in=logged_in),
     }
 
 

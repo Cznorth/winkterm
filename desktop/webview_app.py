@@ -466,6 +466,15 @@ class WindowAPI:
             return None
         return result[0]
 
+    def open_external_url(self, url: str) -> bool:
+        """Open a URL in the system default browser (OAuth, docs, etc.)."""
+        import webbrowser
+
+        text = (url or "").strip()
+        if not text.startswith(("http://", "https://")):
+            return False
+        return webbrowser.open(text)
+
 
 # 创建 API 实例
 window_api = WindowAPI()
