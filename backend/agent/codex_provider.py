@@ -33,6 +33,8 @@ CODEX_WS_URL = "wss://chatgpt.com/backend-api/codex/responses"
 CODEX_DEFAULT_MODEL = "gpt-5.5"
 CODEX_HOME = Path.home() / ".codex"
 CODEX_AUTH_FILE = CODEX_HOME / "auth.json"
+WINKTERM_HOME = Path.home() / ".winkterm"
+WINKTERM_CODEX_AUTH_FILE = WINKTERM_HOME / "codex_auth.json"
 CODEX_OAUTH_FLOW_FILE = CODEX_HOME / "oauth_flow.json"
 CODEX_OAUTH_HISTORY_FILE = CODEX_HOME / "oauth_flow_history.json"
 CODEX_OAUTH_FLOW_TTL_SECONDS = 30 * 60
@@ -72,12 +74,12 @@ def _codex_version() -> str:
 
 
 def _load_codex_tokens() -> dict:
-    if not CODEX_AUTH_FILE.exists():
-        raise CodexProviderError("Codex CLI is not logged in. Run codex login first.")
-    data = json.loads(CODEX_AUTH_FILE.read_text(encoding="utf-8"))
+    if not WINKTERM_CODEX_AUTH_FILE.exists():
+        raise CodexProviderError("WinkTerm is not authorized for Codex. Authorize Codex in Settings first.")
+    data = json.loads(WINKTERM_CODEX_AUTH_FILE.read_text(encoding="utf-8"))
     tokens = data.get("tokens") or {}
     if not tokens.get("access_token"):
-        raise CodexProviderError("Codex auth file does not contain an access token. Run codex login again.")
+        raise CodexProviderError("WinkTerm Codex authorization does not contain an access token. Authorize again.")
     return tokens
 
 
@@ -109,15 +111,16 @@ def _account_id_from_tokens(id_token: str, access_token: str) -> str:
 
 
 def _save_codex_tokens(id_token: str, access_token: str, refresh_token: str) -> None:
-    CODEX_HOME.mkdir(parents=True, exist_ok=True)
+    WINKTERM_HOME.mkdir(parents=True, exist_ok=True)
     existing = {}
-    if CODEX_AUTH_FILE.exists():
+    if WINKTERM_CODEX_AUTH_FILE.exists():
         try:
-            existing = json.loads(CODEX_AUTH_FILE.read_text(encoding="utf-8"))
+            existing = json.loads(WINKTERM_CODEX_AUTH_FILE.read_text(encoding="utf-8"))
         except Exception:
             existing = {}
     account_id = _account_id_from_tokens(id_token, access_token)
     existing.update({
+        "source": "winkterm_codex_oauth",
         "tokens": {
             "id_token": id_token,
             "access_token": access_token,
@@ -126,8 +129,8 @@ def _save_codex_tokens(id_token: str, access_token: str, refresh_token: str) -> 
         },
         "last_refresh": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     })
-    CODEX_AUTH_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
-    CODEX_AUTH_FILE.chmod(0o600)
+    WINKTERM_CODEX_AUTH_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    WINKTERM_CODEX_AUTH_FILE.chmod(0o600)
 
 
 def _oauth_flow_snapshot(flow: dict) -> dict:
@@ -178,6 +181,13 @@ def _remove_oauth_flow_from_history(oauth_state: str) -> None:
 
 
 def _find_oauth_flow_for_state(oauth_state: str) -> dict:
+    with _oauth_lock:
+        current = dict(_oauth_flow or {})
+    if current.get("oauth_state") == oauth_state and current.get("code_verifier"):
+        started = float(current.get("started_at") or 0)
+        if not started or time.time() - started <= CODEX_OAUTH_FLOW_TTL_SECONDS:
+            return current
+
     active = _get_active_oauth_flow()
     if active.get("oauth_state") == oauth_state and active.get("code_verifier"):
         return active
@@ -221,6 +231,13 @@ def _persist_oauth_flow(flow: dict | None) -> None:
     CODEX_OAUTH_FLOW_FILE.chmod(0o600)
 
 
+def _clear_oauth_flow_file() -> None:
+    try:
+        CODEX_OAUTH_FLOW_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _load_persisted_oauth_flow() -> dict | None:
     if not CODEX_OAUTH_FLOW_FILE.exists():
         return None
@@ -245,7 +262,7 @@ def _set_oauth_flow(state: str, message: str) -> None:
             _oauth_flow["message"] = message
             _oauth_flow["completed_at"] = time.time()
         if state != "pending":
-            _persist_oauth_flow(None)
+            _clear_oauth_flow_file()
         elif _oauth_flow is not None:
             _persist_oauth_flow(dict(_oauth_flow))
 
@@ -265,10 +282,10 @@ def _get_active_oauth_flow() -> dict:
 
 
 def _oauth_already_logged_in_message() -> str | None:
-    if not CODEX_AUTH_FILE.exists():
+    if not WINKTERM_CODEX_AUTH_FILE.exists():
         return None
     try:
-        data = json.loads(CODEX_AUTH_FILE.read_text(encoding="utf-8"))
+        data = json.loads(WINKTERM_CODEX_AUTH_FILE.read_text(encoding="utf-8"))
     except Exception:
         return None
     tokens = data.get("tokens") or {}
@@ -530,7 +547,7 @@ def _codex_bin() -> str:
 
 
 def codex_status() -> dict:
-    has_tokens = CODEX_AUTH_FILE.exists() and bool(_oauth_already_logged_in_message())
+    has_tokens = WINKTERM_CODEX_AUTH_FILE.exists() and bool(_oauth_already_logged_in_message())
     oauth = _oauth_status_public(logged_in=has_tokens)
     try:
         binary = _codex_bin()
@@ -551,14 +568,15 @@ def codex_status() -> dict:
         timeout=15,
     )
     output = (proc.stdout or proc.stderr or "").strip()
-    logged_in = has_tokens or proc.returncode == 0
+    cli_logged_in = proc.returncode == 0
     transport = "websocket" if has_tokens else "cli"
     return {
         "installed": True,
-        "logged_in": logged_in,
-        "message": "Logged in using ChatGPT" if logged_in and has_tokens else output,
+        "logged_in": has_tokens,
+        "cli_logged_in": cli_logged_in,
+        "message": "Logged in using ChatGPT" if has_tokens else output,
         "transport": transport,
-        "oauth": _oauth_status_public(logged_in=logged_in),
+        "oauth": _oauth_status_public(logged_in=has_tokens),
     }
 
 
@@ -579,6 +597,16 @@ def codex_login(device_auth: bool = True) -> dict:
         "success": proc.returncode == 0,
         "message": output,
     }
+
+
+def codex_logout() -> dict:
+    """Remove WinkTerm's locally stored Codex OAuth credentials."""
+    try:
+        WINKTERM_CODEX_AUTH_FILE.unlink(missing_ok=True)
+    except OSError as e:
+        raise CodexProviderError(f"Failed to remove WinkTerm Codex auth file: {e}") from e
+    _set_oauth_flow("idle", "")
+    return {"success": True}
 
 
 def _codex_headers(tokens: dict) -> tuple[dict, str]:

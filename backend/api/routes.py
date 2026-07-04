@@ -27,6 +27,7 @@ from langchain_anthropic import ChatAnthropic
 from backend.agent.codex_provider import (
     CodexProviderError,
     codex_login,
+    codex_logout,
     codex_status,
     complete_codex_oauth_callback,
     run_codex,
@@ -316,6 +317,16 @@ async def post_codex_login(req: CodexLoginRequest) -> dict:
     """Start Codex CLI login. Device auth is friendlier inside desktop webviews."""
     try:
         return codex_login(device_auth=req.device_auth)
+    except CodexProviderError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/codex/logout")
+@router.delete("/codex/logout")
+async def post_codex_logout() -> dict:
+    """Remove WinkTerm's local Codex OAuth credentials."""
+    try:
+        return codex_logout()
     except CodexProviderError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

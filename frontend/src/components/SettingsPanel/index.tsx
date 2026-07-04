@@ -59,6 +59,7 @@ interface UpdateJob {
 interface CodexStatus {
   installed: boolean;
   logged_in: boolean;
+  cli_logged_in?: boolean;
   message: string;
   oauth?: {
     active: boolean;
@@ -222,6 +223,7 @@ export default function SettingsPanel() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
   const [codexLoggingIn, setCodexLoggingIn] = useState(false);
+  const [codexLoggingOut, setCodexLoggingOut] = useState(false);
   const [codexAuthUrl, setCodexAuthUrl] = useState("");
   const [codexCallbackUrl, setCodexCallbackUrl] = useState("");
   const [codexCallbackError, setCodexCallbackError] = useState("");
@@ -658,6 +660,42 @@ export default function SettingsPanel() {
     }
   };
 
+  const handleCodexLogout = async () => {
+    if (!window.confirm(t("settings.codexLogoutConfirm"))) return;
+    setCodexLoggingOut(true);
+    setCodexOAuthError("");
+    try {
+      await axios.post("/api/codex/logout");
+      setCodexAuthUrl("");
+      setCodexCallbackUrl("");
+      setCodexCallbackError("");
+      await refreshCodexStatus();
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setCodexOAuthError(typeof detail === "string" ? detail : t("settings.codexLogoutFailed"));
+    } finally {
+      setCodexLoggingOut(false);
+    }
+  };
+
+  const codexStatusText = () => {
+    if (!codexStatus) return t("settings.fetching");
+    if (codexStatus.logged_in) return t("settings.codexLoggedIn");
+    if (codexStaleRemotePending) return t("settings.codexStaleOAuth");
+    if (displayedCodexAuthUrl) return t("settings.codexLinkReady");
+    if (codexLoggingIn) return t("settings.codexLoggingIn");
+    if (codexStatus.oauth?.state === "error") {
+      return codexStatus.oauth?.message || t("settings.codexCallbackFailed");
+    }
+    if (codexStatus.oauth?.state === "pending") {
+      return t("settings.codexWaitingAuthorization");
+    }
+    if (codexStatus.cli_logged_in) {
+      return t("settings.codexCliLoggedInWinkTermNotAuthorized");
+    }
+    return t("settings.codexNotLoggedIn");
+  };
+
   const displayedCodexAuthUrl = codexAuthUrl.trim();
   const codexStaleRemotePending = Boolean(
     !displayedCodexAuthUrl
@@ -666,9 +704,7 @@ export default function SettingsPanel() {
     && codexStatus?.oauth?.active,
   );
   const showCodexAuthUrlPanel = isCodexMode && (!codexStatus?.logged_in || !!displayedCodexAuthUrl);
-  const showCodexCallbackForm = isCodexMode
-    && (!codexStatus?.logged_in || !!displayedCodexAuthUrl)
-    && !!displayedCodexAuthUrl;
+  const showCodexCallbackForm = isCodexMode && !codexStatus?.logged_in;
 
   const handleAddModel = () => {
     if (!newModelId.trim()) return;
@@ -965,19 +1001,7 @@ export default function SettingsPanel() {
         <div className="settings-field">
           <label className="settings-label">{t("settings.codexLogin")}</label>
           <div className={codexStatus?.logged_in ? "settings-success" : "settings-help"}>
-            {codexStatus
-              ? codexStatus.logged_in
-                ? t("settings.codexLoggedIn")
-                : codexStaleRemotePending
-                  ? t("settings.codexStaleOAuth")
-                  : displayedCodexAuthUrl
-                    ? t("settings.codexLinkReady")
-                    : codexLoggingIn
-                      ? t("settings.codexLoggingIn")
-                      : codexStatus.oauth?.state === "pending"
-                        ? (codexStatus.oauth?.message || t("settings.codexLoggingIn"))
-                        : codexStatus.message || t("settings.codexNotLoggedIn")
-              : t("settings.fetching")}
+            {codexStatusText()}
           </div>
           {codexOAuthError && (
             <div className="settings-error" style={{ marginTop: "8px" }}>{codexOAuthError}</div>
@@ -990,7 +1014,7 @@ export default function SettingsPanel() {
             <button
               className="settings-btn settings-btn-primary settings-btn-full"
               onClick={handleCodexLogin}
-              disabled={codexLoggingIn}
+              disabled={codexLoggingIn || !!codexStatus?.logged_in}
             >
               {codexLoggingIn ? (
                 <>
@@ -1001,6 +1025,22 @@ export default function SettingsPanel() {
                 t("settings.codexLoginButton")
               )}
             </button>
+            {codexStatus?.logged_in && (
+              <button
+                className="settings-btn settings-btn-secondary settings-btn-full"
+                onClick={handleCodexLogout}
+                disabled={codexLoggingOut}
+              >
+                {codexLoggingOut ? (
+                  <>
+                    <span className="settings-spinner" />
+                    {t("settings.codexLoggingOut")}
+                  </>
+                ) : (
+                  t("settings.codexLogoutButton")
+                )}
+              </button>
+            )}
           </div>
           {showCodexAuthUrlPanel && (
             <div className="settings-codex-auth-panel">

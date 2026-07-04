@@ -114,6 +114,11 @@ const translations = {
   "settings.codexLogin": { zh: "Codex 登录", en: "Codex Login" },
   "settings.codexLoggedIn": { zh: "已通过 ChatGPT 登录 Codex", en: "Logged in to Codex with ChatGPT" },
   "settings.codexNotLoggedIn": { zh: "尚未登录 Codex", en: "Codex is not logged in" },
+  "settings.codexCliLoggedInWinkTermNotAuthorized": {
+    zh: "检测到本机 Codex CLI 已登录，但 WinkTerm 尚未单独授权。",
+    en: "Local Codex CLI is logged in, but WinkTerm has not been authorized separately.",
+  },
+  "settings.codexWaitingAuthorization": { zh: "等待浏览器授权完成", en: "Waiting for browser authorization" },
   "settings.codexStaleOAuth": {
     zh: "检测到上次未完成的授权，请重新点击「生成授权链接」（不会自动显示旧链接）。",
     en: "A previous authorization was not finished. Click \"Generate authorization link\" again (old links are not shown automatically).",
@@ -121,6 +126,13 @@ const translations = {
   "settings.codexCheckStatus": { zh: "检查状态", en: "Check status" },
   "settings.codexLoginButton": { zh: "生成授权链接", en: "Generate authorization link" },
   "settings.codexLoggingIn": { zh: "正在生成链接...", en: "Generating link..." },
+  "settings.codexLogoutButton": { zh: "登出 WinkTerm 授权", en: "Log out WinkTerm authorization" },
+  "settings.codexLoggingOut": { zh: "正在登出...", en: "Logging out..." },
+  "settings.codexLogoutFailed": { zh: "WinkTerm Codex 授权登出失败", en: "Failed to log out WinkTerm Codex authorization" },
+  "settings.codexLogoutConfirm": {
+    zh: "确定要登出 WinkTerm 的 Codex 授权？这不会影响本机 Codex CLI 的登录状态。",
+    en: "Log out of WinkTerm's Codex authorization? This will not affect the local Codex CLI login.",
+  },
   "settings.codexOpenAuth": { zh: "如果没有自动打开，点击这里继续授权", en: "If the browser did not open, continue authorization here" },
   "settings.codexAuthUrlLabel": { zh: "授权链接", en: "Authorization link" },
   "settings.codexAuthUrlHelp": {
@@ -135,8 +147,8 @@ const translations = {
   "settings.codexAuthUrlCopied": { zh: "授权链接已复制", en: "Authorization link copied" },
   "settings.codexOpenInBrowser": { zh: "在浏览器中打开", en: "Open in browser" },
   "settings.codexHelp": {
-    zh: "Codex OAuth 使用 OpenAI 授权码 + PKCE。授权后使用 ChatGPT/Codex 额度，无需 API Key。Token 保存在运行 WinkTerm 后端的机器 ~/.codex/auth.json。远程部署时浏览器会跳转到本机 localhost，请复制完整回调 URL 粘贴到下方。",
-    en: "Codex OAuth uses OpenAI authorization code + PKCE. After authorization it uses your ChatGPT/Codex quota without an API key. Tokens are stored in ~/.codex/auth.json on the machine running the WinkTerm backend. For remote deployments the browser redirects to localhost on your machine — paste the full callback URL below.",
+    zh: "Codex OAuth 使用 OpenAI 授权码 + PKCE。授权后使用 ChatGPT/Codex 额度，无需 API Key。WinkTerm 的 Token 单独保存在运行后端机器的 ~/.winkterm/codex_auth.json，不会改动本机 Codex CLI 登录。远程部署时浏览器会跳转到本机 localhost，请复制完整回调 URL 粘贴到下方。",
+    en: "Codex OAuth uses OpenAI authorization code + PKCE. After authorization it uses your ChatGPT/Codex quota without an API key. WinkTerm stores its own token at ~/.winkterm/codex_auth.json on the backend machine and does not modify the local Codex CLI login. For remote deployments the browser redirects to localhost on your machine — paste the full callback URL below.",
   },
   "settings.codexCallbackLabel": { zh: "回调 URL", en: "Callback URL" },
   "settings.codexCallbackPlaceholder": {
