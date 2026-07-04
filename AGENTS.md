@@ -19,6 +19,24 @@ pip install -r requirements.txt
 python -m uvicorn backend.main:app --reload --port 8000
 ```
 
+### Automated Test Suite
+```powershell
+# From the repository root, run the stable full local suite:
+.\scripts\test-all.ps1
+
+# Optional flags:
+.\scripts\test-all.ps1 -SkipFrontendE2E
+.\scripts\test-all.ps1 -SkipCodexSmoke
+.\scripts\test-all.ps1 -RunVnc
+```
+
+`scripts/test-all.ps1` runs backend pytest, frontend lint/build/typecheck,
+starts a temporary backend, verifies the agent terminal API, runs Codex chat
+and tool-call WebSocket smoke tests, starts the frontend, then runs the
+Puppeteer settings E2E. The script stops the backend/frontend processes it
+starts. VNC smoke is skipped by default because it requires a configured SSH/VNC
+target; use `-RunVnc` only when that target is available.
+
 ### Frontend Development
 ```bash
 cd frontend

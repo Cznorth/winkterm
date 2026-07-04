@@ -33,9 +33,16 @@ function sleep(ms) {
 }
 
 async function openSettings(page) {
+  await page.waitForFunction(
+    () => !!document.querySelector('.activity-item[title="Settings"], .activity-item[title="设置"]'),
+    { timeout: 15000 }
+  );
   await page.evaluate(() => {
     const el = document.querySelector('.activity-item[title="Settings"], .activity-item[title="设置"]');
-    el?.click();
+    if (!el) {
+      throw new Error("Settings activity item not found");
+    }
+    el.click();
   });
   await page.waitForSelector(".settings-panel, .settings-group", { timeout: 10000 });
 }
@@ -92,6 +99,38 @@ async function fillTextareaInAgentDocsGroup(page, index, value) {
     index,
     value
   );
+}
+
+async function waitForAgentDocsValues(page, expectedAgents, expectedMemory) {
+  await page.waitForFunction(
+    (agents, memory) => {
+      const groups = [...document.querySelectorAll(".settings-group")];
+      const group = groups.find((g) => {
+        const t = g.querySelector(".settings-group-title")?.textContent || "";
+        return t.includes("AI 指令与记忆") || t.includes("AI Instructions");
+      });
+      const textareas = group ? [...group.querySelectorAll("textarea.settings-textarea")] : [];
+      return textareas[0]?.value === agents && textareas[1]?.value === memory;
+    },
+    { timeout: 10000 },
+    expectedAgents,
+    expectedMemory
+  );
+}
+
+async function selectLanguage(page, locale) {
+  await page.evaluate((nextLocale) => {
+    const selects = [...document.querySelectorAll("select.settings-select")];
+    const languageSelect = selects.find((select) => {
+      const values = [...select.options].map((option) => option.value);
+      return values.includes("zh") && values.includes("en");
+    });
+    if (!languageSelect) {
+      throw new Error("未找到语言选择器");
+    }
+    languageSelect.value = nextLocale;
+    languageSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  }, locale);
 }
 
 async function main() {
@@ -175,13 +214,14 @@ async function main() {
     // 5. Verify persistence after page reload
     await page.reload({ waitUntil: "networkidle2" });
     await openSettings(page);
+    await waitForAgentDocsValues(page, MARKER_AGENTS, MARKER_MEMORY);
     group = await getAgentDocsGroup(page);
     if (group.textareas[0].value !== MARKER_AGENTS) throw new Error("刷新后 agents.md 未持久化");
     if (group.textareas[1].value !== MARKER_MEMORY) throw new Error("刷新后 memory.md 未持久化");
     pass("刷新后 textarea 内容持久化");
 
     // 6. Switch to English i18n
-    await page.select(".settings-select", "en");
+    await selectLanguage(page, "en");
     await sleep(400);
     group = await getAgentDocsGroup(page);
     if (!group.title?.includes("AI Instructions")) throw new Error(`英文标题: ${group.title}`);
@@ -190,7 +230,7 @@ async function main() {
     pass("切换 English — i18n 文案");
 
     // 7. Save button label in English locale
-    await page.select(".settings-select", "zh");
+    await selectLanguage(page, "zh");
     await sleep(300);
     pass("切回中文");
 

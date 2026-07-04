@@ -117,6 +117,8 @@ async def main() -> int:
     parser.add_argument("--password", default="")
     parser.add_argument("--try-ssh-password", action="store_true")
     parser.add_argument("--base", default="ws://127.0.0.1:8000")
+    parser.add_argument("--connect-timeout", type=float, default=10.0)
+    parser.add_argument("--handshake-timeout", type=float, default=20.0)
     args = parser.parse_args()
 
     conn = load_connection(args.connection_id)
@@ -130,17 +132,28 @@ async def main() -> int:
     print(f"host={conn.get('title')} vnc_port={args.port} pwd={'set' if password else 'MISSING'}")
 
     try:
-        async with websockets.connect(url, max_size=None) as ws:
-            first = await asyncio.wait_for(ws.recv(), timeout=15)
+        async with websockets.connect(
+            url,
+            max_size=None,
+            open_timeout=args.connect_timeout,
+            ping_interval=None,
+        ) as ws:
+            first = await asyncio.wait_for(ws.recv(), timeout=args.connect_timeout)
             if isinstance(first, str):
                 print("TEXT:", first)
                 return 2
             print("banner:", repr(first[:12]))
             banner = first[:12]
             rest = first[12:]
-            ok, msg = await rfb_handshake_after_banner(ws, banner, password or None, rest)
+            ok, msg = await asyncio.wait_for(
+                rfb_handshake_after_banner(ws, banner, password or None, rest),
+                timeout=args.handshake_timeout,
+            )
             print("RESULT:", "OK" if ok else "FAIL", msg)
             return 0 if ok else 1
+    except asyncio.TimeoutError:
+        print("TIMEOUT: VNC websocket did not complete within the configured timeout")
+        return 2
     except ConnectionClosed as e:
         print("WS closed:", e)
         return 2

@@ -55,7 +55,7 @@ function bakedApiConflictsWithPageOrigin(baked: string): boolean {
   }
 }
 
-function useSameOriginApi(baked: string | undefined): boolean {
+function shouldUseSameOriginApi(baked: string | undefined): boolean {
   if (typeof window === "undefined") {
     return false;
   }
@@ -75,7 +75,7 @@ export function getApiBaseUrl(): string {
     return override;
   }
   const baked = process.env.NEXT_PUBLIC_API_URL;
-  if (useSameOriginApi(baked)) {
+  if (shouldUseSameOriginApi(baked)) {
     return "";
   }
   if (baked) {
@@ -91,7 +91,7 @@ export function getVncWsBaseUrl(): string {
     return `${toWsBase(override)}/ws/vnc`;
   }
   const baked = process.env.NEXT_PUBLIC_WS_URL;
-  if (useSameOriginApi(baked)) {
+  if (shouldUseSameOriginApi(baked)) {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${window.location.host}/ws/vnc`;
   }
@@ -112,7 +112,7 @@ export function getWsBaseUrl(): string {
     return `${toWsBase(override)}/ws/terminal`;
   }
   const baked = process.env.NEXT_PUBLIC_WS_URL;
-  if (useSameOriginApi(baked)) {
+  if (shouldUseSameOriginApi(baked)) {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${window.location.host}/ws/terminal`;
   }

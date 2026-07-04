@@ -1,7 +1,7 @@
-"""Standalone tests for two agent-API improvements:
+"""Standalone tests for agent-API improvements:
 
 1. decode_terminal_text  -- GBK/UTF-8 fallback decoding (fixes garbled output).
-2. RunJobManager         -- async run-job registry (fixes ~60s gateway timeout).
+2. TerminalRunManager    -- managed run protocol (fixes long-command timeouts).
 
 Run from the repo root with the project venv:
 
@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.terminal._term_utils import decode_terminal_text  # noqa: E402
-from backend.ssh.run_jobs import RunJob, RunJobManager  # noqa: E402
+from backend.terminal.run_manager import TerminalRunManager  # noqa: E402
 
 
 def check(name: str, cond: bool) -> None:
@@ -43,56 +43,37 @@ def test_decoder() -> None:
     check("binary no-raise", isinstance(out, str) and "ok" in out)
 
 
-async def _fake_ok_worker(job: RunJob) -> None:
-    job.set_terminal("term-xyz")
-    await asyncio.sleep(0.05)
-    job.finish({"ok": True, "exit_code": 0, "stdout": "done", "reason": None})
+def test_terminal_run_manager() -> None:
+    print("TerminalRunManager:")
+    command = TerminalRunManager._final_command("echo done")
+    check("final command", command == "echo done")
 
+    wrapped, sentinel = TerminalRunManager._wrap_command(
+        "echo done",
+        cwd="/tmp",
+        env={"WINKTERM_SMOKE": "1"},
+        powershell=False,
+    )
+    check("posix sentinel", sentinel in wrapped)
+    check("posix cwd", "cd /tmp" in wrapped)
+    check("posix env", "export WINKTERM_SMOKE=1" in wrapped)
 
-async def _fake_slow_worker(job: RunJob) -> None:
-    job.set_terminal("term-slow")
-    await asyncio.sleep(5.0)  # long; we cancel before this completes
-    job.finish({"ok": True, "exit_code": 0, "stdout": "late"})
+    ps_wrapped, ps_sentinel = TerminalRunManager._wrap_command(
+        "Write-Output done",
+        cwd="C:/Temp",
+        env={"WINKTERM_SMOKE": "1"},
+        powershell=True,
+    )
+    check("powershell sentinel", ps_sentinel in ps_wrapped)
+    check("powershell cwd", "Set-Location 'C:/Temp'" in ps_wrapped)
+    check("powershell env", "$env:WINKTERM_SMOKE='1'" in ps_wrapped)
 
-
-async def _fake_boom_worker(job: RunJob) -> None:
-    raise RuntimeError("boom")
-
-
-async def test_run_jobs() -> None:
-    print("RunJobManager:")
-    # Happy path: submit returns immediately as 'running', then resolves to success.
-    d = RunJobManager.submit("conn1", "echo done", _fake_ok_worker)
-    check("submit returns job_id", bool(d["job_id"]))
-    check("submit status running", d["status"] == "running")
-    check("submit not done", d["done"] is False)
-    jid = d["job_id"]
-    await asyncio.sleep(0.2)
-    j = RunJobManager.get(jid)
-    check("resolves success", j["status"] == "success")
-    check("done flag", j["done"] is True)
-    check("stdout captured", j["stdout"] == "done")
-    check("exit_code", j["exit_code"] == 0)
-    check("terminal_id set", j["terminal_id"] == "term-xyz")
-
-    # Error path: worker raises -> status 'error', message captured.
-    d2 = RunJobManager.submit("conn1", "bad", _fake_boom_worker)
-    await asyncio.sleep(0.1)
-    j2 = RunJobManager.get(d2["job_id"])
-    check("error status", j2["status"] == "error")
-    check("error message", j2["error"] == "boom")
-
-    # Cancel path: cancel a still-running job.
-    d3 = RunJobManager.submit("conn1", "sleep", _fake_slow_worker)
-    await asyncio.sleep(0.1)
-    RunJobManager.cancel(d3["job_id"])
-    await asyncio.sleep(0.1)
-    j3 = RunJobManager.get(d3["job_id"])
-    check("canceled status", j3["status"] == "canceled")
-
-    # Unknown id.
-    check("unknown get -> None", RunJobManager.get("nope") is None)
-    check("unknown cancel -> None", RunJobManager.cancel("nope") is None)
+    try:
+        TerminalRunManager._final_command("")
+    except ValueError:
+        check("empty command rejected", True)
+    else:
+        check("empty command rejected", False)
 
 
 def test_route_wiring() -> None:
@@ -100,14 +81,14 @@ def test_route_wiring() -> None:
     from backend.api import agent_routes  # noqa: E402
 
     paths = {r.path for r in agent_routes.router.routes}
-    check("run_async route", "/api/agent/ssh/{conn_id}/run_async" in paths)
-    check("jobs list route", "/api/agent/jobs" in paths)
-    check("job get route", "/api/agent/jobs/{job_id}" in paths)
+    check("terminal run route", "/api/agent/terminals/{terminal_id}/run" in paths)
+    check("run status route", "/api/agent/runs/{run_id}" in paths)
+    check("run wait route", "/api/agent/runs/{run_id}/wait" in paths)
 
 
 def main() -> int:
     test_decoder()
-    asyncio.run(test_run_jobs())
+    test_terminal_run_manager()
     test_route_wiring()
     print("\nALL TESTS PASSED")
     return 0
