@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX v5 installer definition for WinkTerm (Windows, single-file exe).
+
+  Build:
+    wix build winkterm.wxs -o "..\dist\WinkTerm-<version>-x64.msi" -arch x64 \
+      -d AppVersion=<version>
+
+  The AppVersion variable is injected by build-msi.bat (parsed from
+  backend/api/routes.py APP_VERSION), keeping the MSI's ProductVersion in
+  sync with the application version automatically.
+
+  Notes:
+  - WinkTerm ships as a single onefile PyInstaller exe, so only the exe
+    itself is installed (no external DLLs/_internal/ folder needed).
+  - This file is self-contained: it does NOT depend on WixUIExtension so
+    the build needs no extra NuGet packages. The MSI installs silently
+    (msiexec /i ... /quiet) and also works with a basic interactive run.
+  - UpgradeCode is a stable GUID that must NEVER change between releases;
+    Windows uses it to detect upgrades of the same product.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="WinkTerm"
+    Language="1033"
+    Version="$(var.AppVersion)"
+    Manufacturer="WinkTerm"
+    UpgradeCode="38AAEF93-F0A5-49DE-8B78-AA1FE3C87279">
+
+    <SummaryInformation
+      Description="WinkTerm Installer"
+      Manufacturer="WinkTerm" />
+
+    <!-- Major upgrade rule: uninstall older versions before installing. -->
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of WinkTerm is already installed. The setup will now exit." />
+
+    <Media Id="1" Cabinet="WinkTerm.cab" EmbedCab="yes" />
+
+    <!-- Installation directory layout: Program Files\WinkTerm -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="WinkTerm">
+        <Component Id="MainExe" Guid="7B5F4A2C-3D6E-4F1B-9A88-2C7E5D4B1F30">
+          <File Id="WinkTermExe" Source="$(sys.SOURCEFILEDIR)..\dist\WinkTerm.exe" KeyPath="yes" Checksum="yes" />
+          <!-- AppPath so the exe can be located by other installers. -->
+          <Environment Id="PATH" Name="PATH" Value="[INSTALLDIR]" Permanent="no" Part="last" Action="set" System="no" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Start Menu shortcut -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="StartMenuDir" Name="WinkTerm">
+        <Component Id="StartMenuShortcut" Guid="A1C3E5D7-9F2B-4A6C-8E0D-1F3B5A7C9E12">
+          <Shortcut
+            Id="WinkTermShortcut"
+            Name="WinkTerm"
+            Description="AI + terminal human-machine fusion ops tool"
+            Target="[INSTALLDIR]WinkTerm.exe"
+            WorkingDirectory="INSTALLDIR"
+            Icon="WinkTermIcon" />
+          <RegistryValue Root="HKCU" Key="Software\WinkTerm" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Desktop shortcut -->
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="B2D4F6E8-1A3C-5B7D-9F1E-2A4C6E8A0F23">
+        <Shortcut
+          Id="DesktopShortcutLink"
+          Name="WinkTerm"
+          Description="AI + terminal human-machine fusion ops tool"
+          Target="[INSTALLDIR]WinkTerm.exe"
+          WorkingDirectory="INSTALLDIR"
+          Icon="WinkTermIcon" />
+        <RegistryValue Root="HKCU" Key="Software\WinkTerm" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- App icon (shown in Add/Remove Programs and shortcuts) -->
+    <Icon Id="WinkTermIcon" SourceFile="$(sys.SOURCEFILEDIR)..\assets\logo.ico" />
+    <Property Id="ARPPRODUCTICON" Value="WinkTermIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/Cznorth/winkterm" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/Cznorth/winkterm" />
+
+    <!-- Install the components -->
+    <Feature Id="Complete" Title="WinkTerm" Level="1" AllowAdvertise="no" Display="expand" ConfigurableDirectory="INSTALLDIR">
+      <ComponentRef Id="MainExe" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+  </Package>
+</Wix>
