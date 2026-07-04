@@ -41,6 +41,11 @@ class SSHConnection:
     created_at: datetime = field(default_factory=datetime.now)
     last_connected: Optional[datetime] = None
 
+    # Soft-delete tombstone; None means the connection is live. Set to an
+    # ISO timestamp when the user deletes a connection so it can be restored
+    # within an undo window before being purged.
+    deleted_at: Optional[datetime] = None
+
     def to_dict(self) -> dict:
         """Convert to a dictionary."""
         return {
@@ -60,6 +65,7 @@ class SSHConnection:
             "runbook": self.runbook,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_connected": self.last_connected.isoformat() if self.last_connected else None,
+            "deleted_at": self.deleted_at.isoformat() if self.deleted_at else None,
         }
 
     @classmethod
@@ -82,6 +88,7 @@ class SSHConnection:
             runbook=data.get("runbook", ""),
             created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else datetime.now(),
             last_connected=datetime.fromisoformat(data["last_connected"]) if data.get("last_connected") else None,
+            deleted_at=datetime.fromisoformat(data["deleted_at"]) if data.get("deleted_at") else None,
         )
 
     @classmethod

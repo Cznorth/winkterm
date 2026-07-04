@@ -23,17 +23,31 @@ interface Options {
   onCreated: (s: SessionInfo) => void;
   onClosed: (sessionId: string) => void;
   onSnapshot?: (sessions: SessionInfo[]) => void;
+  /** Fired when a reconnect is scheduled (transient disconnect). */
+  onReconnecting?: () => void;
+  /** Fired when the reconnect budget is exhausted (live updates are now off). */
+  onMaxReconnectFailed?: () => void;
 }
 
+const RECONNECT_DELAY_MS = 2000;
+const MAX_RECONNECT_ATTEMPTS = 10;
+
 /** SSE subscription to backend session lifecycle events with auto-reconnect. */
-export function useSessionsStream({ onCreated, onClosed, onSnapshot }: Options): void {
-  const handlersRef = useRef({ onCreated, onClosed, onSnapshot });
-  handlersRef.current = { onCreated, onClosed, onSnapshot };
+export function useSessionsStream({
+  onCreated,
+  onClosed,
+  onSnapshot,
+  onReconnecting,
+  onMaxReconnectFailed,
+}: Options): void {
+  const handlersRef = useRef({ onCreated, onClosed, onSnapshot, onReconnecting, onMaxReconnectFailed });
+  handlersRef.current = { onCreated, onClosed, onSnapshot, onReconnecting, onMaxReconnectFailed };
 
   useEffect(() => {
     let es: EventSource | null = null;
     let stopped = false;
     let reconnectTimer: number | null = null;
+    let reconnectAttempts = 0;
 
     const connect = () => {
       const base = getApiBaseUrl();
@@ -88,10 +102,17 @@ export function useSessionsStream({ onCreated, onClosed, onSnapshot }: Options):
     const scheduleReconnect = () => {
       if (stopped) return;
       if (reconnectTimer) return;
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.warn("[sessions-stream] max reconnect attempts reached, giving up");
+        handlersRef.current.onMaxReconnectFailed?.();
+        return;
+      }
+      reconnectAttempts++;
+      handlersRef.current.onReconnecting?.();
       reconnectTimer = window.setTimeout(() => {
         reconnectTimer = null;
         connect();
-      }, 2000);
+      }, RECONNECT_DELAY_MS);
     };
 
     connect();

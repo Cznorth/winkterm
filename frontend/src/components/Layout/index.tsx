@@ -5,6 +5,7 @@ import { usePanes, LAYOUT_CONFIG, type LayoutType } from "@/hooks/usePanes";
 import { useSessionsStream, type SessionInfo } from "@/hooks/useSessionsStream";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/lib/toast";
 import Terminal from "@/components/Terminal";
 import SettingsPanel from "@/components/SettingsPanel";
 import SSHPanel from "@/components/SSHPanel";
@@ -95,6 +96,7 @@ const MOBILE_NAV_ITEMS: typeof ACTIVITY_ITEMS = [
 
 export default function SplitLayout({ aiPanel }: LayoutProps) {
   const { t } = useI18n();
+  const toast = useToast();
   const {
     layout,
     panes,
@@ -198,6 +200,14 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
   useSessionsStream({
     onCreated: handleSessionCreated,
     onClosed: handleSessionClosed,
+    onReconnecting: () => {
+      // Only show one "reconnecting" toast per disconnect episode; the SSE
+      // hook schedules many reconnects in a row and we don't want to spam.
+      toast.info(t("toast.sessionStreamDisconnected"), { duration: 3000 });
+    },
+    onMaxReconnectFailed: () => {
+      toast.error(t("toast.sessionStreamFailed"));
+    },
   });
 
   // Tab close: notify backend to close session first, then remove local tab (backend close also broadcasts; idempotent on frontend)

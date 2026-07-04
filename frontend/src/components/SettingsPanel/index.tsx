@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/lib/toast";
 import { useTheme } from "@/lib/theme";
 import { getApiBaseUrl } from "@/lib/config";
 import { getAccessKey } from "@/lib/auth";
@@ -223,6 +224,7 @@ const SECTION_IDS: SettingsSectionId[] = [
 
 export default function SettingsPanel() {
   const { t, locale, setLocale } = useI18n();
+  const toast = useToast();
   const { themeMode, setThemeMode } = useTheme();
   const [settings, setSettings] = useState<Settings>({
     api_format: "openai",
@@ -240,11 +242,7 @@ export default function SettingsPanel() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [candidateModels, setCandidateModels] = useState<CandidateModel[]>([]);
-  const [saved, setSaved] = useState(false);
   const [fetchError, setFetchError] = useState("");
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [authUrlCopied, setAuthUrlCopied] = useState(false);
-  const [tokenCopied, setTokenCopied] = useState(false);
   const [streamTesting, setStreamTesting] = useState(false);
   const [streamOutput, setStreamOutput] = useState("");
   const [streamError, setStreamError] = useState("");
@@ -254,8 +252,6 @@ export default function SettingsPanel() {
   const [tokenEditing, setTokenEditing] = useState(false);
   const [agentsMd, setAgentsMd] = useState("");
   const [memoryMd, setMemoryMd] = useState("");
-  const [agentsMdSaved, setAgentsMdSaved] = useState(false);
-  const [memoryMdSaved, setMemoryMdSaved] = useState(false);
   const [savingAgentsMd, setSavingAgentsMd] = useState(false);
   const [savingMemoryMd, setSavingMemoryMd] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -305,8 +301,7 @@ export default function SettingsPanel() {
       }
     } catch { /* fallback to masked value */ }
     await copyToClipboard(tokenToCopy);
-    setTokenCopied(true);
-    setTimeout(() => setTokenCopied(false), 1500);
+    toast.success(t("toast.copied"));
   };
 
   const installGuideUrl = `${getApiBaseUrl() || (typeof window !== "undefined" ? window.location.origin : "")}/api/agent/install.md`;
@@ -330,8 +325,7 @@ export default function SettingsPanel() {
   const handleCopyInstallPrompt = async () => {
     try {
       await navigator.clipboard.writeText(installPrompt);
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
+      toast.success(t("toast.copied"));
     } catch {
       /* Ignore when clipboard is unavailable */
     }
@@ -367,8 +361,7 @@ export default function SettingsPanel() {
   const handleCopyCodexAuthUrl = async (url: string) => {
     if (!url.trim()) return;
     await copyToClipboard(url.trim());
-    setAuthUrlCopied(true);
-    setTimeout(() => setAuthUrlCopied(false), 2000);
+    toast.success(t("toast.copied"));
   };
 
   useEffect(() => {
@@ -663,7 +656,6 @@ export default function SettingsPanel() {
     setCodexCallbackUrl("");
     setCodexCallbackError("");
     setCodexOAuthError("");
-    setAuthUrlCopied(false);
     try {
       const res = await axios.post("/api/codex/oauth/start", { open_browser: false });
       let authUrl = (res.data?.auth_url as string) || "";
@@ -843,8 +835,10 @@ export default function SettingsPanel() {
     setLoading(true);
     try {
       await axios.post("/api/settings", settings);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      toast.success(t("toast.settingsSaved"));
+    } catch (e) {
+      console.error("Save settings failed:", e);
+      toast.error(t("toast.settingsSaveFailed"));
     } finally {
       setLoading(false);
     }
@@ -854,8 +848,10 @@ export default function SettingsPanel() {
     setSavingAgentsMd(true);
     try {
       await axios.put("/api/settings/agents-md", { content: agentsMd });
-      setAgentsMdSaved(true);
-      setTimeout(() => setAgentsMdSaved(false), 2000);
+      toast.success(t("toast.agentsMdSaved"));
+    } catch (e) {
+      console.error("Save agents.md failed:", e);
+      toast.error(t("toast.settingsSaveFailed"));
     } finally {
       setSavingAgentsMd(false);
     }
@@ -865,8 +861,10 @@ export default function SettingsPanel() {
     setSavingMemoryMd(true);
     try {
       await axios.put("/api/settings/memory-md", { content: memoryMd });
-      setMemoryMdSaved(true);
-      setTimeout(() => setMemoryMdSaved(false), 2000);
+      toast.success(t("toast.memoryMdSaved"));
+    } catch (e) {
+      console.error("Save memory.md failed:", e);
+      toast.error(t("toast.settingsSaveFailed"));
     } finally {
       setSavingMemoryMd(false);
     }
@@ -992,28 +990,20 @@ export default function SettingsPanel() {
   };
 
   const renderSaveBar = () => (
-    <>
-      {saved && (
-        <div className="settings-success" style={{ marginBottom: "12px" }}>
-          <CheckIcon />
-          {t("settings.saved")}
-        </div>
+    <button
+      className="settings-btn settings-btn-primary settings-btn-full"
+      onClick={handleSave}
+      disabled={loading}
+    >
+      {loading ? (
+        <>
+          <span className="settings-spinner" />
+          {t("settings.saving")}
+        </>
+      ) : (
+        t("settings.save")
       )}
-      <button
-        className="settings-btn settings-btn-primary settings-btn-full"
-        onClick={handleSave}
-        disabled={loading}
-      >
-        {loading ? (
-          <>
-            <span className="settings-spinner" />
-            {t("settings.saving")}
-          </>
-        ) : (
-          t("settings.save")
-        )}
-      </button>
-    </>
+    </button>
   );
 
   const renderAiSetupSection = () => (
@@ -1128,7 +1118,7 @@ export default function SettingsPanel() {
                   onClick={() => handleCopyCodexAuthUrl(displayedCodexAuthUrl)}
                   disabled={!displayedCodexAuthUrl.trim()}
                 >
-                  {authUrlCopied ? t("settings.codexAuthUrlCopied") : t("settings.codexCopyAuthUrl")}
+                  {t("settings.codexCopyAuthUrl")}
                 </button>
                 <button
                   type="button"
@@ -1560,7 +1550,7 @@ export default function SettingsPanel() {
           <textarea className="settings-textarea" value={agentsMd} onChange={(e) => setAgentsMd(e.target.value)} />
           <div className="settings-help">{t("settings.agentsMdHelp")}</div>
           <button className="settings-btn settings-btn-primary settings-btn-full" onClick={handleSaveAgentsMd} disabled={savingAgentsMd}>
-            {agentsMdSaved ? t("settings.docSaved") : t("settings.saveDoc")}
+            {savingAgentsMd ? t("settings.saving") : t("settings.saveDoc")}
           </button>
         </div>
       ) : (
@@ -1572,7 +1562,7 @@ export default function SettingsPanel() {
           <textarea className="settings-textarea" value={memoryMd} onChange={(e) => setMemoryMd(e.target.value)} />
           <div className="settings-help">{t("settings.memoryMdHelp")}</div>
           <button className="settings-btn settings-btn-primary settings-btn-full" onClick={handleSaveMemoryMd} disabled={savingMemoryMd}>
-            {memoryMdSaved ? t("settings.docSaved") : t("settings.saveDoc")}
+            {savingMemoryMd ? t("settings.saving") : t("settings.saveDoc")}
           </button>
         </div>
       )}
@@ -1601,7 +1591,7 @@ export default function SettingsPanel() {
             {tokenEditing ? t("settings.doneEditingToken") : t("settings.editToken")}
           </button>
           <button className="settings-btn settings-btn-secondary" onClick={handleCopyToken} type="button" disabled={!settings.agent_api_token}>
-            {tokenCopied ? t("settings.copied") : t("settings.revealToken")}
+            {t("settings.revealToken")}
           </button>
           <button className="settings-btn settings-btn-secondary" onClick={handleGenerateToken} type="button">
             {t("settings.agentApiTokenGenerate")}
@@ -1625,7 +1615,7 @@ export default function SettingsPanel() {
         />
         <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
           <button className="settings-btn settings-btn-primary" onClick={handleCopyInstallPrompt} style={{ flex: 1 }}>
-            {linkCopied ? t("settings.agentAccessCopied") : t("settings.agentAccessCopy")}
+            {t("settings.agentAccessCopy")}
           </button>
           <a
             className="settings-btn settings-btn-secondary"

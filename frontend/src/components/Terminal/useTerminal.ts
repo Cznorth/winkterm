@@ -4,6 +4,8 @@ import type { FitAddon } from "@xterm/addon-fit";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import { getWebSocket } from "@/lib/websocket";
 import { xtermDarkTheme, xtermLightTheme } from "@/lib/theme";
+import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/lib/toast";
 import axios from "@/lib/axios";
 
 const DEBUG = process.env.NODE_ENV === "development";
@@ -57,8 +59,11 @@ export function useTerminal(
   const wsRef = useRef(getWebSocket(sessionId, terminalType, sshConnectionId));
   const initRef = useRef(false);
   const screenSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // i18n + toast for connection-failure notifications.
+  const { t } = useI18n();
+  const toast = useToast();
   // Store cleanup functions
-  const unsubRef = useRef<{ msg?: () => void; status?: () => void }>({});
+  const unsubRef = useRef<{ msg?: () => void; status?: () => void; reconnectFailed?: () => void }>({});
 
   const init = useCallback(async () => {
     if (initRef.current) return;
@@ -162,6 +167,7 @@ export function useTerminal(
     // Clean up previous handlers
     if (unsubRef.current.msg) unsubRef.current.msg();
     if (unsubRef.current.status) unsubRef.current.status();
+    if (unsubRef.current.reconnectFailed) unsubRef.current.reconnectFailed();
 
     // Initialize WebSocket
     const ws = wsRef.current;
@@ -204,6 +210,13 @@ export function useTerminal(
           }
         };
       }
+    });
+
+    // Surface a toast when reconnect attempts are exhausted: the terminal is
+    // then permanently dead and the user must reopen it. This is the only
+    // user-visible signal for that terminal-fatal state.
+    unsubRef.current.reconnectFailed = ws.onReconnectFailed(() => {
+      toast.error(t("toast.terminalDisconnected"), { duration: 8000 });
     });
 
     ws.reset();
@@ -291,6 +304,7 @@ export function useTerminal(
       }
       if (unsubRef.current.msg) unsubRef.current.msg();
       if (unsubRef.current.status) unsubRef.current.status();
+      if (unsubRef.current.reconnectFailed) unsubRef.current.reconnectFailed();
       wsRef.current.disconnect();
     };
   }, []);

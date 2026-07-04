@@ -3,6 +3,7 @@ import { getAccessKey } from "./auth";
 
 type MessageHandler = (data: string) => void;
 type StatusHandler = (connected: boolean) => void;
+type ReconnectFailedHandler = () => void;
 
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 20;
@@ -36,6 +37,7 @@ export class TerminalWebSocket {
   private ws: WebSocket | null = null;
   private messageHandlers: MessageHandler[] = [];
   private statusHandlers: StatusHandler[] = [];
+  private reconnectFailedHandlers: ReconnectFailedHandler[] = [];
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private intentionallyClosed = false;
@@ -163,6 +165,7 @@ export class TerminalWebSocket {
   private _scheduleReconnect(): void {
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       log.warn("[_scheduleReconnect] 达到最大重连次数，停止重连");
+      this._notifyReconnectFailed();
       return;
     }
     this.reconnectAttempts++;
@@ -256,6 +259,14 @@ export class TerminalWebSocket {
     };
   }
 
+  /** Subscribe to permanent reconnect failure (max attempts exhausted). */
+  onReconnectFailed(handler: ReconnectFailedHandler): () => void {
+    this.reconnectFailedHandlers.push(handler);
+    return () => {
+      this.reconnectFailedHandlers = this.reconnectFailedHandlers.filter((h) => h !== handler);
+    };
+  }
+
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
@@ -266,6 +277,10 @@ export class TerminalWebSocket {
 
   private _notifyStatus(connected: boolean): void {
     for (const h of this.statusHandlers) h(connected);
+  }
+
+  private _notifyReconnectFailed(): void {
+    for (const h of this.reconnectFailedHandlers) h();
   }
 }
 

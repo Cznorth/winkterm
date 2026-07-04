@@ -522,6 +522,31 @@ const translations = {
   "update.viewRelease": { zh: "查看发布页", en: "View Release" },
   "update.skipVersion": { zh: "跳过此版本", en: "Skip" },
   "update.dismiss": { zh: "忽略本次更新提示", en: "Dismiss update prompt" },
+
+  // === Toast (global transient feedback) ===
+  "toast.undo": { zh: "撤销", en: "Undo" },
+  "toast.copied": { zh: "已复制", en: "Copied" },
+  "toast.settingsSaved": { zh: "设置已保存", en: "Settings saved" },
+  "toast.settingsSaveFailed": { zh: "保存失败", en: "Failed to save settings" },
+  "toast.agentsMdSaved": { zh: "agents.md 已保存", en: "agents.md saved" },
+  "toast.memoryMdSaved": { zh: "memory.md 已保存", en: "memory.md saved" },
+  "toast.sshDeleted": { zh: "连接已删除", en: "Connection deleted" },
+  "toast.sshDeleteFailed": { zh: "删除失败", en: "Failed to delete connection" },
+  "toast.sshRestored": { zh: "连接已恢复", en: "Connection restored" },
+  "toast.sshRestoreFailed": { zh: "恢复失败", en: "Failed to restore connection" },
+  "toast.importFailed": { zh: "导入失败", en: "Import failed" },
+  "toast.terminalDisconnected": {
+    zh: "终端连接已断开且无法恢复，请重新打开该终端",
+    en: "Terminal connection lost and could not be recovered. Please reopen the terminal.",
+  },
+  "toast.sessionStreamDisconnected": {
+    zh: "会话更新已断开，正在重连…",
+    en: "Session updates disconnected, reconnecting…",
+  },
+  "toast.sessionStreamFailed": {
+    zh: "会话实时更新不可用",
+    en: "Live session updates unavailable",
+  },
 } as const;
 
 type TranslationKey = keyof typeof translations;

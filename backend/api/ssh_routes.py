@@ -145,9 +145,29 @@ async def update_connection(conn_id: str, conn: SSHConnectionUpdate) -> dict:
 
 
 @router.delete("/connections/{conn_id}")
-async def delete_connection(conn_id: str) -> dict:
-    """Delete SSH connection."""
-    return SSHConnectionManager.delete_connection(conn_id)
+async def delete_connection(
+    conn_id: str,
+    purge: bool = Query(default=False),
+) -> dict:
+    """Delete SSH connection.
+
+    Soft-delete by default (sets deleted_at, reversible via /restore). Pass
+    purge=true to remove the row permanently; the client uses this after the
+    undo window has elapsed.
+    """
+    result = SSHConnectionManager.delete_connection(conn_id, purge=purge)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail="连接不存在")
+    return result
+
+
+@router.post("/connections/{conn_id}/restore")
+async def restore_connection(conn_id: str) -> dict:
+    """Restore a soft-deleted SSH connection (clear deleted_at)."""
+    result = SSHConnectionManager.restore_connection(conn_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail="连接不存在或未被删除")
+    return result
 
 
 @router.get("/connections/{conn_id}/runbook")

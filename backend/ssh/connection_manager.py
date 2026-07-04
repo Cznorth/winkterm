@@ -53,9 +53,14 @@ class SSHConnectionManager:
 
     @classmethod
     def list_connections(cls) -> dict:
-        """List all connections (passwords masked, runbook stripped)."""
+        """List all live connections (passwords masked, runbook stripped).
+
+        Soft-deleted connections (deleted_at set) are excluded.
+        """
         config = cls._load_config()
-        connections = config.get("ssh_connections", [])
+        all_connections = config.get("ssh_connections", [])
+        # Exclude soft-deleted tombstones from the public list.
+        connections = [c for c in all_connections if not c.get("deleted_at")]
         # Mask passwords
         for conn in connections:
             if conn.get("password"):
@@ -71,10 +76,14 @@ class SSHConnectionManager:
 
     @classmethod
     def get_connection_dict(cls, conn_id: str, *, include_secrets: bool = False) -> Optional[dict]:
-        """Get the connection dict; returns plaintext secrets when include_secrets=True."""
+        """Get the connection dict; returns plaintext secrets when include_secrets=True.
+
+        Soft-deleted connections are treated as missing so the generic GET
+        cannot resurrect a tombstone; use restore_connection instead.
+        """
         config = cls._load_config()
         for conn_data in config.get("ssh_connections", []):
-            if conn_data.get("id") == conn_id:
+            if conn_data.get("id") == conn_id and not conn_data.get("deleted_at"):
                 if include_secrets:
                     return dict(conn_data)
                 masked = dict(conn_data)
@@ -86,11 +95,11 @@ class SSHConnectionManager:
 
     @classmethod
     def get_connection(cls, conn_id: str) -> Optional[SSHConnection]:
-        """Get connection details."""
+        """Get connection details. Soft-deleted connections are treated as missing."""
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
         for conn_data in connections:
-            if conn_data.get("id") == conn_id:
+            if conn_data.get("id") == conn_id and not conn_data.get("deleted_at"):
                 return SSHConnection.from_dict(conn_data)
         return None
 
@@ -131,14 +140,56 @@ class SSHConnectionManager:
         return {"success": True}
 
     @classmethod
-    def delete_connection(cls, conn_id: str) -> dict:
-        """Delete a connection."""
+    def delete_connection(cls, conn_id: str, *, purge: bool = False) -> dict:
+        """Delete a connection.
+
+        By default performs a soft delete (sets deleted_at) so the action is
+        reversible within an undo window. When purge=True the row is removed
+        from the config file permanently; this is meant to be called after the
+        undo window has expired.
+        """
         config = cls._load_config()
         connections = config.get("ssh_connections", [])
-        connections = [c for c in connections if c.get("id") != conn_id]
+
+        found = False
+        for conn in connections:
+            if conn.get("id") != conn_id:
+                continue
+            found = True
+            if purge:
+                connections = [c for c in connections if c.get("id") != conn_id]
+                logger.info(f"永久删除 SSH 连接: {conn_id}")
+            else:
+                conn["deleted_at"] = datetime.now().isoformat()
+                logger.info(f"软删除 SSH 连接: {conn_id}")
+            break
+
+        if not found:
+            return {"success": False}
+
         config["ssh_connections"] = connections
         cls._save_config(config)
-        logger.info(f"删除 SSH 连接: {conn_id}")
+        return {"success": True}
+
+    @classmethod
+    def restore_connection(cls, conn_id: str) -> dict:
+        """Restore a soft-deleted connection (clear deleted_at)."""
+        config = cls._load_config()
+        connections = config.get("ssh_connections", [])
+
+        restored = False
+        for conn in connections:
+            if conn.get("id") == conn_id and conn.get("deleted_at"):
+                conn["deleted_at"] = None
+                restored = True
+                break
+
+        if not restored:
+            return {"success": False}
+
+        config["ssh_connections"] = connections
+        cls._save_config(config)
+        logger.info(f"恢复 SSH 连接: {conn_id}")
         return {"success": True}
 
     @classmethod
@@ -195,9 +246,12 @@ class SSHConnectionManager:
             if not bm.get("host"):
                 continue
 
-            # Check whether it already exists (by host+port+username)
+            # Check whether it already exists (by host+port+username).
+            # Soft-deleted rows are excluded so re-importing does not resurrect
+            # duplicates a user previously deleted.
             existing = any(
-                c.get("host") == bm.get("host")
+                not c.get("deleted_at")
+                and c.get("host") == bm.get("host")
                 and c.get("port") == bm.get("port", 22)
                 and c.get("username") == bm.get("username")
                 for c in connections

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import axios from "@/lib/axios";
 import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/lib/toast";
 import FileTransferDialog from "@/components/FileTransferDialog";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
 import "./SSHPanel.css";
@@ -78,6 +79,7 @@ const RunbookIcon = () => (
 
 export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
   const { t } = useI18n();
+  const toast = useToast();
   const breakpoint = useBreakpoint();
   const useInlineTransfer = breakpoint === "desktop";
   const useMobileVncDialog = breakpoint !== "desktop";
@@ -266,7 +268,7 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
       loadConnections();
     } catch (err) {
       console.error("Import failed:", err);
-      alert(t("ssh.importFailed"));
+      toast.error(t("toast.importFailed"));
     }
 
     if (fileInputRef.current) {
@@ -345,15 +347,55 @@ export default function SSHPanel({ onConnect, onVNCConnect }: SSHPanelProps) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this connection?")) return;
+    // Capture the row before any state change so we can roll the UI back if
+    // the request fails, and keep it for an Undo action below.
+    const removed = connections.find((c) => c.id === id) || null;
+
+    // Optimistic removal: the backend soft-deletes immediately; if the user
+    // does not click Undo within 5s the row is purged permanently.
+    setConnections((prev) => prev.filter((c) => c.id !== id));
+    if (transferTarget?.id === id) {
+      handleCloseTransfer();
+    }
 
     try {
-      if (transferTarget?.id === id) {
-        handleCloseTransfer();
-      }
       await axios.delete(`/api/ssh/connections/${id}`);
-      loadConnections();
+
+      // Undo window: restore the row server-side if clicked. Otherwise the
+      // purge below removes it permanently after the window elapses.
+      toast.success(t("toast.sshDeleted"), {
+        duration: 5000,
+        action: {
+          label: t("toast.undo"),
+          onClick: async () => {
+            try {
+              await axios.post(`/api/ssh/connections/${id}/restore`);
+              toast.info(t("toast.sshRestored"));
+            } catch {
+              toast.error(t("toast.sshRestoreFailed"));
+            }
+            // Always re-sync from the server: restore may have failed or the
+            // purge may have already run.
+            loadConnections();
+          },
+        },
+      });
+
+      // After the undo window elapses, tell the backend to purge the
+      // tombstone permanently. A small buffer (500ms) avoids a race where the
+      // purge arrives before a last-moment Undo click is processed.
+      window.setTimeout(() => {
+        axios.delete(`/api/ssh/connections/${id}?purge=true`).catch(() => {});
+      }, 5500);
     } catch (e) {
+      // Roll back the optimistic removal and surface the failure.
+      if (removed) {
+        setConnections((prev) => {
+          if (prev.some((c) => c.id === removed.id)) return prev;
+          return [...prev, removed];
+        });
+      }
+      toast.error(t("toast.sshDeleteFailed"));
       console.error("Delete failed:", e);
     }
   };
