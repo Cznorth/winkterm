@@ -25,13 +25,17 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 
 from backend.agent.codex_provider import (
+    CODEX_DEFAULT_MODEL,
     CodexProviderError,
     codex_login,
     codex_logout,
     codex_status,
     complete_codex_oauth_callback,
+    is_codex_model_allowed,
+    normalize_codex_model,
     run_codex,
     start_codex_oauth,
+    validate_codex_model,
 )
 from backend.agent.graph import get_graph
 from backend.agent.tools.terminal_legacy import get_terminal_context_raw
@@ -75,6 +79,7 @@ class SettingsModel(BaseModel):
     theme: Optional[str] = None
     agent_api_token: Optional[str] = None
     web_access_key: Optional[str] = None
+    codex_client_version: Optional[str] = None
 
 
 class ModelsRequest(BaseModel):
@@ -158,6 +163,7 @@ def _run_update_download(job_id: str, url: str, target: Path, version: str, tota
 @router.get("/settings")
 async def get_settings() -> dict:
     """Return settings with API keys masked."""
+    UserConfig.repair_codex_models_if_needed()
     return UserConfig.get_masked()
 
 
@@ -298,6 +304,17 @@ async def save_settings(payload: SettingsModel) -> dict:
         val = data[secret] or ""
         if "****" in val or (val == "" and original.get(secret)):
             data[secret] = original.get(secret, "")
+    merged_format = data.get("api_format", original.get("api_format", "openai"))
+    if merged_format == "codex":
+        selected = data.get("selected_model", original.get("selected_model"))
+        if not is_codex_model_allowed(selected):
+            data["selected_model"] = CODEX_DEFAULT_MODEL
+        if "models" in data and data["models"] is not None:
+            data["models"] = [
+                m for m in data["models"]
+                if isinstance(m, dict) and is_codex_model_allowed(m.get("id"))
+            ]
+
     UserConfig.merge_save(data)
     return {"success": True}
 
@@ -393,8 +410,8 @@ async def fetch_models(req: ModelsRequest) -> dict:
     if req.api_format == "codex":
         return {
             "models": [
+                {"id": "gpt-5.4-mini", "name": "GPT-5.4 mini (Codex，推荐)", "provider": "codex"},
                 {"id": "gpt-5.5", "name": "GPT-5.5 (Codex)", "provider": "codex"},
-                {"id": "gpt-5.4-mini", "name": "GPT-5.4 mini (Codex)", "provider": "codex"},
             ]
         }
 
@@ -450,16 +467,15 @@ async def stream_test(req: StreamTestRequest) -> StreamingResponse:
         user_config = UserConfig.load()
         model = user_config.get("selected_model") or settings.effective_model
 
-    if req.api_format == "codex":
-        if not model:
-            model = "gpt-5.5"
-    elif not api_key or not req.base_url or not model:
+    if req.api_format != "codex" and (not api_key or not req.base_url or not model):
         raise HTTPException(status_code=400, detail="缺少 base_url、api_key 或 model")
 
     async def gen():
         try:
             if req.api_format == "codex":
-                content = await run_codex("Reply with exactly: OK", model=model)
+                UserConfig.repair_codex_models_if_needed()
+                effective_model = normalize_codex_model(model)
+                content = await run_codex("Reply with exactly: OK", model=effective_model)
                 yield f"data: {json.dumps({'type': 'token', 'content': content}, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'chunks': 1}, ensure_ascii=False)}\n\n"
                 return

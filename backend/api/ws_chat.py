@@ -14,7 +14,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.agent.factory import get_agent
-from backend.agent.codex_provider import stream_codex_response
+from backend.agent.codex_provider import normalize_codex_model, stream_codex_response
 from backend.agent.codex_protocol import (
     CodexStreamParser,
     append_tool_round_trip,
@@ -378,7 +378,9 @@ class ChatWSHandler:
         try:
             user_config = UserConfig.load()
             if user_config.get("api_format") == "codex":
-                model_name = user_config.get("selected_model") or settings.effective_model
+                model_name = normalize_codex_model(
+                    user_config.get("selected_model") or settings.effective_model
+                )
                 agent_config = AgentRegistry().get(agent_key)
                 instructions = agent_config.load_prompt(lang="en") if agent_config else ""
                 if terminal_output:
@@ -395,7 +397,7 @@ class ChatWSHandler:
                     async for event in stream_codex_response(
                         instructions=instructions,
                         input_items=codex_input,
-                        model=model_name or "gpt-5.5",
+                        model=model_name,
                         tools=codex_tool_schemas,
                     ):
                         if self._stop_requested:

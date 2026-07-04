@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langgraph.graph import END, StateGraph
 
-from backend.agent.codex_provider import stream_codex_response
+from backend.agent.codex_provider import stream_codex_response, normalize_codex_model
 from backend.agent.codex_protocol import (
     CodexStreamParser,
     codex_input_from_messages,
@@ -182,14 +182,16 @@ class AgentBuilder:
 
         if api_format == "codex":
             selected_model = user_config.get("selected_model")
-            model_name = selected_model or (
-                settings.effective_model if self.model == "default" else self.model
+            model_name = normalize_codex_model(
+                selected_model or (
+                    settings.effective_model if self.model == "default" else self.model
+                )
             )
             parser = CodexStreamParser()
             async for event in stream_codex_response(
                 instructions=system_content,
                 input_items=codex_input_from_messages(messages),
-                model=model_name or "gpt-5.5",
+                model=model_name,
                 tools=[_codex_tool_schema(tool) for tool in self.tools],
             ):
                 parser.feed(event)

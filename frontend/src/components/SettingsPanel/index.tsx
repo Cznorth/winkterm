@@ -31,6 +31,15 @@ interface Settings {
   agent_api_token: string;
   web_access_key: string;
   theme: string;
+  codex_client_version: string;
+}
+
+interface CodexClientVersionInfo {
+  effective: string;
+  source: string;
+  default: string;
+  config: string;
+  codex_cli: string;
 }
 
 interface UpdateInfo {
@@ -61,6 +70,7 @@ interface CodexStatus {
   logged_in: boolean;
   cli_logged_in?: boolean;
   message: string;
+  client_version?: CodexClientVersionInfo;
   oauth?: {
     active: boolean;
     state: string;
@@ -159,6 +169,37 @@ const CheckIcon = () => (
 
 const GITHUB_REPO_URL = "https://github.com/Cznorth/winkterm";
 
+const CODEX_MODEL_PRESETS: ModelInfo[] = [
+  { id: "gpt-5.4-mini", name: "GPT-5.4 mini (Codex)", provider: "codex" },
+  { id: "gpt-5.5", name: "GPT-5.5 (Codex)", provider: "codex" },
+];
+
+const isCodexModelId = (id: string) => CODEX_MODEL_PRESETS.some((m) => m.id === id);
+
+function sanitizeSettingsFromApi(data: Record<string, unknown>): Settings {
+  const apiFormat = (data.api_format as Settings["api_format"]) || "openai";
+  let models = (data.models as ModelInfo[]) || [];
+  let selectedModel = (data.selected_model as string) || "";
+  if (apiFormat === "codex") {
+    const codexModels = models.filter((m) => isCodexModelId(m.id));
+    models = codexModels.length ? codexModels : [...CODEX_MODEL_PRESETS];
+    if (!isCodexModelId(selectedModel)) {
+      selectedModel = "gpt-5.4-mini";
+    }
+  }
+  return {
+    api_format: apiFormat,
+    base_url: (data.base_url as string) || "",
+    api_key: (data.api_key as string) || "",
+    models,
+    selected_model: selectedModel,
+    agent_api_token: (data.agent_api_token as string) || "",
+    web_access_key: (data.web_access_key as string) || "",
+    theme: (data.theme as string) || "system",
+    codex_client_version: (data.codex_client_version as string) || "",
+  };
+}
+
 type SettingsSectionId =
   | "ai-setup"
   | "models"
@@ -192,6 +233,7 @@ export default function SettingsPanel() {
     agent_api_token: "",
     web_access_key: "",
     theme: "system",
+    codex_client_version: "",
   });
   const [newModelId, setNewModelId] = useState("");
   const [newModelName, setNewModelName] = useState("");
@@ -298,16 +340,7 @@ export default function SettingsPanel() {
   useEffect(() => {
     axios.get("/api/settings").then((res) => {
       const data = res.data;
-      setSettings({
-        api_format: data.api_format || "openai",
-        base_url: data.base_url || "",
-        api_key: data.api_key || "",
-        models: data.models || [],
-        selected_model: data.selected_model || "",
-        agent_api_token: data.agent_api_token || "",
-        web_access_key: data.web_access_key || "",
-        theme: data.theme || "system",
-      });
+      setSettings(sanitizeSettingsFromApi(data));
       if (data.theme) {
         setThemeMode(data.theme as "system" | "dark" | "light");
       }
@@ -359,8 +392,15 @@ export default function SettingsPanel() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const testModel = settings.selected_model || settings.models?.[0]?.id || "";
   const isCodexMode = settings.api_format === "codex";
+  const testModel = (() => {
+    if (isCodexMode) {
+      if (isCodexModelId(settings.selected_model)) return settings.selected_model;
+      const fromList = (settings.models || []).map((m) => m.id).find(isCodexModelId);
+      return fromList || "gpt-5.4-mini";
+    }
+    return settings.selected_model || settings.models?.[0]?.id || "";
+  })();
 
   useEffect(() => {
     if (!isCodexMode || codexStatus?.logged_in) return;
@@ -592,6 +632,16 @@ export default function SettingsPanel() {
       if (fetched.length === 0) {
         setFetchError(t("settings.noModelsReturned"));
         return;
+      }
+      if (isCodexMode) {
+        const selected = isCodexModelId(settings.selected_model)
+          ? settings.selected_model
+          : (fetched[0]?.id || "gpt-5.4-mini");
+        setSettings((prev) => ({
+          ...prev,
+          models: fetched,
+          selected_model: selected,
+        }));
       }
       const existingIds = new Set((settings.models || []).map(m => m.id));
       setCandidateModels(fetched.map((m) => ({
@@ -920,7 +970,19 @@ export default function SettingsPanel() {
   };
 
   const setProviderFormat = (format: Settings["api_format"]) => {
-    setSettings((prev) => ({ ...prev, api_format: format }));
+    setSettings((prev) => {
+      if (format !== "codex") {
+        return { ...prev, api_format: format };
+      }
+      const selected = isCodexModelId(prev.selected_model) ? prev.selected_model : "gpt-5.4-mini";
+      const models = (prev.models || []).filter((m) => isCodexModelId(m.id));
+      return {
+        ...prev,
+        api_format: format,
+        models: models.length ? models : [...CODEX_MODEL_PRESETS],
+        selected_model: selected,
+      };
+    });
   };
 
   const maskToken = (token: string) => {
@@ -1110,6 +1172,24 @@ export default function SettingsPanel() {
               </button>
             </div>
           )}
+          <div className="settings-field" style={{ marginTop: "12px" }}>
+            <label className="settings-label">{t("settings.codexClientVersion")}</label>
+            <input
+              type="text"
+              className="settings-input"
+              value={settings.codex_client_version}
+              onChange={(e) => setSettings({ ...settings, codex_client_version: e.target.value })}
+              placeholder={codexStatus?.client_version?.default || "0.142.5"}
+            />
+            <div className="settings-help">{t("settings.codexClientVersionHelp")}</div>
+            {codexStatus?.client_version?.effective && (
+              <div className="settings-help" style={{ marginTop: "4px" }}>
+                {t("settings.codexClientVersionEffective")
+                  .replace("{version}", codexStatus.client_version.effective)
+                  .replace("{source}", codexStatus.client_version.source)}
+              </div>
+            )}
+          </div>
           <div className="settings-help" style={{ marginTop: "8px" }}>{t("settings.codexHelp")}</div>
         </div>
       ) : (

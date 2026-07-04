@@ -30,7 +30,48 @@ from backend.agent.codex_protocol import codex_input_from_messages
 
 CODEX_TIMEOUT_SECONDS = 180
 CODEX_WS_URL = "wss://chatgpt.com/backend-api/codex/responses"
-CODEX_DEFAULT_MODEL = "gpt-5.5"
+CODEX_DEFAULT_MODEL = "gpt-5.4-mini"
+CODEX_PREMIUM_MODEL = "gpt-5.5"
+CODEX_FALLBACK_MODEL = "gpt-5.4-mini"
+CODEX_ALLOWED_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5", "gpt-5.4-mini"})
+# Reported on Codex WebSocket as codex_cli_rs; WinkTerm implements the protocol in-process.
+# Default matches @openai/codex npm dist-tags.latest; override via env or ~/.winkterm/config.json.
+WINKTERM_CODEX_CLIENT_VERSION = "0.142.5"
+
+
+def _is_codex_version_gate_error(message: str) -> bool:
+    lower = (message or "").lower()
+    return "newer version" in lower and "codex" in lower
+
+
+def is_codex_model_allowed(model: str | None) -> bool:
+    if not model or not str(model).strip():
+        return False
+    return str(model).strip() in CODEX_ALLOWED_MODEL_IDS
+
+
+def normalize_codex_model(model: str | None) -> str:
+    """Return a Codex WebSocket model id; fall back to default when missing or invalid."""
+    name = (model or "").strip()
+    if name in CODEX_ALLOWED_MODEL_IDS:
+        return name
+    return CODEX_DEFAULT_MODEL
+
+
+def validate_codex_model(model: str | None) -> str:
+    """Like normalize_codex_model but raises when the user picked a non-Codex model id."""
+    name = (model or "").strip()
+    if not name:
+        return CODEX_DEFAULT_MODEL
+    if name in CODEX_ALLOWED_MODEL_IDS:
+        return name
+    allowed = ", ".join(sorted(CODEX_ALLOWED_MODEL_IDS))
+    raise CodexProviderError(
+        f"The '{name}' model is not supported when using Codex with a ChatGPT account. "
+        f"Use one of: {allowed}."
+    )
+
+
 CODEX_HOME = Path.home() / ".codex"
 CODEX_AUTH_FILE = CODEX_HOME / "auth.json"
 WINKTERM_HOME = Path.home() / ".winkterm"
@@ -55,22 +96,81 @@ class CodexProviderError(RuntimeError):
     pass
 
 
-def _codex_version() -> str:
+def _parse_codex_cli_version_output(text: str) -> str:
+    """Extract semver from `codex --version` output (e.g. 'codex-cli 0.142.5')."""
+    import re
+
+    match = re.search(r"(\d+\.\d+\.\d+(?:[-+][\w.-]+)?)", text or "")
+    return match.group(1) if match else ""
+
+
+def _installed_codex_cli_version() -> str:
     binary = shutil.which("codex")
     if not binary:
-        return "0.142.5"
+        return ""
     try:
         proc = subprocess.run(
             [binary, "--version"],
-            input="",
-            text=True,
             capture_output=True,
-            timeout=5,
+            text=True,
+            timeout=10,
         )
+        out = (proc.stdout or proc.stderr or "").strip()
+        return _parse_codex_cli_version_output(out) if proc.returncode == 0 else ""
     except Exception:
-        return "0.142.5"
-    output = (proc.stdout or proc.stderr or "").strip()
-    return output.split()[-1] if output else "0.142.5"
+        return ""
+
+
+def _codex_version_from_user_config() -> str:
+    try:
+        from backend.config import UserConfig
+
+        raw = (UserConfig.load().get("codex_client_version") or "").strip()
+        return raw
+    except Exception:
+        return ""
+
+
+def _codex_version() -> str:
+    """Version sent on Codex WebSocket Version / User-Agent headers."""
+    import os
+
+    for candidate in (
+        os.environ.get("WINKTERM_CODEX_CLIENT_VERSION", "").strip(),
+        _codex_version_from_user_config(),
+        WINKTERM_CODEX_CLIENT_VERSION,
+        _installed_codex_cli_version(),
+    ):
+        if candidate:
+            return candidate
+    return WINKTERM_CODEX_CLIENT_VERSION
+
+
+def codex_client_version_info() -> dict:
+    """Effective client version and where it came from (for settings / debugging)."""
+    import os
+
+    env_v = os.environ.get("WINKTERM_CODEX_CLIENT_VERSION", "").strip()
+    cfg_v = _codex_version_from_user_config()
+    cli_v = _installed_codex_cli_version()
+    effective = _codex_version()
+    if env_v:
+        source = "env"
+    elif cfg_v:
+        source = "config"
+    elif effective == WINKTERM_CODEX_CLIENT_VERSION and not cfg_v and not env_v:
+        source = "default"
+    elif cli_v and effective == cli_v:
+        source = "codex_cli"
+    else:
+        source = "default"
+    return {
+        "effective": effective,
+        "source": source,
+        "default": WINKTERM_CODEX_CLIENT_VERSION,
+        "config": cfg_v,
+        "codex_cli": cli_v,
+    }
 
 
 def _load_codex_tokens() -> dict:
@@ -558,6 +658,7 @@ def codex_status() -> dict:
             "message": "Logged in using ChatGPT" if has_tokens else str(e),
             "transport": "websocket",
             "oauth": oauth,
+            "client_version": codex_client_version_info(),
         }
 
     proc = subprocess.run(
@@ -577,6 +678,7 @@ def codex_status() -> dict:
         "message": "Logged in using ChatGPT" if has_tokens else output,
         "transport": transport,
         "oauth": _oauth_status_public(logged_in=has_tokens),
+        "client_version": codex_client_version_info(),
     }
 
 
@@ -644,18 +746,18 @@ def _codex_request(prompt: str, model: str | None) -> dict:
     }
 
 
-async def stream_codex_response(
+async def _stream_codex_response_once(
     *,
     instructions: str,
     input_items: list,
-    model: str | None = None,
-    tools: list | None = None,
+    model: str,
+    tools: list | None,
 ) -> AsyncIterator[dict]:
     tokens = _load_codex_tokens()
     headers, user_agent = _codex_headers(tokens)
     body = {
         "type": "response.create",
-        "model": model or CODEX_DEFAULT_MODEL,
+        "model": model,
         "instructions": instructions,
         "input": input_items,
         "tools": tools or [],
@@ -700,6 +802,35 @@ async def stream_codex_response(
         raise last_error
 
 
+async def stream_codex_response(
+    *,
+    instructions: str,
+    input_items: list,
+    model: str | None = None,
+    tools: list | None = None,
+) -> AsyncIterator[dict]:
+    model_name = normalize_codex_model(model)
+    try:
+        async for event in _stream_codex_response_once(
+            instructions=instructions,
+            input_items=input_items,
+            model=model_name,
+            tools=tools,
+        ):
+            yield event
+    except CodexProviderError as e:
+        if model_name == CODEX_PREMIUM_MODEL and _is_codex_version_gate_error(str(e)):
+            async for event in _stream_codex_response_once(
+                instructions=instructions,
+                input_items=input_items,
+                model=CODEX_FALLBACK_MODEL,
+                tools=tools,
+            ):
+                yield event
+        else:
+            raise
+
+
 async def stream_codex(prompt: str, model: str | None = None) -> AsyncIterator[str]:
     input_items = codex_input_from_messages([HumanMessage(content=prompt)])
     async for event in stream_codex_response(
@@ -723,4 +854,10 @@ async def _run_codex_websocket(prompt: str, model: str | None = None) -> str:
 
 
 async def run_codex(prompt: str, model: str | None = None) -> str:
-    return await _run_codex_websocket(prompt, model)
+    name = normalize_codex_model(model)
+    try:
+        return await _run_codex_websocket(prompt, name)
+    except CodexProviderError as e:
+        if name == CODEX_PREMIUM_MODEL and _is_codex_version_gate_error(str(e)):
+            return await _run_codex_websocket(prompt, CODEX_FALLBACK_MODEL)
+        raise

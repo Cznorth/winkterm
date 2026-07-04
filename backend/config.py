@@ -100,6 +100,7 @@ class UserConfig:
             "language": "",
             "theme": "system",
             "web_access_key": "",
+            "codex_client_version": "",
         }
 
     @staticmethod
@@ -131,6 +132,39 @@ class UserConfig:
         if config.get("web_access_key"):
             config["web_access_key"] = UserConfig._mask_secret(config["web_access_key"])
         return config
+
+    @staticmethod
+    def repair_codex_models_if_needed() -> bool:
+        """When api_format is codex, fix invalid selected_model/models on disk. Returns True if saved."""
+        from backend.agent.codex_provider import (
+            CODEX_DEFAULT_MODEL,
+            is_codex_model_allowed,
+        )
+
+        config = UserConfig.load()
+        if config.get("api_format") != "codex":
+            return False
+        changed = False
+        if not is_codex_model_allowed(config.get("selected_model")):
+            config["selected_model"] = CODEX_DEFAULT_MODEL
+            changed = True
+        models = config.get("models") or []
+        filtered = [
+            m for m in models
+            if isinstance(m, dict) and is_codex_model_allowed(m.get("id"))
+        ]
+        if not filtered:
+            config["models"] = [
+                {"id": "gpt-5.4-mini", "name": "GPT-5.4 mini (Codex)", "provider": "codex"},
+                {"id": "gpt-5.5", "name": "GPT-5.5 (Codex)", "provider": "codex"},
+            ]
+            changed = True
+        elif len(filtered) != len(models):
+            config["models"] = filtered
+            changed = True
+        if changed:
+            UserConfig.save(config)
+        return changed
 
 
 # AI instructions and memory file paths (same directory as config.json)

@@ -150,6 +150,15 @@ const translations = {
     zh: "Codex OAuth 使用 OpenAI 授权码 + PKCE。授权后使用 ChatGPT/Codex 额度，无需 API Key。WinkTerm 的 Token 单独保存在运行后端机器的 ~/.winkterm/codex_auth.json，不会改动本机 Codex CLI 登录。远程部署时浏览器会跳转到本机 localhost，请复制完整回调 URL 粘贴到下方。",
     en: "Codex OAuth uses OpenAI authorization code + PKCE. After authorization it uses your ChatGPT/Codex quota without an API key. WinkTerm stores its own token at ~/.winkterm/codex_auth.json on the backend machine and does not modify the local Codex CLI login. For remote deployments the browser redirects to localhost on your machine — paste the full callback URL below.",
   },
+  "settings.codexClientVersion": { zh: "Codex 客户端版本", en: "Codex client version" },
+  "settings.codexClientVersionHelp": {
+    zh: "与 OpenAI Codex WebSocket 握手时上报的版本号（非 WinkTerm 应用版本）。留空则使用内置默认；若 gpt-5.5 提示需升级 Codex，可填 npm 上 @openai/codex 的 latest（如 0.142.5）或本机 codex --version。也可设置环境变量 WINKTERM_CODEX_CLIENT_VERSION。",
+    en: "Version string sent to OpenAI Codex WebSocket (not the WinkTerm app version). Leave empty for the built-in default. If gpt-5.5 says a newer Codex is required, set this to @openai/codex latest on npm (e.g. 0.142.5) or your local `codex --version`. Or use env WINKTERM_CODEX_CLIENT_VERSION.",
+  },
+  "settings.codexClientVersionEffective": {
+    zh: "当前生效：{version}（来源：{source}）",
+    en: "Effective: {version} (source: {source})",
+  },
   "settings.codexCallbackLabel": { zh: "回调 URL", en: "Callback URL" },
   "settings.codexCallbackPlaceholder": {
     zh: "http://localhost:1455/auth/callback?code=...&state=...",

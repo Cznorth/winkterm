@@ -48,12 +48,10 @@
     "eslint-config-next": "^14.2.35",
     "orval": "^6.31.0",
     "sharp": "^0.34.5",
-    "typescript": "^5.5.0"
-  },
-  "optionalDependencies": {
-    "@capacitor/android": "^8.4.0",
+    "typescript": "^5.5.0",
+    "@capacitor/android": "^8.4.1",
     "@capacitor/assets": "^3.0.5",
-    "@capacitor/cli": "^8.4.0",
-    "@capacitor/core": "^8.4.0"
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1"
   }
 }
