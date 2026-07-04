@@ -1,14 +1,12 @@
 name: Deploy to Test Server
 
 on:
-  workflow_run:
-    workflows: ["Build and Push Docker Image"]
-    types: [completed]
-    branches: [master]
+  push:
+    branches:
+      - master
 
 jobs:
   deploy:
-    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
@@ -17,17 +15,10 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_KEY }}
-          command_timeout: 15m
+          command_timeout: 45m
           script: |
-            OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
-            IMAGE="ghcr.io/${OWNER}/winkterm:latest"
             cd ${{ secrets.DEPLOY_PATH }}
             git fetch origin
             git reset --hard origin/master
-            if [ -n "${{ secrets.GHCR_PULL_TOKEN }}" ]; then
-              echo "${{ secrets.GHCR_PULL_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-            fi
-            docker pull "$IMAGE"
-            export WINKTERM_IMAGE="$IMAGE"
             docker compose down --remove-orphans
-            docker compose up -d
+            docker compose up -d --build

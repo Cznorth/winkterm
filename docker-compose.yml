@@ -2,8 +2,6 @@ version: "3.9"
 
 services:
   winkterm:
-    # Set WINKTERM_IMAGE (e.g. ghcr.io/owner/winkterm:latest) on deploy to skip on-server builds.
-    image: ${WINKTERM_IMAGE:-winkterm:local}
     build:
       context: .
       dockerfile: Dockerfile
