@@ -54,6 +54,18 @@ npm run dev
 
 Open http://localhost:3000
 
+If you change `frontend/package.json` or any frontend dependency, commit the
+updated `frontend/package-lock.json` in the same change. Before pushing, verify
+the Docker install path locally:
+
+```bash
+cd frontend
+npx npm@10.8.2 ci --omit=optional --ignore-scripts
+```
+
+The Docker image and test-server deploy use this install path, so lockfile drift
+will break online deployment even when a local `npm install` appears healthy.
+
 ### Environment Variables
 
 Copy `.env.example` to `.env` and fill in at least an API key:

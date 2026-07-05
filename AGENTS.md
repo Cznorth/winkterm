@@ -47,6 +47,18 @@ npm run lint          # Lint check
 npm run gen:api       # Generate TypeScript types and react-query hooks from OpenAPI
 ```
 
+When `frontend/package.json` or frontend dependencies change, always commit the
+matching `frontend/package-lock.json`. Before pushing, verify the Docker install
+path with the same npm major used by the Docker image:
+
+```bash
+cd frontend
+npx npm@10.8.2 ci --omit=optional --ignore-scripts
+```
+
+This prevents `docker compose up -d --build` and the GitHub Actions Docker
+pipeline from failing because `package.json` and `package-lock.json` drifted.
+
 ### Desktop App Packaging
 ```bash
 # Windows
