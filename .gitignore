@@ -56,6 +56,7 @@ desktop.ini
 *.swp
 *.swo
 .claude/
+.codegraph/
 
 # Docker
 *.log
