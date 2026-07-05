@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useRef, useCallback, useEffect, useMemo, isValidElement, cloneElement } from "react";
+import { ReactNode, ReactElement, useState, useRef, useCallback, useEffect, useMemo, isValidElement, cloneElement } from "react";
 import { usePanes, LAYOUT_CONFIG, type LayoutType } from "@/hooks/usePanes";
 import { useSessionsStream, type SessionInfo } from "@/hooks/useSessionsStream";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
@@ -179,6 +179,24 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
     });
   }, []);
 
+  const handleActivityClick = useCallback((activity: ActivityItem) => {
+    setActiveActivity((current) => (
+      current === activity && activity !== "terminal" ? "terminal" : activity
+    ));
+  }, []);
+
+  const handleCloseMobileAI = useCallback(() => {
+    setActiveActivity("terminal");
+  }, []);
+
+  const renderAIPanel = useCallback((onClose?: () => void) => {
+    if (!isValidElement(aiPanel)) return aiPanel;
+    return cloneElement(
+      aiPanel as ReactElement<{ onClose?: () => void }>,
+      onClose ? { onClose } : undefined,
+    );
+  }, [aiPanel]);
+
   // Backend session events → sync tab bar (agent-created visible terminals auto-add tab)
   const handleSessionCreated = useCallback((s: SessionInfo) => {
     if (!s.user_visible) return;
@@ -283,7 +301,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
                   <div
                     key={item.id}
                     className={`activity-item ${activeActivity === item.id ? "active" : ""}`}
-                    onClick={() => setActiveActivity(item.id)}
+                    onClick={() => handleActivityClick(item.id)}
                     title={t(item.labelKey)}
                   >
                     {item.icon}
@@ -306,7 +324,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
                 <div
                   className={`activity-item ${activeActivity === "settings" ? "active" : ""}`}
                   title={t("layout.settings")}
-                  onClick={() => setActiveActivity("settings")}
+                  onClick={() => handleActivityClick("settings")}
                 >
                   {Icons.settings}
                 </div>
@@ -335,7 +353,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           </div>
           {isCompact && (
             <div className="chat-section" style={{ display: activeActivity === "chat" ? undefined : "none" }}>
-              {isValidElement(aiPanel) ? cloneElement(aiPanel) : aiPanel}
+              {renderAIPanel(handleCloseMobileAI)}
             </div>
           )}
           {activeActivity === "ssh" &&
@@ -368,7 +386,7 @@ export default function SplitLayout({ aiPanel }: LayoutProps) {
           className="ai-section"
           style={{ display: showAI && !isCompact ? undefined : "none" }}
         >
-          {!isCompact && (isValidElement(aiPanel) ? cloneElement(aiPanel) : aiPanel)}
+          {!isCompact && renderAIPanel(handleToggleAI)}
         </div>
       </div>
 
