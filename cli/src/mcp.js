@@ -47,7 +47,7 @@ async function invoke(method, params = {}) {
 }
 
 export function createServer() {
-  const server = new McpServer({ name: "winkterm", version: "0.2.1" });
+  const server = new McpServer({ name: "winkterm", version: "0.3.0" });
 
   server.tool(
     "winkterm_call",
