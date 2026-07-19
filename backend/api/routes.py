@@ -43,7 +43,7 @@ from backend.agent.tools.terminal_legacy import get_terminal_context_raw
 from backend.config import UserConfig, AgentDocs, settings
 
 router = APIRouter()
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 GITHUB_RELEASES_API = "https://api.github.com/repos/Cznorth/winkterm/releases/latest"
 _update_jobs: dict[str, dict[str, Any]] = {}
 

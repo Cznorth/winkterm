@@ -1731,7 +1731,7 @@ export default function SettingsPanel() {
       <div className="settings-field">
         <label className="settings-label">{t("settings.version")}</label>
         <div className="settings-update-row">
-          <span className="settings-version">{updateInfo?.current_version || "0.3.0"}</span>
+          <span className="settings-version">{updateInfo?.current_version || "0.4.0"}</span>
           <button className="settings-btn settings-btn-secondary" onClick={handleCheckUpdate} disabled={checkingUpdate}>
             {checkingUpdate ? (
               <>

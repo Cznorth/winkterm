@@ -241,8 +241,8 @@ elif IS_MACOS:
             "NSAppleScriptEnabled": False,
             "CFBundleName": "WinkTerm",
             "CFBundleDisplayName": "WinkTerm",
-            "CFBundleVersion": "0.3.0",
-            "CFBundleShortVersionString": "0.3.0",
+            "CFBundleVersion": "0.4.0",
+            "CFBundleShortVersionString": "0.4.0",
             "CFBundleIdentifier": "com.winkterm.app",
             "LSMinimumSystemVersion": "10.13",
             "NSHighResolutionCapable": True,
@@ -271,4 +271,3 @@ else:
         codesign_identity=None,
         entitlements_file=None,
     )
-
