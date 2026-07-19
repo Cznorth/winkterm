@@ -35,6 +35,7 @@ from backend.agent.codex_provider import (
     normalize_codex_model,
     run_codex,
     start_codex_oauth,
+    validate_codex_authorization,
     validate_codex_model,
 )
 from backend.agent.graph import get_graph
@@ -323,6 +324,12 @@ async def save_settings(payload: SettingsModel) -> dict:
 async def get_codex_status() -> dict:
     """Return local Codex CLI install and login state."""
     return codex_status()
+
+
+@router.post("/codex/status/check")
+async def check_codex_status() -> dict:
+    """Validate the saved Codex token against the production service."""
+    return await validate_codex_authorization()
 
 
 class CodexLoginRequest(BaseModel):

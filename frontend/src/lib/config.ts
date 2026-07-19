@@ -24,9 +24,9 @@ function isDesktopRuntime(): boolean {
   );
 }
 
-/** Dev mode: Next runs on 3000; API lives on another port from env vars */
+/** Next development mode: API lives on the separately configured backend. */
 function isNextDevServer(): boolean {
-  return typeof window !== "undefined" && window.location.port === "3000";
+  return typeof window !== "undefined" && process.env.NODE_ENV === "development";
 }
 
 /**

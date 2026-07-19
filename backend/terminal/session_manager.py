@@ -68,6 +68,7 @@ class TerminalSession:
     _read_task: Optional[asyncio.Task] = None
     _wake_event: Optional[asyncio.Event] = None
     _capture_attached: bool = False
+    _closed: bool = False
 
     last_activity_mono: float = field(default_factory=time.monotonic)
     last_user_input_at: Optional[datetime] = None
@@ -182,6 +183,8 @@ class TerminalSession:
 
     async def start(self, ssh_config: Optional[dict] = None) -> None:
         """Start the pty, output capture, and read loop (for async contexts)."""
+        if self._closed:
+            raise RuntimeError("terminal session is closed")
         self.pty.spawn(cols=self.cols, rows=self.rows, ssh_config=ssh_config)
         self.attach_output_capture()
         if self._wake_event is None:
@@ -191,6 +194,9 @@ class TerminalSession:
         self.touch()
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         self.pty.terminate()
         if self._read_task and not self._read_task.done():
             self._read_task.cancel()
@@ -505,7 +511,50 @@ class SessionManager:
                     cls._instance._active_session_id: str | None = None
                     cls._instance._janitor_task: Optional[asyncio.Task] = None
                     cls._instance._subscribers: list[asyncio.Queue] = []
+                    cls._instance._shutting_down = False
         return cls._instance
+
+    # ------------------------------------------------------------------
+    # Application lifecycle
+    # ------------------------------------------------------------------
+
+    def begin_startup(self) -> None:
+        """Open the session pool for a newly started application worker."""
+        with self._sessions_lock:
+            self._shutting_down = False
+
+    def is_shutting_down(self) -> bool:
+        with self._sessions_lock:
+            return self._shutting_down
+
+    async def shutdown(self) -> None:
+        """Close every terminal before the application worker exits."""
+        with self._sessions_lock:
+            self._shutting_down = True
+            sessions = list(self._sessions.values())
+            self._sessions.clear()
+            self._active_session_id = None
+            janitor_task = self._janitor_task
+            self._janitor_task = None
+
+        if janitor_task and not janitor_task.done():
+            janitor_task.cancel()
+
+        read_tasks = [
+            session._read_task
+            for session in sessions
+            if session._read_task is not None and not session._read_task.done()
+        ]
+        for session in sessions:
+            session.close()
+
+        pending_tasks = [*read_tasks]
+        if janitor_task and not janitor_task.done():
+            pending_tasks.append(janitor_task)
+        if pending_tasks:
+            await asyncio.gather(*pending_tasks, return_exceptions=True)
+
+        logger.info(f"[shutdown] Closed {len(sessions)} terminal session(s)")
 
     # ------------------------------------------------------------------
     # pubsub (session lifecycle event broadcast)
@@ -542,6 +591,8 @@ class SessionManager:
     def create_session(self, session_id: str) -> TerminalSession:
         """Legacy API: WebSocket user terminal entry (bare session; caller spawns the pty)."""
         with self._sessions_lock:
+            if self._shutting_down:
+                raise RuntimeError("terminal service is shutting down")
             if session_id in self._sessions:
                 logger.warning(f"[create_session] 会话 {session_id} 已存在,返回现有")
                 return self._sessions[session_id]
@@ -629,8 +680,9 @@ class SessionManager:
         created_by: str = "agent",
         user_visible: bool = True,
         transient: bool = False,
+        ready_timeout: float = 12.0,
     ) -> TerminalSession:
-        """Agent creates a terminal: automatically spawns the pty and read loop."""
+        """Create an agent terminal and wait until its shell can accept input."""
         ssh_config: Optional[dict] = None
         title = ""
         host = port = username = None
@@ -667,10 +719,29 @@ class SessionManager:
             transient=transient,
             ttl_seconds=ttl_seconds,
         )
-        await session.start(ssh_config=ssh_config)
-
         with self._sessions_lock:
+            if self._shutting_down:
+                raise RuntimeError("terminal service is shutting down")
             self._sessions[session_id] = session
+
+        try:
+            await session.start(ssh_config=ssh_config)
+            if ready_timeout > 0:
+                await session.wait_until_idle(
+                    idle=0.5,
+                    max_wait=max(ready_timeout, 0.5),
+                    require_prompt=True,
+                )
+            with self._sessions_lock:
+                if self._shutting_down or self._sessions.get(session_id) is not session:
+                    raise RuntimeError("terminal service stopped while creating a session")
+        except BaseException:
+            with self._sessions_lock:
+                if self._sessions.get(session_id) is session:
+                    self._sessions.pop(session_id, None)
+            session.close()
+            raise
+
         self._ensure_janitor()
         logger.info(
             f"[create] {terminal_type} 会话: {session_id} "

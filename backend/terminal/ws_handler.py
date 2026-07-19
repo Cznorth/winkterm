@@ -13,7 +13,7 @@ from backend.agent.graph import get_graph
 from backend.agent.tools import set_has_ai_output
 from backend.agent.state import AgentState
 from backend.config import settings
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 # Configure logging
 logger = logging.getLogger("ws_handler")
@@ -84,6 +84,8 @@ def _line_to_hash_command(clean_line: str) -> str | None:
     # Case 4: "user@host:~$ # hi" - bash user prompt ($) followed by # command
     if clean_line.startswith("#") or re.search(r"[#\$>%]\s*#\s*\S", clean_line):
         command = clean_line[clean_line.rfind("#") + 1 :].strip()
+        if command.casefold().startswith("winkterm:"):
+            return None
         return command or None
     return None
 
@@ -136,6 +138,9 @@ class TerminalWSHandler:
         self._bytes_sent = 0
         self._bytes_received = 0
         self._last_hash_command: str | None = None
+        self._typed_input = ""
+        self._closed = False
+        self._send_tasks: set[asyncio.Task] = set()
         client = websocket.client or "unknown"
         logger.info(f"[INIT] 客户端连接: {client}, session_id: {session_id}, type: {terminal_type}")
 
@@ -145,6 +150,25 @@ class TerminalWSHandler:
 
         # Detect the Enter key
         if data in ("\r", "\n", "\r\n"):
+            typed_line = self._typed_input
+            self._typed_input = ""
+            clean_typed_line = _clean_terminal_line(typed_line)
+            typed_command = _line_to_hash_command(clean_typed_line)
+            if typed_command:
+                # Raw keyboard input is more reliable than serialized terminal content,
+                # which can contain cursor movement and styling sequences from xterm.
+                # Do not deduplicate explicit input: users may intentionally repeat a command.
+                self._last_hash_command = typed_command
+                logger.info(f"[COMMAND] Parsed AI command from input: {typed_command}")
+                await self.agent_invoke(typed_command)
+                return
+            if clean_typed_line:
+                # A current raw input line is authoritative. Falling back to terminal
+                # history here used to reinterpret an earlier # command or the agent's
+                # own "# winkterm:" output when a plain shell command was submitted.
+                logger.debug("[COMMAND] Current input has no # prefix; skip screen fallback")
+                return
+
             # The frontend serializes the screen before Enter; snapshot immediately here to
             # avoid the post-Enter 200ms debounced screen sync overwriting the # command input line.
             screen_snapshot = self.pty.get_screen_content()
@@ -158,13 +182,32 @@ class TerminalWSHandler:
                     screen_snapshot = latest
             logger.debug("[COMMAND] 检测到回车，解析屏幕内容中的命令")
             await self._parse_last_command_from_screen(screen_snapshot)
+            return
+
+        if data in ("\x03", "\x15"):
+            self._typed_input = ""
+        elif data in ("\x08", "\x7f"):
+            self._typed_input = self._typed_input[:-1]
+        elif "\x1b" not in data:
+            printable = "".join(char for char in data if char.isprintable() or char == "\t")
+            if printable:
+                self._typed_input = (self._typed_input + printable)[-8192:]
 
     async def handle(self) -> None:
         await self.ws.accept()
         logger.info(f"[ACCEPT] WebSocket 已接受连接, session_id: {self.session_id}")
 
         # Create or get the session
-        self.session = self.session_manager.create_session(self.session_id)
+        try:
+            self.session = self.session_manager.create_session(self.session_id)
+        except RuntimeError as exc:
+            self._closed = True
+            logger.info(f"[SHUTDOWN] Reject terminal connection {self.session_id}: {exc}")
+            try:
+                await self.ws.close(code=1012)
+            except Exception:
+                pass
+            return
         self.pty = self.session.pty
 
         # Prefetch SSH connection config (return immediately if validation fails)
@@ -239,6 +282,9 @@ class TerminalWSHandler:
                         logger.debug(f"[RESIZE] 忽略异常 size cols={cols} rows={rows}")
                         continue
                     if self._pending_spawn:
+                        if self.session_manager.is_shutting_down():
+                            logger.info(f"[SHUTDOWN] Skip delayed spawn for {self.session_id}")
+                            return
                         # debounce: each resize resets the spawn timer; spawn with the final value once settled
                         self._spawn_dims = (cols, rows)
                         if self._spawn_task and not self._spawn_task.done():
@@ -277,10 +323,19 @@ class TerminalWSHandler:
         finally:
             # WS disconnect does not close the session; keep the pty + read loop alive (held by the session).
             # The session is reclaimed when the user explicitly deletes the tab (DELETE /api/sessions/{id}) or by TTL.
-            if self._spawn_task and not self._spawn_task.done():
-                self._spawn_task.cancel()
+            self._closed = True
+            spawn_task = self._spawn_task
+            if spawn_task and not spawn_task.done():
+                spawn_task.cancel()
+                await asyncio.gather(spawn_task, return_exceptions=True)
+            self._pending_spawn = False
             if self.pty:
                 self.pty.remove_output_callback(self._on_pty_output)
+            pending_sends = list(self._send_tasks)
+            for task in pending_sends:
+                task.cancel()
+            if pending_sends:
+                await asyncio.gather(*pending_sends, return_exceptions=True)
             logger.debug(f"[CLEANUP] WS 断开但 session {self.session_id} 保活")
 
     async def _spawn_after_settle(self, delay: float) -> None:
@@ -290,6 +345,14 @@ class TerminalWSHandler:
         try:
             await asyncio.sleep(delay)
         except asyncio.CancelledError:
+            return
+        if (
+            self._closed
+            or self.session_manager.is_shutting_down()
+            or self.session_manager.get_session(self.session_id) is not self.session
+        ):
+            self._pending_spawn = False
+            logger.info(f"[SPAWN] Cancelled stale delayed spawn for {self.session_id}")
             return
         if not self._pending_spawn or self._spawn_dims is None:
             return
@@ -313,7 +376,10 @@ class TerminalWSHandler:
             logger.debug("[COMMAND] 屏幕内容为空，跳过解析")
             return
 
-        command = _extract_hash_command_from_screen(screen)
+        # Local input is serialized before Enter, so only the current line is valid.
+        # SSH echo can arrive after Enter and move the command up, requiring lookback.
+        lookback = 6 if self.terminal_type == "ssh" else 1
+        command = _extract_hash_command_from_screen(screen, lookback=lookback)
         if not command:
             return
 
@@ -399,6 +465,42 @@ class TerminalWSHandler:
                 elif event_type == "on_chain_end" and event_name == "LangGraph":
                     final_state = event.get("data", {}).get("output")
 
+            # The Codex provider consumes its own response stream inside the graph and
+            # returns a final AIMessage, so LangGraph does not emit chat-model stream
+            # events for it. Fall back to that message when nothing was streamed.
+            if not has_output and final_state:
+                messages = final_state.get("messages") or []
+                final_message = next(
+                    (
+                        message
+                        for message in reversed(messages)
+                        if isinstance(message, AIMessage) and message.content
+                    ),
+                    None,
+                )
+                if final_message:
+                    content = final_message.content
+                    if isinstance(content, list):
+                        content = "".join(
+                            part if isinstance(part, str) else part.get("text", "")
+                            for part in content
+                        )
+                    if content:
+                        ansi_escape = re.compile(
+                            r"\x1b\[[\?0-9;]*[A-Za-z]"
+                            r"|\x1b\].*?(?:\x07|\x1b\\)"
+                            r"|\x1b[()][AB012]"
+                            r"|\x1b[78]"
+                            r"|\x1b[=>]"
+                        )
+                        clean_content = ansi_escape.sub("", str(content))
+                        clean_content = clean_content.replace("\r", "").replace("\n", "")
+                        if clean_content:
+                            has_output = True
+                            set_has_ai_output(True)
+                            self.pty.write("# winkterm: ".encode("utf-8"))
+                            self.pty.write(clean_content.encode("utf-8"))
+
             # Decide whether to send Ctrl+C based on the state
             waiting_user = final_state.get("waiting_user", False) if final_state else False
             logger.info(f"[AGENT] 处理完成, waiting_user={waiting_user}")
@@ -411,14 +513,21 @@ class TerminalWSHandler:
 
     def _on_pty_output(self, data: bytes) -> None:
         """PTY output callback: send directly to the WebSocket."""
+        if self._closed:
+            return
         text = data.decode(errors="replace")
         self._bytes_sent += len(data)
         # logger.debug(f"[OUTPUT] len={len(data)} data={_truncate(text)}")
-        asyncio.create_task(self._send(text))
+        task = asyncio.create_task(self._send(text))
+        self._send_tasks.add(task)
+        task.add_done_callback(self._send_tasks.discard)
 
     async def _send(self, text: str) -> None:
+        if self._closed:
+            return
         text = _sanitize_pty_output(text)
         try:
             await self.ws.send_text(text)
         except Exception as e:
-            logger.warning(f"[SEND_FAIL] 发送失败: {e}")
+            if not self._closed:
+                logger.warning(f"[SEND_FAIL] 发送失败: {e}")

@@ -71,6 +71,9 @@ interface CodexStatus {
   logged_in: boolean;
   cli_logged_in?: boolean;
   message: string;
+  credential_valid?: boolean | null;
+  validation_error?: string;
+  last_validated?: string;
   client_version?: CodexClientVersionInfo;
   oauth?: {
     active: boolean;
@@ -260,6 +263,7 @@ export default function SettingsPanel() {
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
+  const [codexChecking, setCodexChecking] = useState(false);
   const [codexLoggingIn, setCodexLoggingIn] = useState(false);
   const [codexLoggingOut, setCodexLoggingOut] = useState(false);
   const [codexAuthUrl, setCodexAuthUrl] = useState("");
@@ -341,10 +345,28 @@ export default function SettingsPanel() {
     });
   }, []);
 
-  const refreshCodexStatus = async () => {
-    const res = await axios.get("/api/codex/status");
-    const next = res.data as CodexStatus;
-    setCodexStatus(next);
+  const refreshCodexStatus = async (validateToken = false) => {
+    if (validateToken) {
+      setCodexChecking(true);
+      setCodexOAuthError("");
+    }
+    try {
+      const res = validateToken
+        ? await axios.post("/api/codex/status/check")
+        : await axios.get("/api/codex/status");
+      const next = res.data as CodexStatus;
+      setCodexStatus(next);
+      if (validateToken && next.validation_error && next.credential_valid !== false) {
+        setCodexOAuthError(next.validation_error);
+      }
+    } catch (e: unknown) {
+      if (validateToken) {
+        const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+        setCodexOAuthError(typeof detail === "string" ? detail : (e as Error).message);
+      }
+    } finally {
+      if (validateToken) setCodexChecking(false);
+    }
   };
 
   const openCodexAuthInBrowser = (url: string) => {
@@ -721,7 +743,9 @@ export default function SettingsPanel() {
   };
 
   const codexStatusText = () => {
+    if (codexChecking) return t("settings.codexCheckingStatus");
     if (!codexStatus) return t("settings.fetching");
+    if (codexStatus.credential_valid === true) return t("settings.codexTokenValid");
     if (codexStatus.logged_in) return t("settings.codexLoggedIn");
     if (codexStaleRemotePending) return t("settings.codexStaleOAuth");
     if (displayedCodexAuthUrl) return t("settings.codexLinkReady");
@@ -1052,16 +1076,20 @@ export default function SettingsPanel() {
       {isCodexMode ? (
         <div className="settings-field">
           <label className="settings-label">{t("settings.codexLogin")}</label>
-          <div className={codexStatus?.logged_in ? "settings-success" : "settings-help"}>
+          <div className={codexStatus?.credential_valid === false ? "settings-error" : codexStatus?.logged_in ? "settings-success" : "settings-help"}>
             {codexStatusText()}
           </div>
           {codexOAuthError && (
             <div className="settings-error" style={{ marginTop: "8px" }}>{codexOAuthError}</div>
           )}
           <div className="settings-inline-actions" style={{ marginTop: "8px" }}>
-            <button className="settings-btn settings-btn-secondary settings-btn-full" onClick={refreshCodexStatus}>
-              <RefreshIcon />
-              {t("settings.codexCheckStatus")}
+            <button
+              className="settings-btn settings-btn-secondary settings-btn-full"
+              onClick={() => refreshCodexStatus(true)}
+              disabled={codexChecking}
+            >
+              {codexChecking ? <span className="settings-spinner" /> : <RefreshIcon />}
+              {codexChecking ? t("settings.codexCheckingStatus") : t("settings.codexCheckStatus")}
             </button>
             <button
               className="settings-btn settings-btn-primary settings-btn-full"

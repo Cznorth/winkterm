@@ -229,7 +229,30 @@ def _save_codex_tokens(id_token: str, access_token: str, refresh_token: str) -> 
         },
         "last_refresh": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     })
+    existing.pop("last_validated", None)
+    existing.pop("validation_error", None)
+    existing.pop("validation_invalid_at", None)
     WINKTERM_CODEX_AUTH_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    WINKTERM_CODEX_AUTH_FILE.chmod(0o600)
+
+
+def _update_codex_validation(*, valid: bool, error: str = "") -> None:
+    """Persist credential validation state without changing OAuth tokens."""
+    if not WINKTERM_CODEX_AUTH_FILE.exists():
+        return
+    try:
+        data = json.loads(WINKTERM_CODEX_AUTH_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    data["last_validated"] = now
+    if valid:
+        data.pop("validation_error", None)
+        data.pop("validation_invalid_at", None)
+    else:
+        data["validation_error"] = error
+        data["validation_invalid_at"] = now
+    WINKTERM_CODEX_AUTH_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
     WINKTERM_CODEX_AUTH_FILE.chmod(0o600)
 
 
@@ -388,6 +411,8 @@ def _oauth_already_logged_in_message() -> str | None:
         data = json.loads(WINKTERM_CODEX_AUTH_FILE.read_text(encoding="utf-8"))
     except Exception:
         return None
+    if data.get("validation_error"):
+        return None
     tokens = data.get("tokens") or {}
     if tokens.get("access_token"):
         return "Logged in using ChatGPT"
@@ -474,6 +499,46 @@ async def _exchange_oauth_code(code: str, redirect_uri: str, code_verifier: str)
         if resp.status_code >= 400:
             raise CodexProviderError(f"token endpoint returned {resp.status_code}: {resp.text[:500]}")
         return resp.json()
+
+
+async def _refresh_codex_tokens(tokens: dict) -> dict:
+    """Refresh an expired Codex access token and persist rotated credentials."""
+    refresh_token = str(tokens.get("refresh_token") or "")
+    if not refresh_token:
+        raise CodexProviderError(
+            "Codex authorization expired and cannot be refreshed. Authorize Codex again in Settings."
+        )
+
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": CODEX_OAUTH_CLIENT_ID,
+    }
+    async with httpx.AsyncClient(timeout=30.0, verify=certifi.where()) as client:
+        resp = await client.post(
+            f"{CODEX_OAUTH_ISSUER}/oauth/token",
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        if resp.status_code >= 400:
+            raise CodexProviderError(
+                f"Codex authorization refresh failed ({resp.status_code}). "
+                "Authorize Codex again in Settings."
+            )
+        refreshed = resp.json()
+
+    access_token = str(refreshed.get("access_token") or "")
+    if not access_token:
+        raise CodexProviderError(
+            "Codex authorization refresh did not return an access token. "
+            "Authorize Codex again in Settings."
+        )
+    _save_codex_tokens(
+        str(refreshed.get("id_token") or tokens.get("id_token") or ""),
+        access_token,
+        str(refreshed.get("refresh_token") or refresh_token),
+    )
+    return _load_codex_tokens()
 
 
 class _CodexOAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
@@ -647,17 +712,36 @@ def _codex_bin() -> str:
 
 
 def codex_status() -> dict:
+    auth_data: dict = {}
+    if WINKTERM_CODEX_AUTH_FILE.exists():
+        try:
+            auth_data = json.loads(WINKTERM_CODEX_AUTH_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            auth_data = {}
+    validation_error = str(auth_data.get("validation_error") or "")
+    last_validated = str(auth_data.get("last_validated") or "")
+    credential_valid = False if validation_error else (True if last_validated else None)
     has_tokens = WINKTERM_CODEX_AUTH_FILE.exists() and bool(_oauth_already_logged_in_message())
     oauth = _oauth_status_public(logged_in=has_tokens)
+    if validation_error:
+        oauth = {
+            "active": False,
+            "state": "error",
+            "message": validation_error,
+            "auth_url": "",
+            "started_at": 0,
+        }
     try:
         binary = _codex_bin()
     except CodexProviderError as e:
         return {
             "installed": False,
             "logged_in": has_tokens,
-            "message": "Logged in using ChatGPT" if has_tokens else str(e),
+            "message": validation_error or ("Logged in using ChatGPT" if has_tokens else str(e)),
             "transport": "websocket",
             "oauth": oauth,
+            "credential_valid": credential_valid,
+            "last_validated": last_validated,
             "client_version": codex_client_version_info(),
         }
 
@@ -675,11 +759,92 @@ def codex_status() -> dict:
         "installed": True,
         "logged_in": has_tokens,
         "cli_logged_in": cli_logged_in,
-        "message": "Logged in using ChatGPT" if has_tokens else output,
+        "message": validation_error or ("Logged in using ChatGPT" if has_tokens else output),
         "transport": transport,
-        "oauth": _oauth_status_public(logged_in=has_tokens),
+        "oauth": oauth,
+        "credential_valid": credential_valid,
+        "last_validated": last_validated,
         "client_version": codex_client_version_info(),
     }
+
+
+async def _probe_codex_authorization(tokens: dict) -> None:
+    """Open and close the production Codex WebSocket without creating a response."""
+    headers, user_agent = _codex_headers(tokens)
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    async with websockets.connect(
+        CODEX_WS_URL,
+        additional_headers=headers,
+        user_agent_header=user_agent,
+        ssl=ssl_context,
+        open_timeout=45,
+        ping_interval=None,
+    ):
+        return
+
+
+def _websocket_status_code(exc: Exception) -> int | None:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    return status_code if isinstance(status_code, int) else None
+
+
+async def validate_codex_authorization() -> dict:
+    """Validate saved Codex credentials online, refreshing once after HTTP 401."""
+    try:
+        tokens = _load_codex_tokens()
+    except CodexProviderError as exc:
+        result = codex_status()
+        result.update({"credential_valid": False, "validation_error": str(exc)})
+        return result
+
+    try:
+        await _probe_codex_authorization(tokens)
+    except websockets.WebSocketException as exc:
+        if _websocket_status_code(exc) not in {401, 403}:
+            result = codex_status()
+            result.update({"credential_valid": None, "validation_error": str(exc)})
+            return result
+        try:
+            tokens = await _refresh_codex_tokens(tokens)
+        except CodexProviderError as refresh_exc:
+            message = str(refresh_exc)
+            _update_codex_validation(valid=False, error=message)
+            result = codex_status()
+            result.update({"credential_valid": False, "validation_error": message})
+            return result
+        except Exception as refresh_exc:
+            result = codex_status()
+            result.update({"credential_valid": None, "validation_error": str(refresh_exc)})
+            return result
+        try:
+            await _probe_codex_authorization(tokens)
+        except websockets.WebSocketException as retry_exc:
+            if _websocket_status_code(retry_exc) not in {401, 403}:
+                result = codex_status()
+                result.update({"credential_valid": None, "validation_error": str(retry_exc)})
+                return result
+            message = (
+                f"Codex authorization was rejected ({_websocket_status_code(retry_exc)}). "
+                "Authorize Codex again in Settings."
+            )
+            _update_codex_validation(valid=False, error=message)
+            result = codex_status()
+            result.update({"credential_valid": False, "validation_error": message})
+            return result
+        except (TimeoutError, OSError) as retry_exc:
+            result = codex_status()
+            result.update({"credential_valid": None, "validation_error": str(retry_exc)})
+            return result
+    except (TimeoutError, OSError) as exc:
+        result = codex_status()
+        result.update({"credential_valid": None, "validation_error": str(exc)})
+        return result
+
+    _update_codex_validation(valid=True)
+    result = codex_status()
+    result.update({"credential_valid": True, "validation_error": ""})
+    return result
 
 
 def codex_login(device_auth: bool = True) -> dict:
@@ -754,7 +919,6 @@ async def _stream_codex_response_once(
     tools: list | None,
 ) -> AsyncIterator[dict]:
     tokens = _load_codex_tokens()
-    headers, user_agent = _codex_headers(tokens)
     body = {
         "type": "response.create",
         "model": model,
@@ -771,6 +935,7 @@ async def _stream_codex_response_once(
 
     last_error: Exception | None = None
     for attempt in range(2):
+        headers, user_agent = _codex_headers(tokens)
         try:
             async with websockets.connect(
                 CODEX_WS_URL,
@@ -795,6 +960,10 @@ async def _stream_codex_response_once(
         except (TimeoutError, OSError, websockets.WebSocketException) as e:
             last_error = e
             if attempt == 0:
+                response = getattr(e, "response", None)
+                if getattr(response, "status_code", None) == 401:
+                    tokens = await _refresh_codex_tokens(tokens)
+                    continue
                 await asyncio.sleep(1)
                 continue
             raise

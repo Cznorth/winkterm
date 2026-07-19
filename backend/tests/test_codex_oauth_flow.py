@@ -4,11 +4,43 @@ from __future__ import annotations
 
 import json
 import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from backend.agent import codex_provider as cp
+
+
+class _FakeTokenResponse:
+    def __init__(self, status_code: int, payload: dict):
+        self.status_code = status_code
+        self._payload = payload
+        self.text = json.dumps(payload)
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeTokenClient:
+    def __init__(self, response: _FakeTokenResponse):
+        self.response = response
+        self.request: dict | None = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def post(self, url: str, **kwargs):
+        self.request = {"url": url, **kwargs}
+        return self.response
+
+
+class _UnauthorizedWebSocketError(cp.websockets.WebSocketException):
+    def __init__(self):
+        self.response = SimpleNamespace(status_code=401)
 
 
 @pytest.fixture(autouse=True)
@@ -175,3 +207,155 @@ def test_codex_logout_only_removes_winkterm_tokens():
     assert cp.CODEX_AUTH_FILE.exists()
     assert not cp.WINKTERM_CODEX_AUTH_FILE.exists()
     assert cp._oauth_already_logged_in_message() is None
+
+
+@pytest.mark.asyncio
+async def test_refresh_codex_tokens_persists_rotated_credentials(monkeypatch):
+    cp.WINKTERM_HOME.mkdir(parents=True, exist_ok=True)
+    cp.WINKTERM_CODEX_AUTH_FILE.write_text(
+        json.dumps(
+            {
+                "tokens": {
+                    "access_token": "expired-access",
+                    "id_token": "old-id",
+                    "refresh_token": "old-refresh",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = _FakeTokenClient(
+        _FakeTokenResponse(
+            200,
+            {
+                "access_token": "fresh-access",
+                "refresh_token": "rotated-refresh",
+            },
+        )
+    )
+    monkeypatch.setattr(cp.httpx, "AsyncClient", lambda **kwargs: client)
+
+    refreshed = await cp._refresh_codex_tokens(cp._load_codex_tokens())
+
+    assert refreshed == {
+        "access_token": "fresh-access",
+        "id_token": "old-id",
+        "refresh_token": "rotated-refresh",
+        "account_id": "",
+    }
+    assert client.request is not None
+    assert client.request["data"] == {
+        "grant_type": "refresh_token",
+        "refresh_token": "old-refresh",
+        "client_id": cp.CODEX_OAUTH_CLIENT_ID,
+    }
+
+
+@pytest.mark.asyncio
+async def test_refresh_codex_tokens_reports_reauthorization_on_rejection(monkeypatch):
+    client = _FakeTokenClient(_FakeTokenResponse(401, {"error": "invalid_grant"}))
+    monkeypatch.setattr(cp.httpx, "AsyncClient", lambda **kwargs: client)
+
+    with pytest.raises(cp.CodexProviderError, match="Authorize Codex again"):
+        await cp._refresh_codex_tokens(
+            {
+                "access_token": "expired-access",
+                "id_token": "old-id",
+                "refresh_token": "expired-refresh",
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_validate_codex_authorization_records_valid_token(monkeypatch):
+    cp.WINKTERM_HOME.mkdir(parents=True, exist_ok=True)
+    cp.WINKTERM_CODEX_AUTH_FILE.write_text(
+        json.dumps(
+            {
+                "tokens": {
+                    "access_token": "access",
+                    "id_token": "id",
+                    "refresh_token": "refresh",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    probe = AsyncMock(return_value=None)
+    monkeypatch.setattr(cp, "_probe_codex_authorization", probe)
+
+    result = await cp.validate_codex_authorization()
+
+    assert result["logged_in"] is True
+    assert result["credential_valid"] is True
+    saved = json.loads(cp.WINKTERM_CODEX_AUTH_FILE.read_text(encoding="utf-8"))
+    assert saved["last_validated"]
+    assert "validation_error" not in saved
+
+
+@pytest.mark.asyncio
+async def test_validate_codex_authorization_refreshes_after_401(monkeypatch):
+    cp.WINKTERM_HOME.mkdir(parents=True, exist_ok=True)
+    cp.WINKTERM_CODEX_AUTH_FILE.write_text(
+        json.dumps(
+            {
+                "tokens": {
+                    "access_token": "expired",
+                    "id_token": "id",
+                    "refresh_token": "refresh",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    probe = AsyncMock(side_effect=[_UnauthorizedWebSocketError(), None])
+    refresh = AsyncMock(
+        return_value={
+            "access_token": "fresh",
+            "id_token": "id",
+            "refresh_token": "rotated",
+        }
+    )
+    monkeypatch.setattr(cp, "_probe_codex_authorization", probe)
+    monkeypatch.setattr(cp, "_refresh_codex_tokens", refresh)
+
+    result = await cp.validate_codex_authorization()
+
+    assert result["credential_valid"] is True
+    refresh.assert_awaited_once()
+    assert probe.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_validate_codex_authorization_marks_rejected_refresh_invalid(monkeypatch):
+    cp.WINKTERM_HOME.mkdir(parents=True, exist_ok=True)
+    cp.WINKTERM_CODEX_AUTH_FILE.write_text(
+        json.dumps(
+            {
+                "tokens": {
+                    "access_token": "expired",
+                    "id_token": "id",
+                    "refresh_token": "expired-refresh",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        cp,
+        "_probe_codex_authorization",
+        AsyncMock(side_effect=_UnauthorizedWebSocketError()),
+    )
+    monkeypatch.setattr(
+        cp,
+        "_refresh_codex_tokens",
+        AsyncMock(side_effect=cp.CodexProviderError("Authorize Codex again in Settings.")),
+    )
+
+    result = await cp.validate_codex_authorization()
+
+    assert result["logged_in"] is False
+    assert result["credential_valid"] is False
+    assert result["oauth"]["state"] == "error"
+    saved = json.loads(cp.WINKTERM_CODEX_AUTH_FILE.read_text(encoding="utf-8"))
+    assert saved["validation_error"] == "Authorize Codex again in Settings."

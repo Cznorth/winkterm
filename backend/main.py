@@ -17,6 +17,7 @@ from backend.api.ssh_routes import router as ssh_router
 from backend.api.agent_routes import router as agent_router, public_router as agent_public_router
 from backend.api.sessions_routes import router as sessions_router
 from backend.api.auth_routes import router as auth_router, require_web_auth
+from backend.terminal.session_manager import get_session_manager
 
 # Check if running in PyInstaller bundle
 IS_FROZEN = getattr(sys, 'frozen', False)
@@ -24,6 +25,9 @@ IS_FROZEN = getattr(sys, 'frozen', False)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    session_manager = get_session_manager()
+    session_manager.begin_startup()
+
     # Logging: suppress noisy third-party debug logs
     logging.getLogger("anthropic").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -39,8 +43,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     print(f"  API key set : {'yes' if settings.effective_api_key else 'NO - please set API key'}")
     print(f"  Loki        : {settings.loki_url}")
     print("=" * 50)
-    yield
-    print("WinkTerm Backend stopped.")
+    try:
+        yield
+    finally:
+        # A reload replaces the entire backend process. WebSocket disconnects keep
+        # terminals alive during normal reconnects, but process shutdown must not
+        # leave their shell children orphaned.
+        await session_manager.shutdown()
+        print("WinkTerm Backend stopped.")
 
 
 app = FastAPI(
@@ -80,6 +90,8 @@ async def exit_app():
     """Graceful exit for desktop mode."""
     import os
     import threading
+
+    await get_session_manager().shutdown()
 
     def do_exit():
         import time

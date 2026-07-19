@@ -47,78 +47,128 @@ async function openSettings(page) {
   await page.waitForSelector(".settings-panel, .settings-group", { timeout: 10000 });
 }
 
-async function getAgentDocsGroup(page) {
-  return page.evaluate(() => {
-    const groups = [...document.querySelectorAll(".settings-group")];
-    const group = groups.find((g) => {
-      const t = g.querySelector(".settings-group-title")?.textContent || "";
-      return t.includes("AI 指令与记忆") || t.includes("AI Instructions");
-    });
-    if (!group) return null;
-    const labels = [...group.querySelectorAll(".settings-label")].map((l) => l.textContent?.trim());
-    const helps = [...group.querySelectorAll(".settings-help")].map((h) => h.textContent?.trim());
-    const textareas = [...group.querySelectorAll("textarea.settings-textarea")].map((ta) => ({
-      value: ta.value,
-      className: ta.className,
-    }));
-    const buttons = [...group.querySelectorAll("button.settings-btn-full")].map((b) => ({
-      text: b.textContent?.trim(),
-      disabled: b.disabled,
-    }));
-    return { labels, helps, textareas, buttons, title: group.querySelector(".settings-group-title")?.textContent?.trim() };
+async function clickSettingsSection(page, labels) {
+  await page.evaluate((expectedLabels) => {
+    const buttons = [...document.querySelectorAll(".settings-nav-item, .settings-mobile-tab")];
+    const button = buttons.find((item) =>
+      expectedLabels.some((label) => item.textContent?.includes(label))
+    );
+    if (!button) throw new Error(`Settings section not found: ${expectedLabels.join(" / ")}`);
+    button.click();
+  }, labels);
+}
+
+async function openAgentBehavior(page) {
+  await clickSettingsSection(page, ["Agent 行为", "Agent Behavior"]);
+  await page.waitForFunction(() => {
+    const title = document.querySelector(".settings-section-title")?.textContent || "";
+    return title.includes("Agent 行为") || title.includes("Agent Behavior");
   });
 }
 
-async function saveInAgentDocsGroup(page, index) {
-  await page.evaluate((idx) => {
-    const groups = [...document.querySelectorAll(".settings-group")];
-    const group = groups.find((g) => {
-      const t = g.querySelector(".settings-group-title")?.textContent || "";
-      return t.includes("AI 指令与记忆") || t.includes("AI Instructions");
-    });
-    const btn = group?.querySelectorAll("button.settings-btn-full")[idx];
-    btn?.click();
-  }, index);
+async function getAgentDocsView(page) {
+  return page.evaluate(() => {
+    const panel = document.querySelector(".settings-section-panel");
+    if (!panel) return null;
+    const rows = [...panel.querySelectorAll(".settings-doc-row")].map((row) => ({
+      title: row.querySelector(".settings-doc-row-title")?.textContent?.trim() || "",
+      meta: row.querySelector(".settings-doc-row-meta")?.textContent?.trim() || "",
+      button: row.querySelector("button")?.textContent?.trim() || "",
+    }));
+    const textarea = panel.querySelector("textarea.settings-textarea");
+    const buttons = [...panel.querySelectorAll("button")].map((b) => ({
+      text: b.textContent?.trim(),
+      disabled: b.disabled,
+    }));
+    return {
+      title: panel.querySelector(".settings-section-title")?.textContent?.trim() || "",
+      rows,
+      label: panel.querySelector(".settings-label")?.textContent?.trim() || "",
+      help: panel.querySelector(".settings-help")?.textContent?.trim() || "",
+      textarea: textarea ? { value: textarea.value, className: textarea.className } : null,
+      buttons,
+    };
+  });
 }
 
-async function fillTextareaInAgentDocsGroup(page, index, value) {
+async function openDocEditor(page, filename) {
+  await page.evaluate((expectedFilename) => {
+    const rows = [...document.querySelectorAll(".settings-doc-row")];
+    const row = rows.find(
+      (item) => item.querySelector(".settings-doc-row-meta")?.textContent?.trim() === expectedFilename
+    );
+    const button = row?.querySelector("button");
+    if (!button) throw new Error(`Document row not found: ${expectedFilename}`);
+    button.click();
+  }, filename);
+  await page.waitForFunction(
+    (expectedFilename) =>
+      document.querySelector(".settings-label")?.textContent?.includes(expectedFilename) &&
+      !!document.querySelector("textarea.settings-textarea"),
+    {},
+    filename
+  );
+}
+
+async function backToDocList(page) {
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll(".settings-section-panel button")].find((item) => {
+      const text = item.textContent || "";
+      return text.includes("返回列表") || text.includes("Back to list");
+    });
+    if (!button) throw new Error("Back-to-list button not found");
+    button.click();
+  });
+  await page.waitForSelector(".settings-doc-list");
+}
+
+async function fillDocEditor(page, value) {
   await page.evaluate(
-    (idx, val) => {
-      const groups = [...document.querySelectorAll(".settings-group")];
-      const group = groups.find((g) => {
-        const t = g.querySelector(".settings-group-title")?.textContent || "";
-        return t.includes("AI 指令与记忆") || t.includes("AI Instructions");
-      });
-      const ta = group?.querySelectorAll("textarea.settings-textarea")[idx];
-      if (!ta) return;
+    (val) => {
+      const ta = document.querySelector("textarea.settings-textarea");
+      if (!ta) throw new Error("Document editor not found");
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
       setter?.call(ta, val);
       ta.dispatchEvent(new Event("input", { bubbles: true }));
       ta.dispatchEvent(new Event("change", { bubbles: true }));
     },
-    index,
     value
   );
 }
 
-async function waitForAgentDocsValues(page, expectedAgents, expectedMemory) {
+async function waitForDocValue(page, expected) {
   await page.waitForFunction(
-    (agents, memory) => {
-      const groups = [...document.querySelectorAll(".settings-group")];
-      const group = groups.find((g) => {
-        const t = g.querySelector(".settings-group-title")?.textContent || "";
-        return t.includes("AI 指令与记忆") || t.includes("AI Instructions");
-      });
-      const textareas = group ? [...group.querySelectorAll("textarea.settings-textarea")] : [];
-      return textareas[0]?.value === agents && textareas[1]?.value === memory;
-    },
+    (value) => document.querySelector("textarea.settings-textarea")?.value === value,
     { timeout: 10000 },
-    expectedAgents,
-    expectedMemory
+    expected
+  );
+}
+
+async function saveDocEditor(page, filename) {
+  await page.evaluate(() => {
+    const button = document.querySelector(
+      ".settings-section-panel button.settings-btn-primary.settings-btn-full"
+    );
+    if (!button) throw new Error("Document save button not found");
+    button.click();
+  });
+  await page.waitForFunction(
+    (expectedFilename) => {
+      const messages = [...document.querySelectorAll(".toast-message")].map(
+        (item) => item.textContent || ""
+      );
+      return messages.some(
+        (message) => message.includes(expectedFilename) &&
+          (message.includes("已保存") || message.toLowerCase().includes("saved"))
+      );
+    },
+    { timeout: 8000 },
+    filename
   );
 }
 
 async function selectLanguage(page, locale) {
+  await clickSettingsSection(page, ["外观", "Appearance"]);
   await page.evaluate((nextLocale) => {
     const selects = [...document.querySelectorAll("select.settings-select")];
     const languageSelect = selects.find((select) => {
@@ -155,35 +205,30 @@ async function main() {
 
     // 1. Open app and navigate to settings
     await page.goto(APP, { waitUntil: "networkidle2", timeout: 30000 });
+    await page.evaluate(() => localStorage.setItem("winkterm-language", "zh"));
+    await page.reload({ waitUntil: "networkidle2" });
     await openSettings(page);
+    await openAgentBehavior(page);
     pass("打开设置页");
 
     // 2. Verify UI structure (Chinese locale)
-    let group = await getAgentDocsGroup(page);
-    if (!group) throw new Error("未找到 AI 指令与记忆分组");
-    if (!group.title?.includes("AI 指令与记忆")) throw new Error(`标题异常: ${group.title}`);
-    if (group.textareas.length !== 2) throw new Error(`textarea 数量=${group.textareas.length}`);
-    if (!group.labels.some((l) => l?.includes("agents.md"))) throw new Error(`labels: ${group.labels}`);
-    if (!group.labels.some((l) => l?.includes("memory.md"))) throw new Error(`labels: ${group.labels}`);
-    if (group.helps.length < 2) throw new Error("缺少 help 文案");
-    if (!group.textareas.every((t) => t.className.includes("settings-textarea"))) throw new Error("textarea 样式类缺失");
+    let view = await getAgentDocsView(page);
+    if (!view) throw new Error("未找到 Agent 行为分区");
+    if (!view.title?.includes("Agent 行为")) throw new Error(`标题异常: ${view.title}`);
+    if (view.rows.length !== 2) throw new Error(`文档行数量=${view.rows.length}`);
+    if (!view.rows.some((row) => row.meta === "agents.md")) throw new Error(`rows: ${JSON.stringify(view.rows)}`);
+    if (!view.rows.some((row) => row.meta === "memory.md")) throw new Error(`rows: ${JSON.stringify(view.rows)}`);
+    if (!view.rows.every((row) => row.button.includes("编辑"))) throw new Error("中文编辑按钮缺失");
     pass("UI 结构与中英文案（中文）");
 
     // 3. Edit and save agents.md
-    await fillTextareaInAgentDocsGroup(page, 0, MARKER_AGENTS);
-    await saveInAgentDocsGroup(page, 0);
-    await page.waitForFunction(
-      () => {
-        const groups = [...document.querySelectorAll(".settings-group")];
-        const group = groups.find((g) => {
-          const t = g.querySelector(".settings-group-title")?.textContent || "";
-          return t.includes("AI 指令与记忆") || t.includes("AI Instructions");
-        });
-        const btn = group?.querySelectorAll("button.settings-btn-full")[0];
-        return btn?.textContent?.includes("已保存") || btn?.textContent?.includes("Saved");
-      },
-      { timeout: 8000 }
-    );
+    await openDocEditor(page, "agents.md");
+    view = await getAgentDocsView(page);
+    if (!view?.textarea?.className.includes("settings-textarea") || !view.help) {
+      throw new Error("agents.md 编辑器结构异常");
+    }
+    await fillDocEditor(page, MARKER_AGENTS);
+    await saveDocEditor(page, "agents.md");
     pass("保存 agents.md — 按钮反馈");
 
     const agentsAfterSave = (await api("GET", "/api/settings/agents-md")).content;
@@ -191,20 +236,10 @@ async function main() {
     pass("保存 agents.md — API 校验");
 
     // 4. Edit and save memory.md
-    await fillTextareaInAgentDocsGroup(page, 1, MARKER_MEMORY);
-    await saveInAgentDocsGroup(page, 1);
-    await page.waitForFunction(
-      () => {
-        const groups = [...document.querySelectorAll(".settings-group")];
-        const group = groups.find((g) => {
-          const t = g.querySelector(".settings-group-title")?.textContent || "";
-          return t.includes("AI 指令与记忆") || t.includes("AI Instructions");
-        });
-        const btn = group?.querySelectorAll("button.settings-btn-full")[1];
-        return btn?.textContent?.includes("已保存") || btn?.textContent?.includes("Saved");
-      },
-      { timeout: 8000 }
-    );
+    await backToDocList(page);
+    await openDocEditor(page, "memory.md");
+    await fillDocEditor(page, MARKER_MEMORY);
+    await saveDocEditor(page, "memory.md");
     pass("保存 memory.md — 按钮反馈");
 
     const memoryAfterSave = (await api("GET", "/api/settings/memory-md")).content;
@@ -214,36 +249,44 @@ async function main() {
     // 5. Verify persistence after page reload
     await page.reload({ waitUntil: "networkidle2" });
     await openSettings(page);
-    await waitForAgentDocsValues(page, MARKER_AGENTS, MARKER_MEMORY);
-    group = await getAgentDocsGroup(page);
-    if (group.textareas[0].value !== MARKER_AGENTS) throw new Error("刷新后 agents.md 未持久化");
-    if (group.textareas[1].value !== MARKER_MEMORY) throw new Error("刷新后 memory.md 未持久化");
+    await openAgentBehavior(page);
+    await openDocEditor(page, "agents.md");
+    await waitForDocValue(page, MARKER_AGENTS);
+    view = await getAgentDocsView(page);
+    if (view?.textarea?.value !== MARKER_AGENTS) throw new Error("刷新后 agents.md 未持久化");
+    await backToDocList(page);
+    await openDocEditor(page, "memory.md");
+    await waitForDocValue(page, MARKER_MEMORY);
+    view = await getAgentDocsView(page);
+    if (view?.textarea?.value !== MARKER_MEMORY) throw new Error("刷新后 memory.md 未持久化");
+    await backToDocList(page);
     pass("刷新后 textarea 内容持久化");
 
     // 6. Switch to English i18n
     await selectLanguage(page, "en");
     await sleep(400);
-    group = await getAgentDocsGroup(page);
-    if (!group.title?.includes("AI Instructions")) throw new Error(`英文标题: ${group.title}`);
-    if (!group.labels.some((l) => l?.includes("Instructions"))) throw new Error(`英文 labels: ${group.labels}`);
-    if (!group.labels.some((l) => l?.includes("Long-term Memory"))) throw new Error(`英文 labels: ${group.labels}`);
+    await openAgentBehavior(page);
+    view = await getAgentDocsView(page);
+    if (!view?.title?.includes("Agent Behavior")) throw new Error(`英文标题: ${view?.title}`);
+    if (!view.rows.some((row) => row.title.includes("Instructions"))) throw new Error(`英文 rows: ${JSON.stringify(view.rows)}`);
+    if (!view.rows.some((row) => row.title.includes("Long-term Memory"))) throw new Error(`英文 rows: ${JSON.stringify(view.rows)}`);
     pass("切换 English — i18n 文案");
 
     // 7. Save button label in English locale
     await selectLanguage(page, "zh");
     await sleep(300);
+    await openAgentBehavior(page);
     pass("切回中文");
 
     // 8. Save empty content
-    await fillTextareaInAgentDocsGroup(page, 0, "");
-    await saveInAgentDocsGroup(page, 0);
-    await sleep(600);
+    await openDocEditor(page, "agents.md");
+    await fillDocEditor(page, "");
+    await saveDocEditor(page, "agents.md");
     if ((await api("GET", "/api/settings/agents-md")).content !== "") throw new Error("空 agents.md 保存失败");
     pass("空内容保存 agents.md");
 
-    await fillTextareaInAgentDocsGroup(page, 0, MARKER_AGENTS);
-    await saveInAgentDocsGroup(page, 0);
-    await sleep(600);
+    await fillDocEditor(page, MARKER_AGENTS);
+    await saveDocEditor(page, "agents.md");
   } catch (e) {
     fail("浏览器 E2E", e);
   } finally {
@@ -262,7 +305,7 @@ async function main() {
     console.log(r.ok ? `✓ ${r.name}` : `✗ ${r.name}: ${r.err}`);
   }
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
-  process.exit(failed.length ? 1 : 0);
+  process.exitCode = failed.length ? 1 : 0;
 }
 
 main();

@@ -260,10 +260,16 @@ class PtyManager:
     # ------------------------------------------------------------------
 
     def add_output_callback(self, cb: Callable[[bytes], None]) -> None:
-        self._read_callbacks.append(cb)
+        # Bound method objects are recreated on every attribute access but compare
+        # equal when they wrap the same instance and function. Equality therefore
+        # prevents duplicate subscriptions across reconnects.
+        if cb not in self._read_callbacks:
+            self._read_callbacks.append(cb)
 
     def remove_output_callback(self, cb: Callable[[bytes], None]) -> None:
-        self._read_callbacks = [c for c in self._read_callbacks if c is not cb]
+        # Do not use identity here: ``obj.callback is obj.callback`` is False for
+        # bound methods, which used to leave closed WebSocket handlers subscribed.
+        self._read_callbacks = [c for c in self._read_callbacks if c != cb]
 
     async def start_read_loop(self) -> None:
         """Start the read loop: a background thread reads the PTY and puts data into the asyncio queue.

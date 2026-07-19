@@ -50,6 +50,20 @@ function Assert-PortFree($port) {
 }
 
 function Stop-Started {
+  try {
+    $backendListener = Get-NetTCPConnection -LocalPort $BackendPort -State Listen -ErrorAction SilentlyContinue
+    if ($backendListener) {
+      # The backend exit endpoint closes every PTY before terminating the worker.
+      # Keep force-stop below as a bounded fallback for a hung test server.
+      Invoke-RestMethod -Method Post "http://127.0.0.1:$BackendPort/exit" -TimeoutSec 5 | Out-Null
+      $deadline = (Get-Date).AddSeconds(5)
+      while ((Get-Date) -lt $deadline -and (Get-NetTCPConnection -LocalPort $BackendPort -State Listen -ErrorAction SilentlyContinue)) {
+        Start-Sleep -Milliseconds 100
+      }
+    }
+  } catch {
+    # Best-effort graceful cleanup; force-stop below is the fallback.
+  }
   foreach ($p in $started) {
     try {
       if ($p -and -not $p.HasExited) {
@@ -103,6 +117,12 @@ try {
     Invoke-RestMethod -Method Delete "$base/api/agent/terminals/$($term.id)" -Headers $headers | Out-Null
   }
 
+  Run "Terminal WebSocket reconnect smoke" {
+    python scripts\test_terminal_ws_reconnect.py `
+      --ws-base "ws://127.0.0.1:$BackendPort/ws/terminal" `
+      --http-base "http://127.0.0.1:$BackendPort"
+  }
+
   if (-not $SkipCodexSmoke) {
     Run "Codex chat WebSocket smoke" { python scripts\test_codex_ws_smoke.py --ws-url "ws://127.0.0.1:$BackendPort/ws/chat" }
 
@@ -137,6 +157,9 @@ try {
       $env:CHROME_PATH = "C:/Program Files/Google/Chrome/Application/chrome.exe"
     }
     Run "Browser E2E" { node test-agent-docs-e2e.mjs }
+    if (-not $SkipCodexSmoke) {
+      Run "Terminal AI browser E2E" { node test-terminal-ai-e2e.mjs }
+    }
     Pop-Location
   }
 

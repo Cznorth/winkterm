@@ -124,6 +124,8 @@ const translations = {
     en: "A previous authorization was not finished. Click \"Generate authorization link\" again (old links are not shown automatically).",
   },
   "settings.codexCheckStatus": { zh: "检查状态", en: "Check status" },
+  "settings.codexCheckingStatus": { zh: "正在验证 Token…", en: "Validating token…" },
+  "settings.codexTokenValid": { zh: "Token 有效，Codex 可用", en: "Token is valid and Codex is available" },
   "settings.codexLoginButton": { zh: "生成授权链接", en: "Generate authorization link" },
   "settings.codexLoggingIn": { zh: "正在生成链接...", en: "Generating link..." },
   "settings.codexLogoutButton": { zh: "登出 WinkTerm 授权", en: "Log out WinkTerm authorization" },
