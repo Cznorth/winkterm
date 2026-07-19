@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:desktop": "bash scripts/build-desktop.sh",
+    "build:desktop": "node scripts/build-desktop.mjs",
     "build:android": "next build && cap sync android",
     "android:apk": "next build && cap sync android && cd android && gradlew.bat assembleDebug",
     "start": "next start",

@@ -59,6 +59,7 @@
             Target="[INSTALLDIR]WinkTerm.exe"
             WorkingDirectory="INSTALLDIR"
             Icon="WinkTermIcon" />
+          <RemoveFolder Id="RemoveStartMenuDir" Directory="StartMenuDir" On="uninstall" />
           <RegistryValue Root="HKCU" Key="Software\WinkTerm" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
         </Component>
       </Directory>
