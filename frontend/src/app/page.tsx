@@ -69,7 +69,7 @@ export default function Home() {
     const savedTheme = localStorage.getItem("winkterm-theme");
 
     if (savedLang) {
-      setLocale(savedLang as "zh" | "en");
+      setLocale(savedLang as "zh" | "en" | "fr");
     }
 
     if (savedLang && savedTheme) {
@@ -81,7 +81,7 @@ export default function Home() {
       if (!savedLang) {
         const lang = res.data.language;
         if (lang) {
-          setLocale(lang as "zh" | "en");
+          setLocale(lang as "zh" | "en" | "fr");
         } else {
           setShowLangSelector(true);
         }
@@ -112,7 +112,7 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const handleLanguageSelect = (language: "zh" | "en") => {
+  const handleLanguageSelect = (language: "zh" | "en" | "fr") => {
     setLocale(language);
     setShowLangSelector(false);
     // Save to backend config
