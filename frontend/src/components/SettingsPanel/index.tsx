@@ -1697,13 +1697,14 @@ export default function SettingsPanel() {
           className="settings-select"
           value={locale}
           onChange={(e) => {
-            const lang = e.target.value as "zh" | "en";
+            const lang = e.target.value as "zh" | "en" | "fr";
             setLocale(lang);
             axios.post("/api/settings", { language: lang }).catch(() => {});
           }}
         >
           <option value="zh">中文</option>
           <option value="en">English</option>
+          <option value="fr">Français</option>
         </select>
       </div>
       <div className="settings-field">

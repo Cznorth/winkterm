@@ -98,7 +98,7 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   const lang = localStorage.getItem("winkterm-language");
-  return lang === "zh" ? "文件传输失败" : "File transfer failed";
+  return lang === "zh" ? "文件传输失败" : lang === "fr" ? "Échec du transfert de fichiers" : "File transfer failed";
 }
 
 function formatBytes(size: number | null): string {
@@ -138,7 +138,9 @@ function formatDate(value: string | null): string {
     return "--";
   }
 
-  return date.toLocaleString("zh-CN", {
+  const lang = localStorage.getItem("winkterm-language");
+  const locale = lang === "zh" ? "zh-CN" : lang === "fr" ? "fr-FR" : "en-US";
+  return date.toLocaleString(locale, {
     hour12: false,
     month: "2-digit",
     day: "2-digit",

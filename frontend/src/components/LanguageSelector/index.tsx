@@ -3,7 +3,7 @@
 import "./LanguageSelector.css";
 
 interface LanguageSelectorProps {
-  onSelect: (language: "zh" | "en") => void;
+  onSelect: (language: "zh" | "en" | "fr") => void;
 }
 
 const GlobeIcon = () => (
@@ -23,7 +23,7 @@ export default function LanguageSelector({ onSelect }: LanguageSelectorProps) {
             <GlobeIcon />
           </div>
           <div className="language-selector-title">
-            Select Language / 选择语言
+            Select Language / 选择语言 / Choisir la langue
           </div>
           <div className="language-selector-subtitle">
             Choose your preferred language
@@ -48,6 +48,16 @@ export default function LanguageSelector({ onSelect }: LanguageSelectorProps) {
             <div className="language-selector-label">
               <span className="language-selector-label-primary">English</span>
               <span className="language-selector-label-secondary">英语</span>
+            </div>
+          </button>
+          <button
+            className="language-selector-option"
+            onClick={() => onSelect("fr")}
+          >
+            <span className="language-selector-flag">🇫🇷</span>
+            <div className="language-selector-label">
+              <span className="language-selector-label-primary">Français</span>
+              <span className="language-selector-label-secondary">French / 法语</span>
             </div>
           </button>
         </div>
