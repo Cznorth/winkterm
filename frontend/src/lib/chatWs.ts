@@ -147,7 +147,7 @@ export function useChatWs() {
     ws.onerror = () => {
       console.error("[ChatWS] Error");
       const lang = localStorage.getItem("winkterm-language");
-      setState((s) => ({ ...s, error: lang === "zh" ? "连接失败" : "Connection failed" }));
+      setState((s) => ({ ...s, error: lang === "zh" ? "连接失败" : lang === "fr" ? "Échec de la connexion" : "Connection failed" }));
     };
 
     ws.onmessage = (event) => {
@@ -432,7 +432,8 @@ export function useChatWs() {
   // Send message: queue if streaming, otherwise send directly
   const sendMessage = useCallback((content: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      setState((s) => ({ ...s, error: "未连接" }));
+      const lang = localStorage.getItem("winkterm-language");
+      setState((s) => ({ ...s, error: lang === "zh" ? "未连接" : lang === "fr" ? "Non connecté" : "Not connected" }));
       return;
     }
 
@@ -539,7 +540,8 @@ export function useChatWs() {
   // Switch mode
   const switchMode = useCallback((mode: ChatMode) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      setState((s) => ({ ...s, error: "未连接" }));
+      const lang = localStorage.getItem("winkterm-language");
+      setState((s) => ({ ...s, error: lang === "zh" ? "未连接" : lang === "fr" ? "Non connecté" : "Not connected" }));
       return;
     }
     wsRef.current.send(JSON.stringify({ type: "switch_mode", mode }));
@@ -548,7 +550,8 @@ export function useChatWs() {
   // Switch model
   const switchModel = useCallback((model: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      setState((s) => ({ ...s, error: "未连接" }));
+      const lang = localStorage.getItem("winkterm-language");
+      setState((s) => ({ ...s, error: lang === "zh" ? "未连接" : lang === "fr" ? "Non connecté" : "Not connected" }));
       return;
     }
     wsRef.current.send(JSON.stringify({ type: "switch_model", model }));
